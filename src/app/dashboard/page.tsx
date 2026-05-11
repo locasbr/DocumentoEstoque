@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Produto, MovimentoEstoque, Alerta } from '@/lib/types'
+import { Alerta } from '@/lib/types'
 import { Package, BarChart3, AlertCircle, TrendingUp } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 

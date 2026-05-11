@@ -20,7 +20,7 @@ export default function EstoquePage() {
     try {
       const { data, error } = await supabase
         .from('movimentos_estoque')
-        .select('*, produtos(*)')
+        .select('*, produto(*)')
         .order('criado_em', { ascending: false })
 
       if (!error && data) {
@@ -35,7 +35,7 @@ export default function EstoquePage() {
 
   const movimentosFiltrados = movimentos.filter(
     (m) =>
-      m.produtos?.nome.toLowerCase().includes(filtro.toLowerCase()) ||
+      m.produto?.nome.toLowerCase().includes(filtro.toLowerCase()) ||
       m.motivo?.toLowerCase().includes(filtro.toLowerCase())
   )
 
@@ -92,7 +92,7 @@ export default function EstoquePage() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold">{movimento.produtos?.nome}</p>
+                      <p className="font-semibold">{movimento.produto?.nome}</p>
                       <p className="text-sm text-gray-600">
                         {movimento.motivo || 'Sem motivo'}
                       </p>
