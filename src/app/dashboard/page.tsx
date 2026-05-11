@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Alerta } from '@/lib/types'
+import { Alerta, Produto } from '@/lib/types'
 import { Package, BarChart3, AlertCircle, TrendingUp } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
@@ -26,7 +26,7 @@ export default function Dashboard() {
 
         if (!produtosError && produtos) {
           const valorTotal = produtos.reduce(
-            (sum, p) => sum + p.preco_venda * p.quantidade_atual,
+            (sum: number, p: Produto) => sum + p.preco_venda * p.quantidade_atual,
             0
           )
           setStats((prev) => ({
