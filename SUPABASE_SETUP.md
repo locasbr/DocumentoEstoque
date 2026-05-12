@@ -6,7 +6,7 @@ Execute o seguinte SQL no SQL Editor do Supabase:
 
 ```sql
 -- Criar tabela de produtos
-CREATE TABLE produtos (
+CREATE TABLE IF NOT EXISTS produtos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   nome VARCHAR(255) NOT NULL,
   descricao TEXT,
@@ -23,7 +23,7 @@ CREATE TABLE produtos (
 );
 
 -- Criar tabela de movimentos de estoque
-CREATE TABLE movimentos_estoque (
+CREATE TABLE IF NOT EXISTS movimentos_estoque (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   produto_id UUID NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
   tipo_movimento VARCHAR(20) NOT NULL CHECK (tipo_movimento IN ('entrada', 'saida')),
@@ -34,7 +34,7 @@ CREATE TABLE movimentos_estoque (
 );
 
 -- Criar tabela de alertas
-CREATE TABLE alertas (
+CREATE TABLE IF NOT EXISTS alertas (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   produto_id UUID NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
   tipo_alerta VARCHAR(20) NOT NULL CHECK (tipo_alerta IN ('estoque_baixo', 'estoque_critico')),
