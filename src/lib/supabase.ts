@@ -3,24 +3,33 @@ import { createClient } from '@supabase/supabase-js'
 let supabaseInstance: any = null
 
 export const getSupabaseClient = () => {
-  if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-    if (supabaseUrl && supabaseAnonKey) {
-      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey)
-    } else {
-      // Retorna um client dummy durante build (não será usado)
-      supabaseInstance = createClient('https://placeholder.supabase.co', 'placeholder-key')
-    }
+  // Só inicializa no cliente (navegador)
+  if (typeof window === 'undefined') {
+    return null
   }
+
+  if (!supabaseInstance) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase environment variables not found')
+      return null
+    }
+
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey)
+  }
+
   return supabaseInstance
 }
 
-// Export como um proxy que chama getSupabaseClient()
+// Proxy que sempre chama getSupabaseClient() em runtime
 export const supabase = new Proxy({} as any, {
   get: (_, prop) => {
     const client = getSupabaseClient()
+    if (!client) {
+      throw new Error('Supabase client not initialized. Make sure environment variables are set.')
+    }
     return (client as any)[prop]
   },
 })
