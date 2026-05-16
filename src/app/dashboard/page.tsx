@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Alerta, Produto, MovimentoEstoque } from '@/lib/types'
 import { Package, BarChart3, AlertCircle, TrendingUp, AlertTriangle, Clock, ArrowRight } from 'lucide-react'
-import { formatarMoeda, formatarDataCurta } from '@/lib/utils'
+import { formatarMoeda } from '@/lib/utils'
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
