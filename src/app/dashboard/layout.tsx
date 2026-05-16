@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/navbar'
 import Sidebar from '@/components/sidebar'
+import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 
 export default function DashboardLayout({
@@ -40,6 +41,7 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-col h-screen">
       <Navbar />
+      <SearchCommand />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-auto bg-gray-50">

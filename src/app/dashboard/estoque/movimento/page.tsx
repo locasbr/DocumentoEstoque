@@ -52,6 +52,20 @@ export default function NovoMovimentoPage() {
     }))
   }
 
+  const produtoSelecionado = produtos.find((p) => p.id === formData.produto_id)
+  const maxQuantidade = produtoSelecionado
+    ? formData.tipo_movimento === 'saida'
+      ? produtoSelecionado.quantidade_atual
+      : Infinity
+    : Infinity
+  const ficaraAbaixoDoMinimo =
+    produtoSelecionado &&
+    formData.tipo_movimento === 'saida' &&
+    produtoSelecionado.quantidade_atual - formData.quantidade < produtoSelecionado.quantidade_minima
+  const quantidadeParaRepor = produtoSelecionado
+    ? produtoSelecionado.quantidade_minima - produtoSelecionado.quantidade_atual
+    : 0
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -59,6 +73,17 @@ export default function NovoMovimentoPage() {
 
     if (!formData.produto_id || formData.quantidade === 0) {
       setError('Selecione um produto e informe a quantidade')
+      setLoading(false)
+      return
+    }
+
+    // Validação: quantidade máxima em saída
+    if (
+      formData.tipo_movimento === 'saida' &&
+      produtoSelecionado &&
+      formData.quantidade > produtoSelecionado.quantidade_atual
+    ) {
+      setError(`Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`)
       setLoading(false)
       return
     }
@@ -172,6 +197,30 @@ export default function NovoMovimentoPage() {
                 </option>
               ))}
             </select>
+
+            {/* Info do produto selecionado */}
+            {produtoSelecionado && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-600">Estoque Atual</p>
+                    <p className={`text-lg font-bold ${
+                      produtoSelecionado.quantidade_atual < produtoSelecionado.quantidade_minima
+                        ? 'text-red-600'
+                        : 'text-green-600'
+                    }`}>
+                      {produtoSelecionado.quantidade_atual}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Mínimo</p>
+                    <p className="text-lg font-bold text-gray-700">
+                      {produtoSelecionado.quantidade_minima}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -215,9 +264,46 @@ export default function NovoMovimentoPage() {
               onChange={handleInputChange}
               required
               min="1"
+              max={maxQuantidade === Infinity ? undefined : maxQuantidade}
               className="input-field"
               placeholder="Quantidade"
             />
+
+            {/* Avisos e sugestões */}
+            {formData.quantidade > 0 && produtoSelecionado && (
+              <div className="mt-3 space-y-2">
+                {/* Aviso: quantidade insuficiente */}
+                {formData.tipo_movimento === 'saida' && formData.quantidade > produtoSelecionado.quantidade_atual && (
+                  <div className="p-3 bg-red-50 border border-red-300 text-red-700 rounded-lg text-sm">
+                    ❌ Quantidade insuficiente! Disponível: {produtoSelecionado.quantidade_atual}
+                  </div>
+                )}
+
+                {/* Aviso: vai ficar abaixo do mínimo */}
+                {ficaraAbaixoDoMinimo && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-300 text-yellow-700 rounded-lg text-sm">
+                    ⚠️ Atenção: após este movimento, o estoque ficará abaixo do mínimo!
+                    <p className="mt-2 font-medium">
+                      Sobrará: {produtoSelecionado.quantidade_atual - formData.quantidade} (mín: {produtoSelecionado.quantidade_minima})
+                    </p>
+                  </div>
+                )}
+
+                {/* Sugestão de repor */}
+                {formData.tipo_movimento === 'entrada' && quantidadeParaRepor > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm flex justify-between items-center">
+                    <span>💡 Sugestão: repor {quantidadeParaRepor} unidades</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, quantidade: quantidadeParaRepor })}
+                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-medium"
+                    >
+                      Usar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
