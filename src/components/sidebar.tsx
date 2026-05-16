@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Package, BarChart3, AlertCircle, Home } from 'lucide-react'
+import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -13,6 +13,8 @@ export default function Sidebar() {
     { href: '/dashboard', label: 'Dashboard', icon: Home },
     { href: '/dashboard/produtos', label: 'Produtos', icon: Package },
     { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3 },
+    { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart },
+    { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp },
     { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle },
   ]
 
