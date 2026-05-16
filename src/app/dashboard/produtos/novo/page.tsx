@@ -38,10 +38,19 @@ export default function NovoProdutoPage() {
     setLoading(true)
 
     try {
+      // Get the current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError || !user) {
+        setError('Usuário não autenticado')
+        return
+      }
+
       const { error: insertError } = await supabase.from('produtos').insert([
         {
           ...formData,
           ativo: true,
+          usuario_id: user.id,
         },
       ])
 
