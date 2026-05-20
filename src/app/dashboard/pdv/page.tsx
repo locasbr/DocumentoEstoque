@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
-import { X, Plus, Minus, ShoppingCart, Check } from 'lucide-react'
+import { useNotification } from '@/contexts/NotificationContext'
+import { X, Plus, Minus, ShoppingCart, Check, AlertTriangle } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 interface ItemCarrinho {
@@ -21,6 +23,7 @@ export default function PDVPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [processando, setProcessando] = useState(false)
+  const { addNotification } = useNotification()
 
   useEffect(() => {
     fetchProdutos()
@@ -41,6 +44,7 @@ export default function PDVPage() {
     } catch (error) {
       console.error('Error fetching produtos:', error)
       setError('Erro ao carregar produtos')
+      addNotification('Erro ao carregar produtos', 'error')
     } finally {
       setLoading(false)
     }
@@ -63,8 +67,10 @@ export default function PDVPage() {
               : item
           )
         )
+        addNotification(`➕ ${produto.nome}`, 'info', 1000)
       } else {
         setError(`Quantidade indisponível para ${produto.nome}`)
+        addNotification(`❌ Estoque insuficiente: ${produto.nome}`, 'warning')
       }
     } else {
       setCarrinho([
@@ -75,11 +81,16 @@ export default function PDVPage() {
           preco_unitario: produto.preco_venda,
         },
       ])
+      addNotification(`✅ ${produto.nome} adicionado ao carrinho`, 'success', 1500)
     }
   }
 
   const removerDoCarrinho = (produto_id: string) => {
+    const produto = produtos.find((p) => p.id === produto_id)
     setCarrinho(carrinho.filter((item) => item.produto_id !== produto_id))
+    if (produto) {
+      addNotification(`➖ ${produto.nome} removido`, 'info', 1000)
+    }
   }
 
   const atualizarQuantidade = (produto_id: string, novaQuantidade: number) => {
@@ -120,6 +131,7 @@ export default function PDVPage() {
 
       if (!userData.user) {
         setError('Usuário não autenticado')
+        addNotification('Erro: usuário não autenticado', 'error')
         return
       }
 
@@ -143,6 +155,7 @@ export default function PDVPage() {
 
         if (movimentoError) {
           setError(`Erro ao registrar venda de ${produto.nome}`)
+          addNotification(`Erro ao registrar venda de ${produto.nome}`, 'error')
           return
         }
 
@@ -155,6 +168,7 @@ export default function PDVPage() {
 
         if (updateError) {
           setError('Venda registrada, mas erro ao atualizar estoque')
+          addNotification('Venda registrada, mas erro ao atualizar estoque', 'warning')
           return
         }
 
@@ -173,9 +187,11 @@ export default function PDVPage() {
         }
       }
 
+      const total = calcularTotal()
       setSuccess(
-        `Venda finalizada! Total: ${formatarMoeda(calcularTotal())}`
+        `Venda finalizada! Total: ${formatarMoeda(total)}`
       )
+      addNotification(`💰 Venda finalizada: ${formatarMoeda(total)}!`, 'success', 4000)
       setCarrinho([])
 
       // Recarregar produtos
@@ -184,6 +200,7 @@ export default function PDVPage() {
       }, 1000)
     } catch (err) {
       setError('Erro ao processar venda')
+      addNotification('Erro ao processar venda', 'error')
       console.error(err)
     } finally {
       setProcessando(false)
@@ -198,17 +215,17 @@ export default function PDVPage() {
   )
 
   if (loading) {
-    return <div className="text-center py-8">Carregando...</div>
+    return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Carregando...</div>
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4 md:p-8 h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 p-3 md:p-6 min-h-screen">
         {/* Seção de Produtos */}
-        <div className="lg:col-span-2 flex flex-col space-y-4">
+        <div className="lg:col-span-2 flex flex-col space-y-3 md:space-y-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">PDV - Ponto de Venda</h1>
-            <p className="text-gray-600 mt-1">Registre vendas rapidamente</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">PDV - Ponto de Venda</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Registre vendas rapidamente</p>
           </div>
 
           {error && <Alert message={error} type="error" />}
@@ -219,12 +236,12 @@ export default function PDVPage() {
               placeholder="Buscar produto por nome, SKU ou categoria..."
               value={filtro}
               onChange={(e) => setFiltro(e.target.value)}
-              className="input-field w-full"
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
               autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto flex-1 pr-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 overflow-y-auto flex-1 pr-1">
             {produtosFiltrados.map((produto) => {
               const itemNoCarrinho = carrinho.find(
                 (i) => i.produto_id === produto.id
@@ -233,25 +250,34 @@ export default function PDVPage() {
                 <button
                   key={produto.id}
                   onClick={() => adicionarAoCarrinho(produto)}
-                  className={`p-3 rounded-lg border-2 text-left transition transform hover:scale-105 ${
+                  className={`p-2 md:p-3 rounded-lg border-2 text-left transition transform hover:scale-105 flex flex-col ${
                     itemNoCarrinho
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-600'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
-                  <p className="font-semibold text-sm truncate">{produto.nome}</p>
-                  <p className="text-xs text-gray-600">{produto.sku}</p>
-                  <div className="flex justify-between items-center mt-2">
-                    <p className="text-lg font-bold text-green-600">
+                  {/* Imagem */}
+                  <div className="w-full h-20 md:h-24 mb-2 rounded overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    <img
+                      src={getProductImageUrl(produto.imagem_url)}
+                      alt={produto.nome}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  
+                  <p className="font-semibold text-xs md:text-sm truncate text-gray-900 dark:text-gray-50">{produto.nome}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{produto.sku}</p>
+                  <div className="flex justify-between items-center mt-auto pt-2">
+                    <p className="text-sm md:text-base font-bold text-green-600 dark:text-green-400">
                       {formatarMoeda(produto.preco_venda)}
                     </p>
                     {itemNoCarrinho && (
-                      <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                      <span className="bg-blue-500 dark:bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
                         {itemNoCarrinho.quantidade}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {produto.quantidade_atual} em estoque
                   </p>
                 </button>
@@ -261,24 +287,24 @@ export default function PDVPage() {
         </div>
 
         {/* Carrinho */}
-        <div className="lg:col-span-1 flex flex-col space-y-4">
-          <div className="card h-full flex flex-col">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <ShoppingCart size={24} />
+        <div className="lg:col-span-1 flex flex-col space-y-3">
+          <div className="card dark:bg-gray-900 dark:border-gray-800 h-full flex flex-col">
+            <div className="flex items-center justify-between mb-3 pb-3 border-b dark:border-gray-700">
+              <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-gray-50">
+                <ShoppingCart size={20} />
                 Carrinho
               </h2>
               {carrinho.length > 0 && (
-                <span className="bg-red-500 text-white rounded-full px-3 py-1 text-sm font-bold">
+                <span className="bg-red-500 dark:bg-red-600 text-white rounded-full px-2 md:px-3 py-1 text-xs md:text-sm font-bold">
                   {carrinho.length}
                 </span>
               )}
             </div>
 
             {/* Itens do Carrinho */}
-            <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1">
               {carrinho.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
+                <p className="text-gray-500 dark:text-gray-400 text-center py-8 text-sm">
                   Carrinho vazio
                 </p>
               ) : (
@@ -289,24 +315,24 @@ export default function PDVPage() {
                   return (
                     <div
                       key={item.produto_id}
-                      className="p-3 bg-gray-100 rounded-lg space-y-2"
+                      className="p-2 md:p-3 bg-gray-100 dark:bg-gray-800 rounded-lg space-y-2"
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm">{produto.nome}</p>
-                          <p className="text-xs text-gray-600">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs md:text-sm text-gray-900 dark:text-gray-50 truncate">{produto.nome}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
                             {formatarMoeda(item.preco_unitario)} cada
                           </p>
                         </div>
                         <button
                           onClick={() => removerDoCarrinho(item.produto_id)}
-                          className="p-1 hover:bg-red-200 rounded text-red-600"
+                          className="p-1 hover:bg-red-200 dark:hover:bg-red-900/30 rounded text-red-600 dark:text-red-400 flex-shrink-0"
                         >
-                          <X size={16} />
+                          <X size={14} />
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1">
                         <button
                           onClick={() =>
                             atualizarQuantidade(
@@ -314,9 +340,9 @@ export default function PDVPage() {
                               item.quantidade - 1
                             )
                           }
-                          className="p-1 bg-white rounded hover:bg-gray-200"
+                          className="p-1 bg-white dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-50"
                         >
-                          <Minus size={14} />
+                          <Minus size={12} />
                         </button>
                         <input
                           type="number"
@@ -327,7 +353,7 @@ export default function PDVPage() {
                               parseInt(e.target.value) || 0
                             )
                           }
-                          className="w-12 text-center border rounded py-1 text-sm"
+                          className="w-10 text-center border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-50 rounded py-1 text-xs"
                         />
                         <button
                           onClick={() =>
@@ -336,13 +362,13 @@ export default function PDVPage() {
                               item.quantidade + 1
                             )
                           }
-                          className="p-1 bg-white rounded hover:bg-gray-200"
+                          className="p-1 bg-white dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-50"
                         >
-                          <Plus size={14} />
+                          <Plus size={12} />
                         </button>
                       </div>
 
-                      <p className="text-right text-sm font-bold">
+                      <p className="text-right text-xs md:text-sm font-bold text-gray-900 dark:text-gray-50">
                         {formatarMoeda(
                           item.quantidade * item.preco_unitario
                         )}
@@ -356,14 +382,14 @@ export default function PDVPage() {
             {/* Resumo e Total */}
             {carrinho.length > 0 && (
               <>
-                <div className="border-t pt-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Itens:</span>
-                    <span className="font-semibold">
+                <div className="border-t dark:border-gray-700 pt-3 space-y-2">
+                  <div className="flex justify-between items-center text-xs md:text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Itens:</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-50">
                       {carrinho.reduce((acc, item) => acc + item.quantidade, 0)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-2xl font-bold text-green-600 pb-4 border-b">
+                  <div className="flex justify-between items-center text-lg md:text-2xl font-bold text-green-600 dark:text-green-400 pb-2 border-b dark:border-gray-700">
                     <span>Total:</span>
                     <span>{formatarMoeda(calcularTotal())}</span>
                   </div>
@@ -372,15 +398,15 @@ export default function PDVPage() {
                 <button
                   onClick={processarVenda}
                   disabled={processando}
-                  className="btn-primary w-full flex items-center justify-center gap-2"
+                  className="btn-primary w-full flex items-center justify-center gap-2 text-sm md:text-base"
                 >
-                  <Check size={20} />
+                  <Check size={18} />
                   {processando ? 'Processando...' : 'Finalizar Venda'}
                 </button>
 
                 <button
                   onClick={() => setCarrinho([])}
-                  className="btn-secondary w-full"
+                  className="btn-secondary w-full text-sm md:text-base"
                   disabled={processando}
                 >
                   Limpar Carrinho
@@ -389,7 +415,7 @@ export default function PDVPage() {
             )}
 
             {success && (
-              <div className="p-3 bg-green-100 border border-green-300 text-green-700 rounded-lg text-sm">
+              <div className="p-2 md:p-3 bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 rounded-lg text-xs md:text-sm">
                 ✅ {success}
               </div>
             )}

@@ -39,13 +39,13 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950">
       <Navbar />
       <SearchCommand />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-auto bg-gray-50">
-          <div className="max-w-7xl mx-auto p-4 md:p-8">{children}</div>
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950">
+          <div className="w-full max-w-7xl mx-auto p-4 md:p-8">{children}</div>
         </main>
       </div>
     </div>

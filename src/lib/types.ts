@@ -9,6 +9,7 @@ export interface Produto {
   preco_venda: number;
   categoria: string;
   ativo: boolean;
+  imagem_url?: string;
   criado_em: string;
   atualizado_em: string;
 }

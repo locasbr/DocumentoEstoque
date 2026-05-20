@@ -1,5 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { ThemeProvider } from '@/contexts/ThemeContext'
+import { NotificationProvider } from '@/contexts/NotificationContext'
+import ToastContainer from '@/components/toast-container'
 
 export const metadata: Metadata = {
   title: 'EstoqueSystem - Sistema de Estoque',
@@ -12,8 +15,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR">
-      <body className="bg-gray-50">{children}</body>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <body>
+        <ThemeProvider>
+          <NotificationProvider>
+            {children}
+            <ToastContainer />
+          </NotificationProvider>
+        </ThemeProvider>
+      </body>
     </html>
   )
 }
