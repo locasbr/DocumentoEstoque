@@ -6,7 +6,7 @@ import { Produto } from '@/lib/types'
 import { BarChart3, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react'
 import { formatarMoeda, formatarData } from '@/lib/utils'
 import { useNotification } from '@/contexts/NotificationContext'
-import { exportVendasCSV, exportMovimentosDiariosCSV, exportProdutosCSV } from '@/lib/export-utils'
+import { exportVendasCSV, exportMovimentosDiariosCSV } from '@/lib/export-utils'
 
 interface RelatorioVenda {
   produto_id: string

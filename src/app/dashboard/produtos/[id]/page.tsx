@@ -175,7 +175,7 @@ export default function EditarProdutoPage() {
             <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
               Imagem do Produto
             </label>
-            <ImageUploader onImageSelected={handleImageSelected} disabled={imagemUpload} />
+            <ImageUploader onImageSelected={handleImageSelected} />
           </div>
 
           <hr className="dark:border-gray-700" />

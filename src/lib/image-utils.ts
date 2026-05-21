@@ -13,7 +13,7 @@ export async function uploadProductImage(
     const filename = `${produtoId}_${Date.now()}_${file.name}`
     const filePath = `produtos/${filename}`
 
-    const { error: uploadError, data } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from(STORAGE_BUCKET)
       .upload(filePath, file, {
         cacheControl: '3600',

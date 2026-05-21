@@ -18,6 +18,7 @@ export default function EstoquePage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const { addNotification } = useNotification()
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchData()
   }, [])

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Image from 'next/image'
 import { Upload, X, Image as ImageIcon } from 'lucide-react'
 import { validateImageFile, fileToDataUrl } from '@/lib/image-utils'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -9,14 +10,12 @@ interface ImageUploaderProps {
   onImageSelected: (file: File) => void
   currentImage?: string
   label?: string
-  disabled?: boolean
 }
 
 export default function ImageUploader({
   onImageSelected,
   currentImage,
   label = 'Adicionar Imagem do Produto',
-  disabled = false,
 }: ImageUploaderProps) {
   const [preview, setPreview] = useState<string>(currentImage || '')
   const [loading, setLoading] = useState(false)
@@ -86,10 +85,13 @@ export default function ImageUploader({
 
         {preview ? (
           <div className="relative inline-block">
-            <img
+            <Image
               src={preview}
               alt="Preview"
+              width={160}
+              height={160}
               className="h-40 w-40 object-cover rounded"
+              unoptimized
             />
             <button
               onClick={handleClear}

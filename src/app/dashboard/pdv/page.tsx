@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
@@ -25,6 +26,7 @@ export default function PDVPage() {
   const [processando, setProcessando] = useState(false)
   const { addNotification } = useNotification()
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchProdutos()
   }, [])
@@ -258,10 +260,13 @@ export default function PDVPage() {
                 >
                   {/* Imagem */}
                   <div className="w-full h-20 md:h-24 mb-2 rounded overflow-hidden bg-gray-100 dark:bg-gray-700">
-                    <img
+                    <Image
                       src={getProductImageUrl(produto.imagem_url)}
                       alt={produto.nome}
+                      width={200}
+                      height={96}
                       className="w-full h-full object-cover"
+                      unoptimized
                     />
                   </div>
                   

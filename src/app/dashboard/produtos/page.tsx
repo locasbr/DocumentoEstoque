@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import { useNotification } from '@/contexts/NotificationContext'
 import { SkeletonGrid } from '@/components/skeleton-loaders'
-import { Plus, Trash2, Edit2, Image as ImageIcon } from 'lucide-react'
+import { Plus, Trash2, Edit2 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 export default function ProdutosPage() {
@@ -18,6 +19,7 @@ export default function ProdutosPage() {
   const [success, setSuccess] = useState('')
   const { addNotification } = useNotification()
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchProdutos()
   }, [])
@@ -129,10 +131,13 @@ export default function ProdutosPage() {
                   {produtosFiltrados.map((produto) => (
                     <tr key={produto.id} className="border-t dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="px-4 py-4">
-                        <img
+                        <Image
                           src={getProductImageUrl(produto.imagem_url)}
                           alt={produto.nome}
-                          className="w-10 h-10 rounded object-cover"
+                          width={40}
+                          height={40}
+                          className="rounded object-cover"
+                          unoptimized
                         />
                       </td>
                       <td className="px-4 py-4 font-medium text-gray-900 dark:text-gray-50">{produto.nome}</td>
@@ -186,10 +191,13 @@ export default function ProdutosPage() {
                   <div className="flex gap-4">
                     {/* Imagem */}
                     <div className="flex-shrink-0">
-                      <img
+                      <Image
                         src={getProductImageUrl(produto.imagem_url)}
                         alt={produto.nome}
-                        className="w-16 h-16 rounded object-cover"
+                        width={64}
+                        height={64}
+                        className="rounded object-cover"
+                        unoptimized
                       />
                     </div>
 

@@ -76,7 +76,7 @@ export default function NovoProdutoPage() {
         return
       }
 
-      const { data, error: insertError } = await supabase.from('produtos').insert([
+      const { error: insertError } = await supabase.from('produtos').insert([
         {
           ...formData,
           ativo: true,
@@ -126,7 +126,7 @@ export default function NovoProdutoPage() {
             <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
               Imagem do Produto
             </label>
-            <ImageUploader onImageSelected={handleImageSelected} disabled={imagemUpload} />
+            <ImageUploader onImageSelected={handleImageSelected} />
           </div>
 
           <hr className="dark:border-gray-700" />
