@@ -60,7 +60,7 @@ export async function deleteProductImage(imagePath: string): Promise<boolean> {
 /**
  * Obter URL pública da imagem
  */
-export function getProductImageUrl(imagePath: string | null): string {
+export function getProductImageUrl(imagePath: string | null | undefined): string {
   if (!imagePath) {
     return '/placeholder-product.png'
   }

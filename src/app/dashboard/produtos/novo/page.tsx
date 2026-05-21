@@ -44,6 +44,10 @@ export default function NovoProdutoPage() {
       // Criar um ID temporário para a imagem antes do produto ser criado
       const tempId = `temp-${Date.now()}`
       const result = await uploadProductImage(file, tempId)
+      if (!result) {
+        addNotification('Erro ao enviar imagem', 'error')
+        return
+      }
       setFormData((prev) => ({
         ...prev,
         imagem_url: result.path,

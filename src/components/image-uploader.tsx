@@ -9,12 +9,14 @@ interface ImageUploaderProps {
   onImageSelected: (file: File) => void
   currentImage?: string
   label?: string
+  disabled?: boolean
 }
 
 export default function ImageUploader({
   onImageSelected,
   currentImage,
   label = 'Adicionar Imagem do Produto',
+  disabled = false,
 }: ImageUploaderProps) {
   const [preview, setPreview] = useState<string>(currentImage || '')
   const [loading, setLoading] = useState(false)

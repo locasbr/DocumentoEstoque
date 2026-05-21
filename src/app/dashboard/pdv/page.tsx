@@ -6,7 +6,7 @@ import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import { useNotification } from '@/contexts/NotificationContext'
-import { X, Plus, Minus, ShoppingCart, Check, AlertTriangle } from 'lucide-react'
+import { X, Plus, Minus, ShoppingCart, Check } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 interface ItemCarrinho {

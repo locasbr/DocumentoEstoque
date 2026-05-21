@@ -42,7 +42,7 @@ export default function EstoquePage() {
       if (!produtosRes.error && produtosRes.data) {
         setProdutos(produtosRes.data)
         // Notificar sobre produtos com estoque crítico
-        const criticos = produtosRes.data.filter(p => p.quantidade_atual === 0)
+        const criticos = produtosRes.data.filter((p: Produto) => p.quantidade_atual === 0)
         if (criticos.length > 0) {
           addNotification(
             `⚠️ ${criticos.length} produto(s) com ESTOQUE ZERADO!`,

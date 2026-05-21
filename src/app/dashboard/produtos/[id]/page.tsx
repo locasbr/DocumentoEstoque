@@ -73,7 +73,10 @@ export default function EditarProdutoPage() {
   }
 
   const handleImageSelected = async (file: File) => {
-    if (!formData) return
+    if (!formData || !id) {
+      addNotification('Erro: ID do produto não encontrado', 'error')
+      return
+    }
     try {
       setImagemUpload(true)
       // Se existe imagem anterior, deletar ela
@@ -81,6 +84,10 @@ export default function EditarProdutoPage() {
         await deleteProductImage(formData.imagem_url)
       }
       const result = await uploadProductImage(file, id)
+      if (!result) {
+        addNotification('Erro ao enviar imagem', 'error')
+        return
+      }
       setFormData((prev) =>
         prev
           ? {
