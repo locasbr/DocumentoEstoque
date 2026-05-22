@@ -104,33 +104,33 @@ export default function AlertasPage() {
       {message && <Alert message={message} type="success" />}
 
       <div className="card">
-        <div className="flex gap-4 mb-6">
+        <div className="flex flex-wrap gap-2 md:gap-4 mb-6">
           <button
             onClick={() => setFiltro('todos')}
-            className={`px-4 py-2 rounded-lg transition-colors ${
+            className={`px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base font-medium h-10 flex items-center ${
               filtro === 'todos'
                 ? 'bg-primary text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             Todos ({alertas.length})
           </button>
           <button
             onClick={() => setFiltro('nao_visualizados')}
-            className={`px-4 py-2 rounded-lg transition-colors ${
+            className={`px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base font-medium h-10 flex items-center ${
               filtro === 'nao_visualizados'
                 ? 'bg-primary text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             Não Visualizados ({alertas.filter((a) => !a.visualizado).length})
           </button>
           <button
             onClick={() => setFiltro('visualizados')}
-            className={`px-4 py-2 rounded-lg transition-colors ${
+            className={`px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base font-medium h-10 flex items-center ${
               filtro === 'visualizados'
                 ? 'bg-primary text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             Visualizados ({alertas.filter((a) => a.visualizado).length})
@@ -146,38 +146,38 @@ export default function AlertasPage() {
             {alertasFiltrados.map((alerta) => (
               <div
                 key={alerta.id}
-                className={`p-4 border rounded-lg flex items-start justify-between ${
-                  alerta.visualizado ? 'bg-gray-50' : 'bg-yellow-50 border-yellow-200'
+                className={`p-4 border rounded-lg flex flex-col md:flex-row md:items-start md:justify-between gap-4 ${
+                  alerta.visualizado ? 'bg-gray-50 dark:bg-gray-800/50' : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
                 }`}
               >
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-3 md:gap-4 flex-1 min-w-0">
                   <AlertCircle
-                    className={
+                    className={`flex-shrink-0 mt-1 ${
                       alerta.tipo_alerta === 'estoque_critico'
-                        ? 'text-red-600'
-                        : 'text-warning'
-                    }
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-yellow-600 dark:text-yellow-400'
+                    }`}
                     size={24}
                   />
-                  <div>
-                    <h3 className="font-semibold">{alerta.produto?.nome}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-50 break-words">{alerta.produto?.nome}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                       {alerta.tipo_alerta === 'estoque_critico'
                         ? '🔴 Estoque crítico'
                         : '🟡 Estoque baixo'}
                     </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Quantidade atual: {alerta.produto?.quantidade_atual} unidades
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                      Quantidade atual: <span className="font-bold text-red-600 dark:text-red-400">{alerta.produto?.quantidade_atual}</span> unidades
                     </p>
-                    <p className="text-xs text-gray-500">
-                      Mínimo necessário: {alerta.produto?.quantidade_minima} unidades
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Mínimo necessário: <span className="font-bold">{alerta.produto?.quantidade_minima}</span> unidades
                     </p>
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                       {formatarData(alerta.criado_em)}
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0 self-end md:self-start">
                   {!alerta.visualizado && (
                     <button
                       onClick={() => handleMarcarComoVisto(alerta.id)}
