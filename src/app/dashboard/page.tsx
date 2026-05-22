@@ -4,7 +4,16 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Alerta, Produto, MovimentoEstoque } from '@/lib/types'
-import { Package, BarChart3, AlertCircle, TrendingUp, AlertTriangle, Clock, ArrowRight } from 'lucide-react'
+import {
+  Package,
+  BarChart3,
+  AlertCircle,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  ArrowRight,
+  Printer,
+} from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 export default function Dashboard() {
@@ -36,7 +45,7 @@ export default function Dashboard() {
             .filter((p: Produto) => p.quantidade_atual < p.quantidade_minima)
             .sort((a: Produto, b: Produto) => a.quantidade_atual - b.quantidade_atual)
             .slice(0, 5)
-          
+
           setStats((prev) => ({
             ...prev,
             totalProdutos: produtos.length,
@@ -106,9 +115,19 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Bem-vindo ao seu sistema de estoque</p>
+      {/* Cabeçalho com botão Nota Fiscal (desktop only) */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-2">Bem-vindo ao seu sistema de estoque</p>
+        </div>
+        <Link
+          href="/dashboard/nota-fiscal"
+          className="hidden md:inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+        >
+          <Printer size={18} />
+          <span className="font-medium">Imprimir Nota Fiscal</span>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -128,7 +147,7 @@ export default function Dashboard() {
           icon={AlertCircle}
           label="Alertas Críticos"
           value={stats.alertas}
-          color={stats.alertas > 0 ? "bg-red-500" : "bg-gray-400"}
+          color={stats.alertas > 0 ? 'bg-red-500' : 'bg-gray-400'}
         />
         <StatCard
           icon={TrendingUp}
@@ -141,7 +160,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Produtos Críticos */}
         {produtosCriticos.length > 0 && (
-          <div className="card border-l-4 border-red-500">
+          <div className="card border-l-4 border-red-500 pl-4">
+            {/* ↑ padding-left adicionado */}
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle size={24} className="text-red-500" />
               <h2 className="text-xl font-bold">Produtos Críticos</h2>
@@ -171,7 +191,7 @@ export default function Dashboard() {
 
         {/* Movimentos de Hoje */}
         {movimentosHoje.length > 0 && (
-          <div className="card border-l-4 border-blue-500">
+          <div className="card border-l-4 border-blue-500 pl-4">
             <div className="flex items-center gap-2 mb-4">
               <Clock size={24} className="text-blue-500" />
               <h2 className="text-xl font-bold">Movimentos de Hoje</h2>
@@ -194,8 +214,15 @@ export default function Dashboard() {
                         <p className="text-xs text-gray-600">{movimento.motivo || 'Sem motivo'}</p>
                       </div>
                     </div>
-                    <p className={`font-bold text-sm ${movimento.tipo_movimento === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
-                      {movimento.tipo_movimento === 'entrada' ? '+' : '-'}{movimento.quantidade}
+                    <p
+                      className={`font-bold text-sm ${
+                        movimento.tipo_movimento === 'entrada'
+                          ? 'text-green-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {movimento.tipo_movimento === 'entrada' ? '+' : '-'}
+                      {movimento.quantidade}
                     </p>
                   </div>
                 </div>
@@ -208,7 +235,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Alertas Recentes */}
+      {/* Alertas Recentes – emojis substituídos por ícones */}
       {alertasRecentes.length > 0 && (
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -220,12 +247,17 @@ export default function Dashboard() {
               <Link
                 key={alerta.id}
                 href="/dashboard/alertas"
-                className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg hover:bg-yellow-100 transition"
+                className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg hover:bg-yellow-100 transition flex items-center gap-3"
               >
-                <p className="font-medium">
+                {alerta.tipo_alerta === 'estoque_baixo' ? (
+                  <AlertTriangle size={18} className="text-yellow-600 shrink-0" />
+                ) : (
+                  <AlertCircle size={18} className="text-red-600 shrink-0" />
+                )}
+                <p className="font-medium text-gray-800">
                   {alerta.tipo_alerta === 'estoque_baixo'
-                    ? '⚠️ Estoque Baixo: '
-                    : '🔴 Estoque Crítico: '}
+                    ? 'Estoque Baixo: '
+                    : 'Estoque Crítico: '}
                   <span className="text-red-600">{alerta.produto?.nome}</span>
                 </p>
               </Link>
