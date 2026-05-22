@@ -65,8 +65,19 @@ export function getProductImageUrl(imagePath: string | null | undefined): string
     return '/placeholder-product.png'
   }
 
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(imagePath)
-  return data.publicUrl
+  // Se já é uma URL completa, retornar como está
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath
+  }
+
+  // Se é um caminho relativo, construir a URL do Supabase
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl) {
+    console.warn('NEXT_PUBLIC_SUPABASE_URL não configurada')
+    return '/placeholder-product.png'
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${imagePath}`
 }
 
 /**
