@@ -11,6 +11,7 @@ const navItems = [
   { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp },
   { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle },
+  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle },
 ]
 
 export default function Sidebar() {
@@ -35,18 +36,7 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* Perfil no rodapé da sidebar */}
-        <div className="p-4 border-t dark:border-gray-800">
-          <Link href="/dashboard/perfil"
-            className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors w-full ${
-              isActive('/dashboard/perfil')
-                ? 'bg-primary text-white'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}>
-            <UserCircle size={20} />
-            <span className="text-sm font-medium">Perfil</span>
-          </Link>
-        </div>
+       
       </aside>
 
       {/* Mobile Bottom Navigation */}
