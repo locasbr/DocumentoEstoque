@@ -41,3 +41,12 @@ export interface Usuario {
   criado_em: string;
   atualizado_em: string;
 }
+export interface Membro {
+  id: string
+  dono_id: string
+  user_id: string
+  email: string
+  nivel: 'dono' | 'funcionario'
+  status: 'pendente' | 'ativo' | 'inativo'
+  created_at: string
+}

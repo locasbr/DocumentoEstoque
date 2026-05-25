@@ -2,28 +2,39 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle } from 'lucide-react'
+import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
+import { useMembro } from '@/hooks/useMembro'
 
-const navItems = [
-  { href: '/dashboard',            label: 'Dashboard',  icon: Home },
-  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package },
-  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3 },
-  { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp },
-  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle },
-  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle },
+const allNavItems = [
+  { href: '/dashboard',            label: 'Dashboard',  icon: Home, requiredLevel: 'dono' },
+  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package, requiredLevel: 'dono' },
+  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3, requiredLevel: null },
+  { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
+  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle, requiredLevel: 'dono' },
+  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users, requiredLevel: 'dono' },
+  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle, requiredLevel: null },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const { isDono } = useMembro()
+  
   const isActive = (path: string) => pathname === path
+
+  // Filtra itens baseado no nível do usuário
+  const filteredNavItems = allNavItems.filter(item => {
+    if (item.requiredLevel === null) return true // Todos têm acesso
+    if (item.requiredLevel === 'dono') return isDono
+    return false
+  })
 
   return (
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen sticky top-0 border-r dark:border-gray-800">
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(({ href, label, icon: Icon }) => (
+          {filteredNavItems.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                 isActive(href)
@@ -42,7 +53,7 @@ export default function Sidebar() {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-30">
         <div className="flex items-center justify-around">
-          {[...navItems, { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle }].map(({ href, label, icon: Icon }) => (
+          {filteredNavItems.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href}
               className={`flex flex-col items-center gap-0.5 px-2 py-2 flex-1 transition-colors ${
                 isActive(href) ? 'text-primary' : 'text-gray-500 dark:text-gray-400'

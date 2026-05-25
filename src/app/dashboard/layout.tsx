@@ -1,12 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/navbar'
 import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
+
+const RESTRICTED_ROUTES = [
+  '/dashboard$', // dashboard principal
+  '/dashboard/produtos',
+  '/dashboard/relatorios',
+  '/dashboard/alertas',
+  '/dashboard/equipe',
+]
 
 export default function DashboardLayout({
   children,
@@ -14,6 +22,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -22,9 +31,32 @@ export default function DashboardLayout({
         const { data } = await supabase.auth.getSession()
         if (!data.session) {
           router.push('/login')
-        } else {
-          setIsLoading(false)
+          return
         }
+
+        // Busca o nível do usuário
+        const { data: membroData } = await supabase
+          .from('membros')
+          .select('nivel')
+          .eq('user_id', data.session.user.id)
+          .single()
+
+        const userLevel = membroData?.nivel || 'dono'
+
+        // Se for funcionário, verifica se pode acessar a rota
+        if (userLevel === 'funcionario') {
+          const isRestrictedRoute = RESTRICTED_ROUTES.some((route) => {
+            const regex = new RegExp(`^${route}`)
+            return regex.test(pathname)
+          })
+
+          if (isRestrictedRoute) {
+            router.push('/dashboard/pdv')
+            return
+          }
+        }
+
+        setIsLoading(false)
       } catch (error) {
         console.error('Error checking auth:', error)
         router.push('/login')
@@ -32,7 +64,7 @@ export default function DashboardLayout({
     }
 
     checkAuth()
-  }, [router])
+  }, [router, pathname])
 
   if (isLoading) {
     return <Loading />
