@@ -189,7 +189,7 @@ export default function Dashboard() {
                 href="/dashboard/alertas"
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
               >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 min-w-[8px] min-h-[8px] self-center ${
                   alerta.tipo_alerta === 'estoque_critico' ? 'bg-red-500' : 'bg-yellow-500'
                 }`} />
                 <span className="text-sm text-gray-700 dark:text-gray-300 pl-2">
