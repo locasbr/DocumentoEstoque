@@ -139,6 +139,7 @@ export default function NovoMovimentoPage() {
           await supabase.from('alertas').insert([
             {
               produto_id: formData.produto_id,
+              usuario_id: userData.user.id,
               tipo_alerta: tipoAlerta,
               visualizado: false,
             },
