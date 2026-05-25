@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
@@ -31,18 +31,7 @@ export default function EquipePage() {
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
 
   // Buscar lista de membros
-  useEffect(() => {
-    if (loadingMembro) return
-
-    if (!isDono) {
-      addNotification('Apenas donos podem acessar esta página', 'error')
-      return
-    }
-
-    fetchMembros()
-  }, [isDono, loadingMembro, donoId])
-
-  const fetchMembros = async () => {
+  const fetchMembros = useCallback(async () => {
     try {
       setIsLoading(true)
       const { data, error } = await supabase
@@ -59,7 +48,18 @@ export default function EquipePage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [addNotification, donoId])
+
+  useEffect(() => {
+    if (loadingMembro) return
+
+    if (!isDono) {
+      addNotification('Apenas donos podem acessar esta página', 'error')
+      return
+    }
+
+    fetchMembros()
+  }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
   const generatePassword = (): string => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'

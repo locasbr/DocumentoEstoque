@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { MovimentoEstoque, Produto } from '@/lib/types'
@@ -18,12 +18,7 @@ export default function EstoquePage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const { addNotification } = useNotification()
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [movimentosRes, produtosRes] = await Promise.all([
         supabase
@@ -58,7 +53,11 @@ export default function EstoquePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [addNotification])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // Calcular estatísticas do dia
   const hoje = new Date().toDateString()

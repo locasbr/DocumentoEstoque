@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
@@ -19,12 +19,7 @@ export default function ProdutosPage() {
   const [success, setSuccess] = useState('')
   const { addNotification } = useNotification()
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    fetchProdutos()
-  }, [])
-
-  const fetchProdutos = async () => {
+  const fetchProdutos = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('produtos')
@@ -40,7 +35,11 @@ export default function ProdutosPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [addNotification])
+
+  useEffect(() => {
+    fetchProdutos()
+  }, [fetchProdutos])
 
   const handleDelete = async (id: string, nome: string) => {
     if (confirm(`Tem certeza que deseja deletar "${nome}"?`)) {
