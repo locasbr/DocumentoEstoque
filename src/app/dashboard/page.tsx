@@ -122,7 +122,7 @@ export default function Dashboard() {
                   href={`/dashboard/produtos/${produto.id}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 pl-3">
                     <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{produto.nome}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">SKU: {produto.sku}</p>
                   </div>
@@ -192,7 +192,7 @@ export default function Dashboard() {
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                   alerta.tipo_alerta === 'estoque_critico' ? 'bg-red-500' : 'bg-yellow-500'
                 }`} />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-sm text-gray-700 dark:text-gray-300 pl-2">
                   <span className="font-medium">
                     {alerta.tipo_alerta === 'estoque_baixo' ? 'Estoque Baixo' : 'Estoque Crítico'}:
                   </span>{' '}
