@@ -300,7 +300,7 @@ export default function NovoProdutoPage() {
       {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
       {scannerAberto && (
         <BarcodeScanner
-          onBarcodeDetected={handleCodigoBarrasLido}
+          onDetected={handleCodigoBarrasLido}
           onClose={() => setScannerAberto(false)}
         />
       )}

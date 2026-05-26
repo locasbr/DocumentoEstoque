@@ -354,7 +354,7 @@ export default function EditarProdutoPage() {
       {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
       {scannerAberto && (
         <BarcodeScanner
-          onBarcodeDetected={handleCodigoBarrasLido}
+          onDetected={handleCodigoBarrasLido}
           onClose={() => setScannerAberto(false)}
         />
       )}
