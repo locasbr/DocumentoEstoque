@@ -9,27 +9,43 @@ interface Props {
 
 export default function BarcodeScanner({ onDetected, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [erro, setErro] = useState('')
+  const [manualInput, setManualInput] = useState('')
+  const [temCamera, setTemCamera] = useState(true)
 
   useEffect(() => {
     let stream: MediaStream | undefined
     let intervalo: NodeJS.Timeout
 
     async function iniciar() {
-      // Verifica suporte
+      // Verifica suporte a BarcodeDetector
       if (!('BarcodeDetector' in window)) {
-        setErro('Seu navegador não suporta leitura automática. Use o Chrome no Android.')
+        console.log('BarcodeDetector não suportado, usando input manual')
+        setTemCamera(false)
+        inputRef.current?.focus()
         return
       }
 
       try {
+        // Tenta acessar a câmera
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } }
+          video: { 
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
         })
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream
-          await videoRef.current.play()
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch(err => {
+              console.error('Erro ao dar play no vídeo:', err)
+              setErro('Erro ao iniciar vídeo. Tente recarregar.')
+            })
+          }
         }
 
         const detector = new (window as any).BarcodeDetector({
@@ -37,7 +53,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         })
 
         intervalo = setInterval(async () => {
-          if (!videoRef.current) return
+          if (!videoRef.current || videoRef.current.readyState !== 4) return
           try {
             const codes = await detector.detect(videoRef.current)
             if (codes.length > 0) {
@@ -45,11 +61,22 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
               stream?.getTracks().forEach(t => t.stop())
               onDetected(codes[0].rawValue)
             }
-          } catch {}
+          } catch (e) {
+            // Silencia erros de detecção
+          }
         }, 300)
 
-      } catch (e) {
-        setErro('Não foi possível acessar a câmera. Verifique as permissões.')
+      } catch (e: any) {
+        console.error('Erro ao acessar câmera:', e)
+        if (e.name === 'NotAllowedError') {
+          setErro('Permissão de câmera negada. Digite o código abaixo.')
+        } else if (e.name === 'NotFoundError') {
+          setErro('Nenhuma câmera encontrada. Digite o código abaixo.')
+        } else {
+          setErro('Erro ao acessar câmera. Digite o código abaixo.')
+        }
+        setTemCamera(false)
+        inputRef.current?.focus()
       }
     }
 
@@ -61,37 +88,74 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
     }
   }, [onDetected])
 
+  const handleSubmitManual = () => {
+    if (manualInput.trim()) {
+      onDetected(manualInput.trim())
+      setManualInput('')
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
-      <div className="flex items-center justify-between p-4 bg-black">
-        <p className="text-white font-medium">Aponte para o código de barras</p>
-        <button onClick={onClose} className="text-white p-2">
+      <div className="flex items-center justify-between p-4 bg-black border-b border-gray-700">
+        <p className="text-white font-medium text-sm">
+          {temCamera ? 'Aponte para o código de barras' : 'Digite o código'}
+        </p>
+        <button onClick={onClose} className="text-white p-2 hover:bg-gray-800 rounded">
           <X size={24} />
         </button>
       </div>
 
-      {erro ? (
-        <div className="flex-1 flex items-center justify-center p-8 text-center">
-          <div>
-            <p className="text-white text-lg mb-4">{erro}</p>
-            <button onClick={onClose} className="bg-white text-black px-6 py-3 rounded-lg font-medium">
-              Fechar
+      {temCamera && !erro ? (
+        <>
+          <video
+            ref={videoRef}
+            className="flex-1 w-full h-full object-cover bg-black"
+            playsInline
+            muted
+            autoPlay
+          />
+          
+          {/* Guia visual */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="border-2 border-dashed border-yellow-400 w-40 h-32 rounded-lg opacity-70"></div>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          {erro && (
+            <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg max-w-xs">
+              <p className="text-red-300 text-sm">{erro}</p>
+            </div>
+          )}
+          
+          <div className="w-full max-w-xs">
+            <p className="text-white mb-4 font-medium">Digite o código de barras:</p>
+            <input
+              ref={inputRef}
+              type="text"
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSubmitManual()
+              }}
+              placeholder="1234567890123"
+              className="w-full px-4 py-3 text-center text-lg border-2 border-white rounded-lg bg-transparent text-white placeholder-gray-400 focus:outline-none focus:border-green-400"
+              autoFocus
+            />
+            <button
+              onClick={handleSubmitManual}
+              className="w-full mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition"
+            >
+              Confirmar
             </button>
           </div>
         </div>
-      ) : (
-        <video
-          ref={videoRef}
-          className="flex-1 object-cover w-full"
-          playsInline
-          muted
-          autoPlay
-        />
       )}
 
-      <div className="p-4 bg-black text-center">
-        <p className="text-gray-400 text-sm">
-          Funciona no Chrome Android · Desktop use leitor USB
+      <div className="p-3 bg-black border-t border-gray-700 text-center">
+        <p className="text-gray-400 text-xs">
+          {temCamera ? '📱 Chrome Android ou Firefox · Ou toque aqui para digitar' : '⌨️ Digite manualmente'}
         </p>
       </div>
     </div>
