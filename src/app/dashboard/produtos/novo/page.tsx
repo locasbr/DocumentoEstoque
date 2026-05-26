@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabase'
 import { uploadProductImage } from '@/lib/image-utils'
 import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
+import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Camera } from 'lucide-react'
 
 export default function NovoProdutoPage() {
   const router = useRouter()
@@ -17,6 +18,7 @@ export default function NovoProdutoPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [imagemUpload, setImagemUpload] = useState(false)
+  const [scannerAberto, setScannerAberto] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -36,6 +38,15 @@ export default function NovoProdutoPage() {
       ...prev,
       [name]: name.includes('quantidade') || name.includes('preco') ? parseFloat(value) || 0 : value,
     }))
+  }
+
+  const handleCodigoBarrasLido = (codigoBarras: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      sku: codigoBarras,
+    }))
+    setScannerAberto(false)
+    addNotification('✅ SKU preenchido via código de barras', 'success', 2000)
   }
 
   const handleImageSelected = async (file: File) => {
@@ -151,15 +162,26 @@ export default function NovoProdutoPage() {
               <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
                 SKU *
               </label>
-              <input
-                type="text"
-                name="sku"
-                value={formData.sku}
-                onChange={handleInputChange}
-                required
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-                placeholder="Código SKU"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="sku"
+                  value={formData.sku}
+                  onChange={handleInputChange}
+                  required
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 flex-1"
+                  placeholder="Código SKU"
+                />
+                <button
+                  type="button"
+                  onClick={() => setScannerAberto(true)}
+                  className="btn-primary px-3 flex items-center gap-2 whitespace-nowrap"
+                  title="Ler código de barras"
+                >
+                  <Camera size={18} />
+                  <span className="hidden sm:inline">Câmera</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -274,6 +296,14 @@ export default function NovoProdutoPage() {
           </div>
         </form>
       </div>
+
+      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {scannerAberto && (
+        <BarcodeScanner
+          onBarcodeDetected={handleCodigoBarrasLido}
+          onClose={() => setScannerAberto(false)}
+        />
+      )}
     </div>
   )
 }

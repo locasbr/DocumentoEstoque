@@ -7,9 +7,10 @@ import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import CupomImpressao from '@/components/cupom-impressao'
+import BarcodeScanner from '@/components/barcode-scanner'
 import { useCupom } from '@/hooks/useCupom'
 import { useNotification } from '@/contexts/NotificationContext'
-import { X, Plus, Minus, ShoppingCart, Check, CreditCard, Banknote, QrCode } from 'lucide-react'
+import { X, Plus, Minus, ShoppingCart, Check, CreditCard, Banknote, QrCode, Camera } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 interface ItemCarrinho {
@@ -32,6 +33,7 @@ export default function PDVPage() {
   const [filtro, setFiltro] = useState('')
   const [error, setError] = useState('')
   const [processando, setProcessando] = useState(false)
+  const [scannerAberto, setScannerAberto] = useState(false)
 
   // Pagamento
   const [modalPagamento, setModalPagamento] = useState(false)
@@ -61,6 +63,17 @@ export default function PDVPage() {
       addNotification('Erro ao carregar produtos', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCodigoBarrasLido = (codigoBarras: string) => {
+    const produtoEncontrado = produtos.find((p) => p.sku.toLowerCase() === codigoBarras.toLowerCase())
+    
+    if (produtoEncontrado) {
+      adicionarAoCarrinho(produtoEncontrado)
+      addNotification(`✅ ${produtoEncontrado.nome} adicionado via código de barras`, 'success', 2000)
+    } else {
+      addNotification('❌ Produto não cadastrado', 'warning', 3000)
     }
   }
 
@@ -249,9 +262,19 @@ export default function PDVPage() {
             <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
           </div>
           {error && <Alert message={error} type="error" />}
-          <input type="text" placeholder="Buscar produto, SKU ou categoria..."
-            value={filtro} onChange={(e) => setFiltro(e.target.value)}
-            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
+          <div className="flex gap-2">
+            <input type="text" placeholder="Buscar produto, SKU ou categoria..."
+              value={filtro} onChange={(e) => setFiltro(e.target.value)}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
+            <button
+              onClick={() => setScannerAberto(true)}
+              className="btn-primary px-4 flex items-center gap-2 whitespace-nowrap"
+              title="Ler código de barras"
+            >
+              <Camera size={18} />
+              <span className="hidden sm:inline">Câmera</span>
+            </button>
+          </div>
           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
             {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
           </div>
@@ -313,9 +336,18 @@ export default function PDVPage() {
       <div className="md:hidden space-y-3 p-3">
         <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
         {error && <Alert message={error} type="error" />}
-        <input type="text" placeholder="Buscar..." value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
+        <div className="flex gap-2">
+          <input type="text" placeholder="Buscar..." value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
+          <button
+            onClick={() => setScannerAberto(true)}
+            className="btn-primary px-3 flex items-center gap-1"
+            title="Ler código de barras"
+          >
+            <Camera size={18} />
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
         </div>
@@ -412,6 +444,14 @@ export default function PDVPage() {
       {/* ── CUPOM ── */}
       {cupomAberto && dadosCupom && (
         <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
+      )}
+
+      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {scannerAberto && (
+        <BarcodeScanner
+          onBarcodeDetected={handleCodigoBarrasLido}
+          onClose={() => setScannerAberto(false)}
+        />
       )}
     </div>
   )
