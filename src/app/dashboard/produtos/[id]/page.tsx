@@ -1,5 +1,7 @@
 'use client'
 
+import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
+import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -27,6 +29,10 @@ export default function EditarProdutoPage() {
   const [scannerAberto, setScannerAberto] = useState(false)
 
   const [formData, setFormData] = useState<Produto | null>(null)
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
+  const [barcodeDetectado, setBarcodeDetectado] = useState('')
+  const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
 
   useEffect(() => {
     if (!id) {
@@ -74,6 +80,17 @@ export default function EditarProdutoPage() {
     )
   }
 
+  const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
+  setFormData((prev) => prev ? ({
+    ...prev,
+    nome: produto.nome || prev.nome,
+    descricao: produto.descricao || prev.descricao,
+    categoria: produto.categoria || prev.categoria,
+  }) : null)
+  setBarcodeModalAberto(false)
+  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
+}
+
   const handleImageSelected = async (file: File) => {
     if (!formData || !id) {
       addNotification('Erro: ID do produto não encontrado', 'error')
@@ -107,19 +124,20 @@ export default function EditarProdutoPage() {
     }
   }
 
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    if (!formData) return
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            sku: codigoBarras,
-          }
-        : null
-    )
-    setScannerAberto(false)
-    addNotification('✅ SKU preenchido via código de barras', 'success', 2000)
-  }
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+  setScannerAberto(false)
+  setBarcodeDetectado(codigoBarras)
+  setBarcodeModalAberto(true)
+  setBuscandoBarcode(true)
+  setProdutoBarcode(null)
+
+  // Preenche SKU imediatamente
+  setFormData((prev) => prev ? { ...prev, sku: codigoBarras } : null)
+  // Busca informações na API
+  const resultado = await buscarProdutoPorBarcode(codigoBarras)
+  setProdutoBarcode(resultado)
+  setBuscandoBarcode(false)
+}
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -350,7 +368,17 @@ export default function EditarProdutoPage() {
           </div>
         </form>
       </div>
-
+      {/* ── MODAL BARCODE PRODUTO ── */}
+{barcodeModalAberto && produtoBarcode !== null && (
+  <BarcodeProductModal
+    codigo={barcodeDetectado}
+    produto={produtoBarcode}
+    loading={buscandoBarcode}
+    onConfirmar={handleConfirmarBarcode}
+    onCancelar={() => setBarcodeModalAberto(false)}
+  />
+  
+)}
       {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
       {scannerAberto && (
         <BarcodeScanner

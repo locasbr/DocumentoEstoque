@@ -1,5 +1,7 @@
 'use client'
 
+import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
+import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -19,6 +21,10 @@ export default function NovoProdutoPage() {
   const [success, setSuccess] = useState('')
   const [imagemUpload, setImagemUpload] = useState(false)
   const [scannerAberto, setScannerAberto] = useState(false)
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
+  const [barcodeDetectado, setBarcodeDetectado] = useState('')
+  const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -40,14 +46,32 @@ export default function NovoProdutoPage() {
     }))
   }
 
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      sku: codigoBarras,
-    }))
-    setScannerAberto(false)
-    addNotification('✅ SKU preenchido via código de barras', 'success', 2000)
-  }
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+  setScannerAberto(false)
+  setBarcodeDetectado(codigoBarras)
+  setBarcodeModalAberto(true)
+  setBuscandoBarcode(true)
+  setProdutoBarcode(null)
+
+  // Preenche SKU imediatamente
+  setFormData((prev) => ({ ...prev, sku: codigoBarras }))
+
+  // Busca informações na API
+  const resultado = await buscarProdutoPorBarcode(codigoBarras)
+  setProdutoBarcode(resultado)
+  setBuscandoBarcode(false)
+}
+
+  const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
+  setFormData((prev) => ({
+    ...prev,
+    nome: produto.nome || prev.nome,
+    descricao: produto.descricao || prev.descricao,
+    categoria: produto.categoria || prev.categoria,
+  }))
+  setBarcodeModalAberto(false)
+  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
+}
 
   const handleImageSelected = async (file: File) => {
     try {
@@ -304,6 +328,18 @@ export default function NovoProdutoPage() {
           onClose={() => setScannerAberto(false)}
         />
       )}
+
+      {/* ── MODAL BARCODE PRODUTO ── */}
+      {barcodeModalAberto && produtoBarcode !== null && (
+      <BarcodeProductModal
+        codigo={barcodeDetectado}
+        produto={produtoBarcode}
+        loading={buscandoBarcode}
+        onConfirmar={handleConfirmarBarcode}
+        onCancelar={() => setBarcodeModalAberto(false)}
+       />
+)}
     </div>
   )
 }
+
