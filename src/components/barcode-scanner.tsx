@@ -28,15 +28,59 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       }
 
       try {
-        // Tenta acessar a câmera
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
+        // 1. Lista todas as câmeras disponíveis
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(device => device.kind === 'videoinput')
+        
+        // 2. Identifica a câmera traseira normal (evita grande angular)
+        let cameraId: string | undefined
+        
+        // Função para testar se a câmera é provavelmente grande angular
+        const isWideAngle = (label: string) => {
+          const l = label.toLowerCase()
+          return l.includes('wide') || l.includes('ultra') || 
+                 l.includes('0.6') || l.includes('0.5') ||
+                 l.includes('angle') || l.includes('grande angular')
+        }
+
+        // Filtra câmeras traseiras
+        const backCameras = videoDevices.filter(device => {
+          const label = device.label.toLowerCase()
+          return label.includes('back') || label.includes('traseira') || 
+                 label.includes('principal') || label.includes('main') ||
+                 (label.includes('camera') && !label.includes('front'))
         })
+
+        // Tentativa 1: pegar a primeira câmera traseira que NÃO é wide-angle
+        const normalBack = backCameras.find(cam => !isWideAngle(cam.label))
+        if (normalBack) {
+          cameraId = normalBack.deviceId
+        } 
+        // Tentativa 2: se não achou, usar a primeira câmera traseira disponível (sem filtro)
+        else if (backCameras.length > 0) {
+          cameraId = backCameras[0].deviceId
+        }
+
+        // 3. Define as constraints de vídeo
+        const constraints: MediaStreamConstraints = {
+          video: cameraId 
+            ? { deviceId: { exact: cameraId } }   // força o deviceId específico
+            : {
+                facingMode: { exact: 'environment' }, // fallback: traseira padrão
+                width: { min: 1280, ideal: 1920 },    // força resolução alta (evita wide)
+                height: { min: 720, ideal: 1080 }
+              }
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+        
+        // Verifica se a resolução está muito baixa (possível wide-angle)
+        const track = stream.getVideoTracks()[0]
+        const settings = track.getSettings()
+        if (settings.width && settings.width < 1280) {
+          console.warn('Resolução baixa detectada, pode ser wide-angle.')
+          // Se quiser, pode tentar trocar para outra câmera aqui (opcional)
+        }
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream
