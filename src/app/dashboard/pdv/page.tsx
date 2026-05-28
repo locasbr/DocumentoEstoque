@@ -8,6 +8,7 @@ import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import CupomImpressao from '@/components/cupom-impressao'
 import BarcodeScanner from '@/components/barcode-scanner'
+import { buscarProdutoPorBarcode } from '@/lib/barcode-api'
 import { useCupom } from '@/hooks/useCupom'
 import { useNotification } from '@/contexts/NotificationContext'
 import { X, Plus, Minus, ShoppingCart, Check, CreditCard, Banknote, QrCode, Camera } from 'lucide-react'
@@ -33,7 +34,6 @@ export default function PDVPage() {
   const [filtro, setFiltro] = useState('')
   const [error, setError] = useState('')
   const [processando, setProcessando] = useState(false)
-  const [scannerAberto, setScannerAberto] = useState(false)
 
   // Pagamento
   const [modalPagamento, setModalPagamento] = useState(false)
@@ -41,12 +41,17 @@ export default function PDVPage() {
   const [valorRecebido, setValorRecebido] = useState('')
   const [desconto, setDesconto] = useState('')
 
+  // Scanner e cadastro rápido
+  const [scannerAberto, setScannerAberto] = useState(false)
+  const [modalCadastroRapido, setModalCadastroRapido] = useState(false)
+  const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
+  const [skuParaCadastro, setSkuParaCadastro] = useState('')
+
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
 
   useEffect(() => {
     fetchProdutos()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchProdutos = async () => {
@@ -63,17 +68,6 @@ export default function PDVPage() {
       addNotification('Erro ao carregar produtos', 'error')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    const produtoEncontrado = produtos.find((p) => p.sku.toLowerCase() === codigoBarras.toLowerCase())
-    
-    if (produtoEncontrado) {
-      adicionarAoCarrinho(produtoEncontrado)
-      addNotification(`✅ ${produtoEncontrado.nome} adicionado via código de barras`, 'success', 2000)
-    } else {
-      addNotification('❌ Produto não cadastrado', 'warning', 3000)
     }
   }
 
@@ -107,6 +101,82 @@ export default function PDVPage() {
     }
   }
 
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+    // 1. Busca no banco local
+    const produtoLocal = produtos.find(p => p.sku === codigoBarras)
+    if (produtoLocal) {
+      adicionarAoCarrinho(produtoLocal)
+      addNotification(`✅ ${produtoLocal.nome} adicionado`, 'success', 2000)
+      return
+    }
+
+    // 2. Não achou local: consulta APIs externas
+    addNotification(`🔍 Buscando ${codigoBarras}...`, 'info', 2000)
+    const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
+
+    if (resultadoAPI.encontrado) {
+      setSkuParaCadastro(codigoBarras)
+      setDadosProdutoAPI(resultadoAPI)
+      setModalCadastroRapido(true)
+    } else {
+      addNotification(`❌ Produto ${codigoBarras} não encontrado. Cadastre manualmente.`, 'warning', 5000)
+    }
+  }
+
+  const salvarProdutoRapido = async () => {
+    const nomeInput = document.getElementById('cadastroNome') as HTMLInputElement
+    const marcaInput = document.getElementById('cadastroMarca') as HTMLInputElement
+    const descricaoInput = document.getElementById('cadastroDescricao') as HTMLTextAreaElement
+    const categoriaInput = document.getElementById('cadastroCategoria') as HTMLInputElement
+    const precoInput = document.getElementById('cadastroPreco') as HTMLInputElement
+    const quantidadeInput = document.getElementById('cadastroQuantidade') as HTMLInputElement
+    const imagemInput = document.getElementById('cadastroImagem') as HTMLInputElement
+
+    const nome = nomeInput?.value.trim()
+    const marca = marcaInput?.value.trim()
+    const descricao = descricaoInput?.value.trim()
+    const categoria = categoriaInput?.value.trim()
+    const preco = parseFloat(precoInput?.value || '0')
+    const quantidade = parseInt(quantidadeInput?.value || '0')
+    const imagem = imagemInput?.value || dadosProdutoAPI?.imagem_url || ''
+
+    if (!nome || isNaN(preco) || preco <= 0) {
+      addNotification('Nome e preço são obrigatórios', 'error')
+      return
+    }
+
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error('Usuário não autenticado')
+
+      const { error: insertError } = await supabase.from('produtos').insert({
+        sku: skuParaCadastro,
+        nome,
+        marca,
+        descricao,
+        categoria,
+        preco_venda: preco,
+        quantidade_atual: quantidade,
+        imagem_url: imagem,
+        ativo: true,
+        usuario_id: userData.user.id,
+        quantidade_minima: 10,
+        preco_custo: 0,
+      })
+
+      if (insertError) throw insertError
+
+      addNotification(`✅ Produto "${nome}" cadastrado com sucesso!`, 'success')
+      setModalCadastroRapido(false)
+      await fetchProdutos()
+      // Tenta adicionar ao carrinho após cadastro
+      const novoProduto = { id: 'temp', sku: skuParaCadastro, nome, preco_venda: preco, quantidade_atual: quantidade } as Produto
+      adicionarAoCarrinho(novoProduto)
+    } catch (err: any) {
+      addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
+    }
+  }
+
   const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0)
   const subtotal   = carrinho.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0)
   const descontoVal = parseFloat(desconto) || 0
@@ -128,7 +198,6 @@ export default function PDVPage() {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) { setError('Usuário não autenticado'); return }
 
-      // Registra movimentos e atualiza estoque
       for (const item of carrinho) {
         const produto = produtos.find((p) => p.id === item.produto_id)
         if (!produto) continue
@@ -145,7 +214,6 @@ export default function PDVPage() {
         const novaQtd = produto.quantidade_atual - item.quantidade
         await supabase.from('produtos').update({ quantidade_atual: novaQtd }).eq('id', item.produto_id)
 
-        // Alerta automático de estoque baixo
         if (novaQtd < produto.quantidade_minima) {
           await supabase.from('alertas').insert([{
             produto_id: item.produto_id,
@@ -156,7 +224,6 @@ export default function PDVPage() {
         }
       }
 
-      // Gera o cupom
       await gerarCupom({
         itens: carrinho.map((item) => {
           const produto = produtos.find((p) => p.id === item.produto_id)!
@@ -195,7 +262,6 @@ export default function PDVPage() {
 
   if (loading) return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Carregando...</div>
 
-  // ─── CARD DE PRODUTO ───────────────────────────────────────────────────────
   const ProdutoCard = ({ produto }: { produto: Produto }) => {
     const item = carrinho.find((i) => i.produto_id === produto.id)
     return (
@@ -219,7 +285,6 @@ export default function PDVPage() {
     )
   }
 
-  // ─── ITEM DO CARRINHO ──────────────────────────────────────────────────────
   const ItemCarrinhoCard = ({ item }: { item: ItemCarrinho }) => {
     const produto = produtos.find((p) => p.id === item.produto_id)
     return (
@@ -252,35 +317,30 @@ export default function PDVPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-40 md:pb-0">
 
-      {/* ── DESKTOP ── */}
+      {/* DESKTOP */}
       <div className="hidden md:grid lg:grid-cols-3 gap-6 p-6">
-
-        {/* Produtos */}
         <div className="lg:col-span-2 space-y-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">PDV</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
-          </div>
-          {error && <Alert message={error} type="error" />}
-          <div className="flex gap-2">
-            <input type="text" placeholder="Buscar produto, SKU ou categoria..."
-              value={filtro} onChange={(e) => setFiltro(e.target.value)}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">PDV</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
+            </div>
             <button
               onClick={() => setScannerAberto(true)}
-              className="btn-primary px-4 flex items-center gap-2 whitespace-nowrap"
-              title="Ler código de barras"
+              className="btn-primary flex items-center gap-2 px-4"
             >
-              <Camera size={18} />
-              <span className="hidden sm:inline">Câmera</span>
+              <Camera size={18} /> <span>Ler código</span>
             </button>
           </div>
+          {error && <Alert message={error} type="error" />}
+          <input type="text" placeholder="Buscar produto, SKU ou categoria..."
+            value={filtro} onChange={(e) => setFiltro(e.target.value)}
+            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
             {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
           </div>
         </div>
 
-        {/* Carrinho Desktop */}
         <div className="card dark:bg-gray-900 dark:border-gray-800 flex flex-col h-fit sticky top-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b dark:border-gray-700">
             <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart size={20} />Carrinho</h2>
@@ -288,72 +348,52 @@ export default function PDVPage() {
               <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-0.5">{totalItens} un</span>
             )}
           </div>
-
           <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
             {carrinho.length === 0
               ? <p className="text-gray-400 text-sm text-center py-8">Carrinho vazio</p>
               : carrinho.map((i) => <ItemCarrinhoCard key={i.produto_id} item={i} />)}
           </div>
-
           {carrinho.length > 0 && (
             <>
-              {/* Desconto */}
               <div className="mb-3">
                 <label className="text-xs text-gray-500 mb-1 block">Desconto (R$)</label>
                 <input type="number" min="0" step="0.01" placeholder="0,00"
                   value={desconto} onChange={(e) => setDesconto(e.target.value)}
                   className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm" />
               </div>
-
-              {/* Totais */}
               <div className="border-t dark:border-gray-700 pt-3 space-y-1 mb-4 text-sm">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span><span>{formatarMoeda(subtotal)}</span>
-                </div>
-                {descontoVal > 0 && (
-                  <div className="flex justify-between text-red-500">
-                    <span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatarMoeda(subtotal)}</span></div>
+                {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
                 <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 pt-1">
                   <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
                 </div>
               </div>
-
-              <button onClick={abrirPagamento}
-                className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2">
+              <button onClick={abrirPagamento} className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2">
                 <Check size={18} />Finalizar Venda
               </button>
-              <button onClick={() => setCarrinho([])} className="btn-secondary w-full py-2 text-sm">
-                Limpar carrinho
-              </button>
+              <button onClick={() => setCarrinho([])} className="btn-secondary w-full py-2 text-sm">Limpar carrinho</button>
             </>
           )}
         </div>
       </div>
 
-      {/* ── MOBILE ── */}
+      {/* MOBILE */}
       <div className="md:hidden space-y-3 p-3">
-        <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
-        {error && <Alert message={error} type="error" />}
-        <div className="flex gap-2">
-          <input type="text" placeholder="Buscar..." value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
-            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
-          <button
-            onClick={() => setScannerAberto(true)}
-            className="btn-primary px-3 flex items-center gap-1"
-            title="Ler código de barras"
-          >
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
+          <button onClick={() => setScannerAberto(true)} className="btn-primary px-3 py-2">
             <Camera size={18} />
           </button>
         </div>
+        {error && <Alert message={error} type="error" />}
+        <input type="text" placeholder="Buscar..." value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
         <div className="grid grid-cols-2 gap-2">
           {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
         </div>
       </div>
 
-      {/* ── MOBILE CARRINHO FLUTUANTE ── */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl p-4 z-40">
           <div className="flex justify-between items-center mb-3">
@@ -371,7 +411,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ── MODAL DE PAGAMENTO ── */}
+      {/* MODAL DE PAGAMENTO */}
       {modalPagamento && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -381,23 +421,13 @@ export default function PDVPage() {
                 <X size={22} />
               </button>
             </div>
-
-            {/* Resumo */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-5 space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500">
-                <span>{totalItens} item(ns)</span><span>{formatarMoeda(subtotal)}</span>
-              </div>
-              {descontoVal > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-gray-500"><span>{totalItens} item(ns)</span><span>{formatarMoeda(subtotal)}</span></div>
+              {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
               <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 border-t dark:border-gray-700 pt-2 mt-2">
                 <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
               </div>
             </div>
-
-            {/* Forma de pagamento */}
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de pagamento</p>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
@@ -412,17 +442,12 @@ export default function PDVPage() {
                 </button>
               ))}
             </div>
-
-            {/* Valor recebido (só para dinheiro) */}
             {formaPagamento === 'Dinheiro' && (
               <div className="mb-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
-                  Valor recebido (R$)
-                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Valor recebido (R$)</label>
                 <input type="number" min={totalPagar} step="0.01"
                   value={valorRecebido} onChange={(e) => setValorRecebido(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
-                  placeholder={totalPagar.toFixed(2)} />
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold" />
                 {trocoVal > 0 && (
                   <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg flex justify-between">
                     <span className="text-green-700 dark:text-green-400 font-medium">Troco</span>
@@ -431,7 +456,6 @@ export default function PDVPage() {
                 )}
               </div>
             )}
-
             <button onClick={processarVenda} disabled={processando}
               className="btn-primary w-full py-3.5 text-base font-bold flex items-center justify-center gap-2">
               <Check size={20} />
@@ -441,17 +465,50 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ── CUPOM ── */}
-      {cupomAberto && dadosCupom && (
-        <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
+      {/* MODAL DE CADASTRO RÁPIDO */}
+      {modalCadastroRapido && dadosProdutoAPI && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold dark:text-white">Cadastrar novo produto</h2>
+              <button onClick={() => setModalCadastroRapido(false)} className="text-gray-400">
+                <X size={22} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
+            </p>
+            <div className="space-y-3">
+              <div><label className="block text-sm font-medium mb-1">SKU (código)</label><input type="text" value={skuParaCadastro} disabled className="input-field bg-gray-100 dark:bg-gray-800" /></div>
+              <div><label className="block text-sm font-medium mb-1">Nome *</label><input id="cadastroNome" defaultValue={dadosProdutoAPI.nome} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Marca</label><input id="cadastroMarca" defaultValue={dadosProdutoAPI.marca} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Descrição</label><textarea id="cadastroDescricao" defaultValue={dadosProdutoAPI.descricao} rows={2} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Categoria</label><input id="cadastroCategoria" defaultValue={dadosProdutoAPI.categoria} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Preço de venda *</label><input id="cadastroPreco" type="number" step="0.01" className="input-field" placeholder="0,00" /></div>
+              <div><label className="block text-sm font-medium mb-1">Quantidade inicial</label><input id="cadastroQuantidade" type="number" defaultValue="0" className="input-field" /></div>
+              {dadosProdutoAPI.imagem_url && (
+                <div><label className="block text-sm font-medium mb-1">Imagem</label><img src={dadosProdutoAPI.imagem_url} alt="prévia" className="w-24 h-24 object-cover rounded border" /><input id="cadastroImagem" type="hidden" value={dadosProdutoAPI.imagem_url} /></div>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={salvarProdutoRapido} className="btn-primary flex-1">Salvar e usar</button>
+              <button onClick={() => setModalCadastroRapido(false)} className="btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {/* SCANNER */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
           onClose={() => setScannerAberto(false)}
         />
+      )}
+
+      {/* CUPOM */}
+      {cupomAberto && dadosCupom && (
+        <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
       )}
     </div>
   )

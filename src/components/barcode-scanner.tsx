@@ -16,11 +16,10 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
   const [cameraAtual, setCameraAtual] = useState<string | null>(null)
   const [mostrarSeletor, setMostrarSeletor] = useState(false)
 
-  // 1. Listar câmeras e escolher a melhor automaticamente
+  // Lista câmeras e escolhe a melhor (maior resolução, evita wide)
   useEffect(() => {
     const iniciar = async () => {
       try {
-        // Pede permissão para acessar câmeras (necessário para obter labels)
         await navigator.mediaDevices.getUserMedia({ video: true })
         const devices = await navigator.mediaDevices.enumerateDevices()
         const videoDevices = devices.filter(d => d.kind === 'videoinput')
@@ -31,7 +30,6 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           return
         }
 
-        // Escolhe a melhor câmera traseira
         const melhorCamera = await escolherMelhorCamera(videoDevices)
         setCameraAtual(melhorCamera?.deviceId || videoDevices[0].deviceId)
       } catch {
@@ -41,22 +39,18 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
     iniciar()
   }, [])
 
-  // Função que escolhe a câmera com maior resolução máxima (evita wide)
   async function escolherMelhorCamera(cameras: MediaDeviceInfo[]): Promise<MediaDeviceInfo | null> {
     const backCameras: MediaDeviceInfo[] = []
     const wideKeywords = ['wide', 'ultra', '0.6', '0.5', 'angle', 'grande angular']
 
-    // Filtra câmeras que provavelmente são traseiras
     for (const cam of cameras) {
       const label = cam.label.toLowerCase()
       if (label.includes('back') || label.includes('traseira') || label.includes('environment') || !label.includes('front')) {
         backCameras.push(cam)
       }
     }
-
     if (backCameras.length === 0) return null
 
-    // Tenta obter as capacidades de cada câmera (resolução máxima)
     const camerasComResolucao = await Promise.all(
       backCameras.map(async (cam) => {
         try {
@@ -76,18 +70,12 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       })
     )
 
-    // Ordena por resolução (maior primeiro)
     const ordenadas = camerasComResolucao.sort((a, b) => b.resolucao - a.resolucao)
-
-    // Pega a primeira que não é wide-angle
     const normal = ordenadas.find(c => !wideKeywords.some(kw => c.label.includes(kw)))
-    if (normal) return normal.cam
-
-    // Fallback: a de maior resolução (geralmente a principal)
-    return ordenadas[0]?.cam || null
+    return normal?.cam || ordenadas[0]?.cam || null
   }
 
-  // 2. Iniciar a stream da câmera escolhida
+  // Inicia a câmera escolhida
   useEffect(() => {
     if (!cameraAtual) return
 
@@ -136,9 +124,15 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
 
     return () => {
       clearInterval(intervalo)
-      if (stream) stream.getTracks().forEach(t => t.stop())
+      stream?.getTracks().forEach(t => t.stop())
     }
   }, [cameraAtual, onDetected])
+
+  const trocarCamera = (deviceId: string) => {
+    setCameraAtual(deviceId)
+    setMostrarSeletor(false)
+    setErro('')
+  }
 
   const handleSubmitManual = () => {
     if (manualInput.trim()) {
@@ -147,15 +141,8 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
     }
   }
 
-  const trocarCamera = (deviceId: string) => {
-    setCameraAtual(deviceId)
-    setMostrarSeletor(false)
-    setErro('')
-  }
-
   return (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 bg-black border-b border-gray-700">
         <p className="text-white font-medium text-sm">Leitor de código de barras</p>
         <button onClick={onClose} className="text-white p-2 hover:bg-gray-800 rounded">
@@ -163,7 +150,6 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </button>
       </div>
 
-      {/* Vídeo */}
       <div className="relative flex-1">
         <video
           ref={videoRef}
@@ -177,7 +163,6 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       </div>
 
-      {/* Seletor de câmera (aparece se falhar ou se usuário quiser) */}
       {(mostrarSeletor || cameras.length > 1) && (
         <div className="p-3 bg-gray-900 border-t border-gray-700">
           <button
@@ -206,7 +191,6 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
-      {/* Fallback manual */}
       {erro && (
         <div className="p-4 bg-black border-t border-gray-700">
           <p className="text-red-400 text-sm mb-2">{erro}</p>
@@ -231,9 +215,8 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
-      {/* Rodapé corrigido (sem aspas não escapadas) */}
       <div className="p-2 bg-black text-center text-gray-500 text-xs">
-        📱 Aponte para o código | Se não focar, toque em Trocar câmera
+        📱 Aponte para o código | Se não focar, troque a câmera
       </div>
     </div>
   )
