@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X, Camera, RotateCw } from 'lucide-react'
+import { X, RotateCw } from 'lucide-react'
 
 interface Props {
   onDetected: (code: string) => void
@@ -34,7 +34,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         // Escolhe a melhor câmera traseira
         const melhorCamera = await escolherMelhorCamera(videoDevices)
         setCameraAtual(melhorCamera?.deviceId || videoDevices[0].deviceId)
-      } catch (err) {
+      } catch {
         setErro('Permissão de câmera negada')
       }
     }
@@ -68,7 +68,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           const maxWidth = capabilities?.width?.max || 0
           const maxHeight = capabilities?.height?.max || 0
           const resolucao = maxWidth * maxHeight
-          track.stop()
+          stream.getTracks().forEach(t => t.stop())
           return { cam, resolucao, label: cam.label.toLowerCase() }
         } catch {
           return { cam, resolucao: 0, label: cam.label.toLowerCase() }
@@ -122,10 +122,11 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
               stream?.getTracks().forEach(t => t.stop())
               onDetected(codes[0].rawValue)
             }
-          } catch {}
+          } catch {
+            // silencia erros de detecção
+          }
         }, 300)
-
-      } catch (err) {
+      } catch {
         setErro('Erro ao iniciar a câmera. Tente outra.')
         setMostrarSeletor(true)
       }
@@ -135,23 +136,21 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
 
     return () => {
       clearInterval(intervalo)
-      stream?.getTracks().forEach(t => t.stop())
+      if (stream) stream.getTracks().forEach(t => t.stop())
     }
   }, [cameraAtual, onDetected])
 
-  // Função para trocar manualmente de câmera
-  const trocarCamera = (deviceId: string) => {
-    setCameraAtual(deviceId)
-    setMostrarSeletor(false)
-    setErro('')
-  }
-
-  // Input manual
   const handleSubmitManual = () => {
     if (manualInput.trim()) {
       onDetected(manualInput.trim())
       setManualInput('')
     }
+  }
+
+  const trocarCamera = (deviceId: string) => {
+    setCameraAtual(deviceId)
+    setMostrarSeletor(false)
+    setErro('')
   }
 
   return (
@@ -232,8 +231,9 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
+      {/* Rodapé corrigido (sem aspas não escapadas) */}
       <div className="p-2 bg-black text-center text-gray-500 text-xs">
-        📱 Aponte para o código | Se não focar, toque em "Trocar câmera"
+        📱 Aponte para o código | Se não focar, toque em Trocar câmera
       </div>
     </div>
   )
