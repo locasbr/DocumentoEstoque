@@ -34,25 +34,633 @@ export default function RootLayout({
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\page.tsx ===
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Loading from '@/components/loading'
+import Link from 'next/link'
+import {
+  Package,
+  BarChart3,
+  ShoppingCart,
+  AlertCircle,
+  Users,
+  QrCode,
+  CheckCircle,
+  ArrowRight,
+  Zap,
+} from 'lucide-react'
 
-export default function Home() {
-  const router = useRouter()
+const FUNCIONALIDADES = [
+  {
+    icon: Package,
+    titulo: 'Controle de Estoque',
+    desc: 'Cadastre produtos, defina mínimos e acompanhe tudo em tempo real.',
+  },
+  {
+    icon: ShoppingCart,
+    titulo: 'PDV Completo',
+    desc: 'Ponto de venda integrado com leitor de código de barras pela câmera.',
+  },
+  {
+    icon: BarChart3,
+    titulo: 'Relatórios Inteligentes',
+    desc: 'Veja vendas, lucro, margem e movimentação diária com gráficos.',
+  },
+  {
+    icon: AlertCircle,
+    titulo: 'Alertas Automáticos',
+    desc: 'Receba avisos quando o estoque estiver baixo ou zerado.',
+  },
+  {
+    icon: Users,
+    titulo: 'Equipe & Funcionários',
+    desc: 'Adicione funcionários com acesso limitado ao PDV.',
+  },
+  {
+    icon: QrCode,
+    titulo: 'Leitor de Código de Barras',
+    desc: 'Escaneie produtos pela câmera do celular. Sem equipamento extra.',
+  },
+]
 
-  useEffect(() => {
-    // Pequeno delay para garantir que o router está pronto
-    const timer = setTimeout(() => {
-      router.push('/login')
-    }, 500)
+const BENEFICIOS = [
+  'Controle ilimitado de produtos',
+  'Dashboard com métricas em tempo real',
+  'Alertas de estoque baixo e crítico',
+  'Relatórios de entrada e saída',
+  'PDV completo com código de barras',
+  'Múltiplos funcionários por conta',
+  'Cupom via WhatsApp',
+  'Suporte prioritário',
+  'Atualizações inclusas',
+]
 
-    return () => clearTimeout(timer)
-  }, [router])
 
-  return <Loading />
+
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-white text-gray-900">
+
+      {/* ══════════ NAVBAR ══════════ */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-2xl">📦</span>
+            <span className="text-xl font-bold text-gray-900">
+              EstoqueSystem
+            </span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition"
+            >
+              Entrar
+            </Link>
+            <Link
+              href="/signup"
+              className="px-5 py-2.5 text-sm font-semibold bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+            >
+              Teste grátis
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* ══════════ HERO ══════════ */}
+      <section className="pt-32 pb-20 px-4">
+        <div className="max-w-4xl mx-auto text-center space-y-6">
+          <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-1.5 rounded-full text-sm font-medium">
+            <Zap className="w-4 h-4" />
+            15 dias grátis — sem cartão de crédito
+          </div>
+
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
+            Controle seu estoque{' '}
+            <span className="text-green-600">sem complicação</span>
+          </h1>
+
+          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+            Sistema completo de estoque, PDV e relatórios feito para{' '}
+            <strong>pequenos mercados, mercearias e comércios</strong>. Funciona
+            no celular e no computador.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <Link
+              href="/signup"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
+            >
+              Começar grátis agora
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link
+              href="/login"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-gray-100 text-gray-700 text-lg font-medium rounded-2xl hover:bg-gray-200 transition"
+            >
+              Já tenho conta
+            </Link>
+          </div>
+
+          <p className="text-sm text-gray-400 pt-2">
+            ✅ Sem cartão &nbsp;·&nbsp; ✅ Cancele quando quiser &nbsp;·&nbsp; ✅
+            Suporte via WhatsApp
+          </p>
+        </div>
+      </section>
+
+      {/* ══════════ DEMO VISUAL ══════════ */}
+      <section className="pb-20 px-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-4 sm:p-8 shadow-2xl">
+            <div className="bg-gray-950 rounded-2xl p-6 sm:p-10 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
+                {[
+                  { label: 'Produtos', valor: '247', cor: 'text-blue-400' },
+                  { label: 'Vendas Hoje', valor: '38', cor: 'text-green-400' },
+                  { label: 'Alertas', valor: '5', cor: 'text-yellow-400' },
+                  {
+                    label: 'Estoque',
+                    valor: 'R$ 12.450',
+                    cor: 'text-purple-400',
+                  },
+                ].map(({ label, valor, cor }) => (
+                  <div key={label} className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">
+                      {label}
+                    </p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${cor}`}>
+                      {valor}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ FUNCIONALIDADES ══════════ */}
+      <section className="py-20 px-4 bg-gray-50" id="funcionalidades">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Tudo que você precisa em um só lugar
+            </h2>
+            <p className="text-gray-600 mt-3 text-lg">
+              Sem planilha, sem caderno, sem complicação.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
+              <div
+                key={titulo}
+                className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center mb-4 group-hover:bg-green-100 transition">
+                  <Icon className="w-6 h-6 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{titulo}</h3>
+                <p className="text-gray-600 text-sm leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ COMO FUNCIONA ══════════ */}
+      <section className="py-20 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Comece em 2 minutos
+            </h2>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-8">
+            {[
+              {
+                passo: '1',
+                titulo: 'Crie sua conta',
+                desc: 'Cadastro rápido com email e senha. Sem burocracia.',
+                emoji: '📝',
+              },
+              {
+                passo: '2',
+                titulo: 'Cadastre produtos',
+                desc: 'Adicione seus produtos manualmente ou com a câmera do celular.',
+                emoji: '📦',
+              },
+              {
+                passo: '3',
+                titulo: 'Comece a vender',
+                desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda.',
+                emoji: '🚀',
+              },
+            ].map(({ passo, titulo, desc, emoji }) => (
+              <div key={passo} className="text-center space-y-3">
+                <span className="text-4xl">{emoji}</span>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white text-sm font-bold">
+                  {passo}
+                </div>
+                <h3 className="text-lg font-semibold">{titulo}</h3>
+                <p className="text-gray-600 text-sm">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ QUEM CRIOU ══════════ */}
+<section className="py-20 px-4 bg-gray-50">
+  <div className="max-w-4xl mx-auto">
+    <div className="flex flex-col md:flex-row items-center gap-10">
+
+      {/* Foto */}
+      <div className="shrink-0">
+        <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
+          {/* Coloque sua foto em /public/lucas.jpg */}
+          <img
+            src="/lucas.jpg"
+            alt="Lucas Machado - Criador do EstoqueSystem"
+            className="w-full h-full object-cover"
+          />
+        </div>
+      </div>
+
+      {/* Texto */}
+      <div className="space-y-5 text-center md:text-left">
+        <div>
+          <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
+            Quem está por trás
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
+            Prazer, Lucas Machado 👋
+          </h2>
+        </div>
+
+        <div className="text-gray-600 text-lg leading-relaxed space-y-4">
+          <p>
+            Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
+            criar projetos que resolvam problemas reais e que possam gerar
+            valor de verdade pra quem usa.
+          </p>
+          <p>
+            O EstoqueSystem nasceu de uma percepção simples: pequenos
+            comerciantes <strong>não precisam de sistemas caros e
+            complicados</strong> — precisam de algo que funcione no celular,
+            que seja fácil de usar e que caiba no bolso.
+          </p>
+          <p>
+            Eu construí cada tela, cada botão e cada funcionalidade pensando
+            em quem está atrás do balcão, vendendo e tentando manter o negócio
+            de pé. Se você é essa pessoa,{' '}
+            <strong className="text-gray-900">
+              o EstoqueSystem foi feito pra você.
+            </strong>
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎯</span>
+            <div className="text-left">
+              <p className="font-semibold text-sm text-gray-900">Missão</p>
+              <p className="text-gray-500 text-xs">
+                Tornar o controle de estoque acessível pra todo pequeno comércio
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">💬</span>
+            <div className="text-left">
+              <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
+              <p className="text-gray-500 text-xs">
+                Fale comigo pelo WhatsApp — sem robô, sem fila
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+      {/* ══════════ PREÇO ══════════ */}
+      <section className="py-20 px-4" id="preco">
+        <div className="max-w-lg mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Simples e acessível
+            </h2>
+            <p className="text-gray-600 mt-3">
+              Um plano só, com tudo incluso. Sem surpresas.
+            </p>
+          </div>
+
+          <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
+            <div className="text-center space-y-1 mb-6">
+              <p className="text-sm text-gray-500 uppercase tracking-wider font-medium">
+                Plano Profissional
+              </p>
+              <div className="flex items-baseline justify-center gap-1">
+                <span className="text-sm text-gray-400">R$</span>
+                <span className="text-5xl font-extrabold">79</span>
+                <span className="text-2xl font-bold">,90</span>
+                <span className="text-gray-400 ml-1">/mês</span>
+              </div>
+              <p className="text-green-600 font-medium text-sm">
+                15 dias grátis para testar
+              </p>
+            </div>
+
+            <div className="border-t border-gray-100 my-6" />
+
+            <ul className="space-y-3 mb-8">
+              {BENEFICIOS.map((b) => (
+                <li key={b} className="flex items-start gap-3 text-sm">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+
+            <Link
+              href="/signup"
+              className="block w-full text-center px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition"
+            >
+              Começar teste grátis
+            </Link>
+
+            <p className="text-center text-xs text-gray-400 mt-3">
+              Sem cartão de crédito · Cancele quando quiser
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ FAQ ══════════ */}
+      <section className="py-20 px-4 bg-gray-50">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Perguntas frequentes
+            </h2>
+          </div>
+          <div className="space-y-4">
+            {[
+              {
+                p: 'Preciso instalar alguma coisa?',
+                r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.',
+              },
+              {
+                p: 'Funciona no celular?',
+                r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.',
+              },
+              {
+                p: 'Como funciona o período de teste?',
+                r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.',
+              },
+              {
+                p: 'Como faço o pagamento?',
+                r: 'O pagamento é feito via PIX. Após o pagamento, seu acesso é liberado em até 1 hora.',
+              },
+              {
+                p: 'Posso adicionar funcionários?',
+                r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.',
+              },
+              {
+                p: 'Meus dados ficam seguros?',
+                r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.',
+              },
+            ].map(({ p, r }) => (
+              <details
+                key={p}
+                className="bg-white rounded-xl border border-gray-100 group"
+              >
+                <summary className="px-6 py-4 cursor-pointer font-medium text-gray-900 flex items-center justify-between hover:bg-gray-50 rounded-xl transition">
+                  {p}
+                  <ChevronIcon />
+                </summary>
+                <div className="px-6 pb-4 text-gray-600 text-sm leading-relaxed">
+                  {r}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ CTA FINAL ══════════ */}
+      <section className="py-20 px-4">
+        <div className="max-w-3xl mx-auto text-center space-y-6">
+          <h2 className="text-3xl sm:text-4xl font-bold">
+            Chega de perder dinheiro com estoque descontrolado
+          </h2>
+          <p className="text-gray-600 text-lg">
+            Comece agora, é grátis por 15 dias. Sem compromisso.
+          </p>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-2 px-10 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
+          >
+            Criar minha conta grátis
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </div>
+      </section>
+
+      {/* ══════════ FOOTER ══════════ */}
+      <footer className="border-t border-gray-100 py-8 px-4">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+          <div className="flex items-center gap-2">
+            <span>📦</span>
+            <span className="font-semibold text-gray-700">EstoqueSystem</span>
+          </div>
+          <p>© {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.</p>
+          <div className="flex gap-4">
+            <Link href="/login" className="hover:text-gray-700 transition">
+              Entrar
+            </Link>
+            <Link href="/signup" className="hover:text-gray-700 transition">
+              Criar conta
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
 }
 
+// Ícone do accordion do FAQ
+function ChevronIcon() {
+  return (
+    <svg
+      className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\assinar\page.tsx ===
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import Loading from '@/components/loading'
+import PixQRCode from '@/components/pix-qrcode'
+
+const WHATSAPP_NUMERO = '5522999467499'
+const CHAVE_PIX = '3e837146-a5b1-4c55-bd93-71d97260e8d3'
+const NOME_RECEBEDOR = 'EstoqueSystem - Lucas'
+const CIDADE_RECEBEDOR = 'Saquarema'
+const VALOR_MENSAL = 79.90
+
+const BENEFICIOS = [
+  'Controle ilimitado de produtos',
+  'Dashboard com métricas em tempo real',
+  'Alertas de estoque baixo e crítico',
+  'Relatórios de entrada e saída',
+  'PDV completo com leitor de código de barras',
+  'Múltiplos funcionários por conta',
+  'Cupom fiscal não-fiscal via WhatsApp',
+  'Suporte prioritário via WhatsApp',
+  'Atualizações e novos recursos inclusos',
+]
+
+export default function AssinarPage() {
+  const router = useRouter()
+  const [emailUsuario, setEmailUsuario] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const verificar = async () => {
+      const { data } = await supabase.auth.getSession()
+
+      if (!data.session) {
+        router.push('/login')
+        return
+      }
+
+      setEmailUsuario(data.session.user.email ?? '')
+
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('plano, trial_fim')
+        .eq('id', data.session.user.id)
+        .single()
+
+      if (perfil?.plano === 'ativo') {
+        router.push('/dashboard')
+        return
+      }
+
+      setLoading(false)
+    }
+
+    verificar()
+  }, [router])
+
+  const mensagemWhatsApp = encodeURIComponent(
+    `Quero assinar o EstoqueSystem R$79,90/mês.\nMeu email: ${emailUsuario}`
+  )
+  const urlWhatsApp = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensagemWhatsApp}`
+
+  if (loading) return <Loading />
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center p-4">
+      <div className="max-w-lg w-full space-y-8">
+
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-500/10 mb-2">
+            <span className="text-4xl">🔒</span>
+          </div>
+          <h1 className="text-3xl font-bold text-white">
+            Seu período de teste encerrou
+          </h1>
+          <p className="text-gray-400 text-lg">
+            Assine o{' '}
+            <span className="text-white font-semibold">EstoqueSystem</span> e
+            continue gerenciando seu estoque sem interrupções.
+          </p>
+        </div>
+
+        {/* Card do Plano */}
+        <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-8 space-y-6 backdrop-blur-sm">
+
+          {/* Preço */}
+          <div className="text-center space-y-1">
+            <p className="text-sm text-gray-400 uppercase tracking-wider font-medium">
+              Plano Profissional
+            </p>
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-sm text-gray-400">R$</span>
+              <span className="text-5xl font-extrabold text-white">79</span>
+              <span className="text-2xl font-bold text-white">,90</span>
+              <span className="text-gray-400 ml-1">/mês</span>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-700" />
+
+          {/* Benefícios */}
+          <ul className="space-y-3">
+            {BENEFICIOS.map((b) => (
+              <li key={b} className="flex items-start gap-3 text-gray-300">
+                <span className="text-green-400 mt-0.5 shrink-0">✓</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="border-t border-gray-700" />
+
+          {/* QR CODE PIX */}
+          <PixQRCode
+            chavePix={CHAVE_PIX}
+            nomeRecebedor={NOME_RECEBEDOR}
+            cidadeRecebedor={CIDADE_RECEBEDOR}
+            valor={VALOR_MENSAL}
+          />
+
+          <div className="border-t border-gray-700" />
+
+          {/* Botão WhatsApp */}
+          <a
+            href={urlWhatsApp}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-xl text-lg transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="w-6 h-6 fill-current"
+              aria-hidden="true"
+            >
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+            </svg>
+            Confirmar pagamento via WhatsApp
+          </a>
+
+          {/* Aviso */}
+          <p className="text-center text-gray-500 text-sm">
+            ⏳ Após o pagamento, seu acesso será liberado em até{' '}
+            <span className="text-yellow-400 font-medium">1 hora</span>.
+          </p>
+        </div>
+
+        <p className="text-center text-gray-600 text-xs">
+          Dúvidas? Fale conosco pelo mesmo WhatsApp acima.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\layout.tsx ===
@@ -65,9 +673,10 @@ import Navbar from '@/components/navbar'
 import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
+import TrialBanner from '@/components/trial-banner'
 
 const RESTRICTED_ROUTES = [
-  '/dashboard$', // dashboard principal
+  '/dashboard$',
   '/dashboard/produtos',
   '/dashboard/relatorios',
   '/dashboard/alertas',
@@ -82,26 +691,28 @@ export default function DashboardLayout({
   const router = useRouter()
   const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
+  const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
+  const [mostrarBanner, setMostrarBanner] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const { data } = await supabase.auth.getSession()
+
         if (!data.session) {
           router.push('/login')
           return
         }
 
-        // Busca o nível do usuário
+        // ── Busca nível do membro (lógica existente) ──
         const { data: membroData } = await supabase
           .from('membros')
           .select('nivel')
           .eq('user_id', data.session.user.id)
           .single()
 
-        const userLevel = membroData?.nivel || 'dono'
+        const userLevel = membroData?.nivel ?? 'dono'
 
-        // Se for funcionário, verifica se pode acessar a rota
         if (userLevel === 'funcionario') {
           const isRestrictedRoute = RESTRICTED_ROUTES.some((route) => {
             const regex = new RegExp(`^${route}`)
@@ -111,6 +722,48 @@ export default function DashboardLayout({
           if (isRestrictedRoute) {
             router.push('/dashboard/pdv')
             return
+          }
+        }
+
+        // ── NOVO: Verifica trial/plano ──
+        const { data: perfil } = await supabase
+          .from('perfis')
+          .select('plano, trial_fim')
+          .eq('id', data.session.user.id)
+          .single()
+
+        if (perfil) {
+          const agora = new Date()
+          const trialFim = perfil.trial_fim
+            ? new Date(perfil.trial_fim)
+            : null
+
+          // Plano expirado → paywall
+          if (perfil.plano === 'expirado') {
+            router.push('/assinar')
+            return
+          }
+
+          // Trial expirado → paywall
+          if (
+            perfil.plano === 'trial' &&
+            trialFim &&
+            trialFim < agora
+          ) {
+            router.push('/assinar')
+            return
+          }
+
+          // Trial ativo → calcula dias restantes pro banner
+          if (perfil.plano === 'trial' && trialFim) {
+            const diffMs = trialFim.getTime() - agora.getTime()
+            const dias = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+            setDiasRestantes(dias)
+
+            // Mostra banner só nos últimos 5 dias
+            if (dias >= 0 && dias <= 5) {
+              setMostrarBanner(true)
+            }
           }
         }
 
@@ -129,19 +782,21 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen">
+      {mostrarBanner && diasRestantes !== null && (
+        <TrialBanner diasRestantes={diasRestantes} />
+      )}
       <Navbar />
-      <SearchCommand />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex">
         <Sidebar />
-        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 pb-20 md:pb-0">
-          <div className="w-full max-w-7xl mx-auto p-4 md:p-8">{children}</div>
+        <main className="flex-1 p-4 md:p-6 md:ml-48 mb-16 md:mb-0 mt-16">
+          <SearchCommand />
+          {children}
         </main>
       </div>
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\page.tsx ===
@@ -362,6 +1017,779 @@ export default function Dashboard() {
           </Link>
         </div>
       )}
+    </div>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\admin\page.tsx ===
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useNotification } from '@/contexts/NotificationContext'
+import { useMembro } from '@/hooks/useMembro'
+import { formatarData, formatarMoeda } from '@/lib/utils'
+import {
+  Users,
+  Crown,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Search,
+  RefreshCw,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  Package,
+  BarChart3,
+  ShoppingCart,
+  Calendar,
+  Hash,
+  Store,
+  TrendingUp,
+} from 'lucide-react'
+
+interface Perfil {
+  id: string
+  nome_negocio: string | null
+  plano: 'trial' | 'ativo' | 'expirado'
+  trial_fim: string | null
+  created_at: string | null
+  email?: string
+}
+
+interface DetalhesUsuario {
+  totalProdutos: number
+  totalMovimentos: number
+  totalAlertas: number
+  totalMembros: number
+  valorEstoque: number
+  vendasHoje: number
+  ultimoAcesso: string | null
+  produtosCriticos: number
+  movimentosRecentes: {
+    tipo: string
+    produto: string
+    quantidade: number
+    data: string
+  }[]
+}
+
+type FiltroPlano = 'todos' | 'trial' | 'ativo' | 'expirado'
+
+// ╔══════════════════════════════════════════════════╗
+// ║  COLOQUE AQUI O SEU EMAIL DE ADMIN              ║
+// ╚══════════════════════════════════════════════════╝
+const ADMIN_EMAILS = [
+  'seu-email-admin@email.com',
+]
+
+export default function AdminPage() {
+  const { isLoading: loadingMembro } = useMembro()
+  const { addNotification } = useNotification()
+
+  const [perfis, setPerfis] = useState<Perfil[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filtro, setFiltro] = useState('')
+  const [filtroPlano, setFiltroPlano] = useState<FiltroPlano>('todos')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [atualizando, setAtualizando] = useState<string | null>(null)
+
+  // Expandir detalhes
+  const [expandido, setExpandido] = useState<string | null>(null)
+  const [detalhes, setDetalhes] = useState<Record<string, DetalhesUsuario>>({})
+  const [carregandoDetalhes, setCarregandoDetalhes] = useState(false)
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        const email = data.session.user.email ?? ''
+        setIsAdmin(ADMIN_EMAILS.includes(email))
+      }
+    }
+    checkAdmin()
+  }, [])
+
+  const fetchPerfis = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('perfis')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setPerfis(data ?? [])
+    } catch (error) {
+      console.error('Erro ao buscar perfis:', error)
+      addNotification('Erro ao carregar usuários', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [addNotification])
+
+  useEffect(() => {
+    if (!loadingMembro && isAdmin) {
+      fetchPerfis()
+    }
+  }, [loadingMembro, isAdmin, fetchPerfis])
+
+  // Busca detalhes do usuário ao expandir
+  const fetchDetalhes = async (userId: string) => {
+    if (detalhes[userId]) return // já carregou
+
+    setCarregandoDetalhes(true)
+    try {
+      // Busca tudo em paralelo
+      const [produtosRes, movimentosRes, alertasRes, membrosRes] =
+        await Promise.all([
+          supabase
+            .from('produtos')
+            .select('id, nome, quantidade_atual, quantidade_minima, preco_venda')
+            .eq('usuario_id', userId),
+          supabase
+            .from('movimentos_estoque')
+            .select('id, tipo_movimento, quantidade, criado_em, produto:produto_id(nome)')
+            .eq('usuario_id', userId)
+            .order('criado_em', { ascending: false })
+            .limit(10),
+          supabase
+            .from('alertas')
+            .select('id')
+            .eq('usuario_id', userId)
+            .eq('visualizado', false),
+          supabase
+            .from('membros')
+            .select('id, email, nivel, status')
+            .eq('dono_id', userId),
+        ])
+
+      const produtos = produtosRes.data ?? []
+      const movimentos = movimentosRes.data ?? []
+      const alertas = alertasRes.data ?? []
+      const membros = membrosRes.data ?? []
+
+      const valorEstoque = produtos.reduce(
+  (sum: number, p: any) => sum + (p.preco_venda ?? 0) * (p.quantidade_atual ?? 0),
+  0
+      )
+
+      const produtosCriticos = produtos.filter(
+  (p: any) => p.quantidade_atual < p.quantidade_minima
+    ).length
+
+      const hoje = new Date().toDateString()
+const vendasHoje = movimentos.filter(
+  (m: any) =>
+    m.tipo_movimento === 'saida' &&
+    new Date(m.criado_em).toDateString() === hoje
+).length
+
+      const ultimoMov = movimentos[0]?.criado_em ?? null
+
+      setDetalhes((prev) => ({
+        ...prev,
+        [userId]: {
+          totalProdutos: produtos.length,
+          totalMovimentos: movimentos.length,
+          totalAlertas: alertas.length,
+          totalMembros: membros.length,
+          valorEstoque,
+          vendasHoje,
+          ultimoAcesso: ultimoMov,
+          produtosCriticos,
+          movimentosRecentes: movimentos.slice(0, 5).map((m: any) => ({
+            tipo: m.tipo_movimento,
+            produto: m.produto?.nome ?? '—',
+            quantidade: m.quantidade,
+            data: m.criado_em,
+          })),
+        },
+      }))
+    } catch (error) {
+      console.error('Erro ao buscar detalhes:', error)
+      addNotification('Erro ao carregar detalhes do usuário', 'error')
+    } finally {
+      setCarregandoDetalhes(false)
+    }
+  }
+
+  const toggleExpandir = (userId: string) => {
+    if (expandido === userId) {
+      setExpandido(null)
+    } else {
+      setExpandido(userId)
+      fetchDetalhes(userId)
+    }
+  }
+
+  // Altera plano
+  const alterarPlano = async (
+    userId: string,
+    novoPlano: 'trial' | 'ativo' | 'expirado'
+  ) => {
+    setAtualizando(userId)
+    try {
+      const updateData: Record<string, unknown> = { plano: novoPlano }
+
+      if (novoPlano === 'ativo') {
+        updateData.trial_fim = null
+      }
+      if (novoPlano === 'trial') {
+        const novaData = new Date()
+        novaData.setDate(novaData.getDate() + 15)
+        updateData.trial_fim = novaData.toISOString()
+      }
+
+      const { error } = await supabase
+        .from('perfis')
+        .update(updateData)
+        .eq('id', userId)
+
+      if (error) throw error
+
+      addNotification(`Plano alterado para "${novoPlano}"!`, 'success')
+      fetchPerfis()
+    } catch (error) {
+      console.error('Erro ao alterar plano:', error)
+      addNotification('Erro ao alterar plano', 'error')
+    } finally {
+      setAtualizando(null)
+    }
+  }
+
+  const estenderTrial = async (userId: string, dias: number) => {
+    setAtualizando(userId)
+    try {
+      const perfil = perfis.find((p) => p.id === userId)
+      const baseDate = perfil?.trial_fim
+        ? new Date(perfil.trial_fim)
+        : new Date()
+
+      const inicio = baseDate < new Date() ? new Date() : baseDate
+      inicio.setDate(inicio.getDate() + dias)
+
+      const { error } = await supabase
+        .from('perfis')
+        .update({ plano: 'trial', trial_fim: inicio.toISOString() })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      addNotification(`Trial estendido em +${dias} dias!`, 'success')
+      fetchPerfis()
+    } catch (error) {
+      console.error('Erro ao estender trial:', error)
+      addNotification('Erro ao estender trial', 'error')
+    } finally {
+      setAtualizando(null)
+    }
+  }
+
+  // Métricas
+  const totalUsuarios = perfis.length
+  const totalAtivos = perfis.filter((p) => p.plano === 'ativo').length
+  const totalTrial = perfis.filter((p) => p.plano === 'trial').length
+  const totalExpirados = perfis.filter((p) => p.plano === 'expirado').length
+
+  const trialsExpirando = perfis.filter((p) => {
+    if (p.plano !== 'trial' || !p.trial_fim) return false
+    const fim = new Date(p.trial_fim)
+    const diffDias = Math.ceil(
+      (fim.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+    )
+    return diffDias >= 0 && diffDias <= 3
+  }).length
+
+  // Filtros
+  const perfisFiltrados = perfis.filter((p) => {
+    if (filtroPlano !== 'todos' && p.plano !== filtroPlano) return false
+    if (filtro) {
+      const busca = filtro.toLowerCase()
+      return (
+        p.nome_negocio?.toLowerCase().includes(busca) ||
+        p.id.toLowerCase().includes(busca) ||
+        p.email?.toLowerCase().includes(busca)
+      )
+    }
+    return true
+  })
+
+  const diasRestantes = (trialFim: string | null): number | null => {
+    if (!trialFim) return null
+    return Math.ceil(
+      (new Date(trialFim).getTime() - new Date().getTime()) /
+        (1000 * 60 * 60 * 24)
+    )
+  }
+
+  const planoBadge = (plano: string, trialFim: string | null) => {
+    const dias = diasRestantes(trialFim)
+    const trialExpirado = plano === 'trial' && dias !== null && dias < 0
+
+    if (plano === 'ativo') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+          <CheckCircle className="w-3 h-3" /> Ativo
+        </span>
+      )
+    }
+    if (plano === 'expirado' || trialExpirado) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+          <XCircle className="w-3 h-3" /> Expirado
+        </span>
+      )
+    }
+    if (plano === 'trial') {
+      const cor =
+        dias !== null && dias <= 3
+          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+          : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cor}`}
+        >
+          <Clock className="w-3 h-3" /> Trial {dias !== null && `(${dias}d)`}
+        </span>
+      )
+    }
+    return <span className="text-xs text-gray-500">{plano}</span>
+  }
+
+  // Bloqueio: não é admin
+  if (!loadingMembro && !isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Shield className="w-16 h-16 text-red-400" />
+        <p className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+          Acesso restrito
+        </p>
+        <p className="text-gray-500">
+          Apenas administradores podem acessar esta página.
+        </p>
+      </div>
+    )
+  }
+
+  if (loading || loadingMembro) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Crown className="w-6 h-6 text-yellow-500" />
+            Painel Admin
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Gerencie assinantes e trials do EstoqueSystem
+          </p>
+        </div>
+        <button
+          onClick={fetchPerfis}
+          className="btn-secondary flex items-center gap-2 self-start"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
+      </div>
+
+      {/* Métricas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          {
+            label: 'Total Usuários',
+            value: totalUsuarios,
+            icon: Users,
+            color: 'bg-blue-50 dark:bg-blue-900/20',
+            textColor: 'text-blue-600 dark:text-blue-400',
+          },
+          {
+            label: 'Ativos (pagantes)',
+            value: totalAtivos,
+            icon: CheckCircle,
+            color: 'bg-green-50 dark:bg-green-900/20',
+            textColor: 'text-green-600 dark:text-green-400',
+          },
+          {
+            label: 'Em Trial',
+            value: totalTrial,
+            icon: Clock,
+            color: 'bg-yellow-50 dark:bg-yellow-900/20',
+            textColor: 'text-yellow-600 dark:text-yellow-400',
+          },
+          {
+            label: 'Expirados',
+            value: totalExpirados,
+            icon: XCircle,
+            color: 'bg-red-50 dark:bg-red-900/20',
+            textColor: 'text-red-600 dark:text-red-400',
+          },
+        ].map(({ label, value, icon: Icon, color, textColor }) => (
+          <div key={label} className={`${color} rounded-xl p-4 flex flex-col gap-2`}>
+            <div className="flex items-center gap-2">
+              <Icon className={`w-5 h-5 ${textColor}`} />
+              <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+            </div>
+            <span className={`text-3xl font-bold ${textColor}`}>{value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Alerta */}
+      {trialsExpirando > 0 && (
+        <div className="flex items-center gap-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+          <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0" />
+          <p className="text-yellow-800 dark:text-yellow-300 text-sm font-medium">
+            ⚠️ {trialsExpirando} usuário(s) com trial expirando nos próximos 3 dias!
+          </p>
+        </div>
+      )}
+
+      {/* Filtros */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por nome, email ou ID..."
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            className="input-field pl-10 w-full"
+          />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {(
+            [
+              { label: 'Todos', value: 'todos' },
+              { label: 'Ativos', value: 'ativo' },
+              { label: 'Trial', value: 'trial' },
+              { label: 'Expirados', value: 'expirado' },
+            ] as const
+          ).map(({ label, value }) => (
+            <button
+              key={value}
+              onClick={() => setFiltroPlano(value)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                filtroPlano === value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Lista */}
+      {perfisFiltrados.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          Nenhum usuário encontrado
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {perfisFiltrados.map((perfil) => {
+            const dias = diasRestantes(perfil.trial_fim)
+            const isProcessando = atualizando === perfil.id
+            const isExpandido = expandido === perfil.id
+            const det = detalhes[perfil.id]
+
+            return (
+              <div
+                key={perfil.id}
+                className={`bg-white dark:bg-gray-800 border rounded-xl overflow-hidden transition ${
+                  isProcessando
+                    ? 'opacity-50 pointer-events-none'
+                    : 'border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                {/* Linha principal — clicável */}
+                <div
+                  onClick={() => toggleExpandir(perfil.id)}
+                  className="p-4 sm:p-5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                          {perfil.nome_negocio || 'Sem nome'}
+                        </h3>
+                        {planoBadge(perfil.plano, perfil.trial_fim)}
+                        {isExpandido ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="truncate font-mono text-xs">
+                          ID: {perfil.id.substring(0, 8)}...
+                        </span>
+                        {perfil.created_at && (
+                          <span>Cadastro: {formatarData(perfil.created_at)}</span>
+                        )}
+                        {perfil.trial_fim && (
+                          <span>
+                            Trial até:{' '}
+                            {new Date(perfil.trial_fim).toLocaleDateString('pt-BR')}
+                            {dias !== null && dias >= 0 && (
+                              <span className="ml-1 text-yellow-600">
+                                ({dias}d restantes)
+                              </span>
+                            )}
+                            {dias !== null && dias < 0 && (
+                              <span className="ml-1 text-red-500">
+                                (expirado há {Math.abs(dias)}d)
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Ações */}
+                    <div
+                      className="flex items-center gap-2 flex-wrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {perfil.plano !== 'ativo' && (
+                        <button
+                          onClick={() => alterarPlano(perfil.id, 'ativo')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800 transition"
+                        >
+                          ✅ Ativar
+                        </button>
+                      )}
+                      {perfil.plano === 'ativo' && (
+                        <button
+                          onClick={() => alterarPlano(perfil.id, 'expirado')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 transition"
+                        >
+                          ❌ Suspender
+                        </button>
+                      )}
+                      {perfil.plano !== 'ativo' && (
+                        <>
+                          <button
+                            onClick={() => estenderTrial(perfil.id, 7)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 transition"
+                          >
+                            +7 dias
+                          </button>
+                          <button
+                            onClick={() => estenderTrial(perfil.id, 15)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 transition"
+                          >
+                            +15 dias
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── PAINEL EXPANDIDO ── */}
+                {isExpandido && (
+                  <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-850 p-4 sm:p-6">
+                    {carregandoDetalhes && !det ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                      </div>
+                    ) : det ? (
+                      <div className="space-y-5">
+                        {/* Info completa */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="flex items-center gap-3 text-sm">
+                            <Hash className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span className="text-gray-500">ID completo:</span>
+                            <code className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded select-all">
+                              {perfil.id}
+                            </code>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm">
+                            <Store className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span className="text-gray-500">Negócio:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {perfil.nome_negocio || '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm">
+                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span className="text-gray-500">Cadastro:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {perfil.created_at
+                                ? formatarData(perfil.created_at)
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm">
+                            <Clock className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span className="text-gray-500">Última atividade:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {det.ultimoAcesso
+                                ? formatarData(det.ultimoAcesso)
+                                : 'Nenhuma'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Mini métricas */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[
+                            {
+                              label: 'Produtos',
+                              value: det.totalProdutos,
+                              icon: Package,
+                              color: 'text-blue-600 dark:text-blue-400',
+                            },
+                            {
+                              label: 'Movimentos',
+                              value: det.totalMovimentos,
+                              icon: BarChart3,
+                              color: 'text-green-600 dark:text-green-400',
+                            },
+                            {
+                              label: 'Vendas hoje',
+                              value: det.vendasHoje,
+                              icon: ShoppingCart,
+                              color: 'text-purple-600 dark:text-purple-400',
+                            },
+                            {
+                              label: 'Valor estoque',
+                              value: formatarMoeda(det.valorEstoque),
+                              icon: TrendingUp,
+                              color: 'text-emerald-600 dark:text-emerald-400',
+                            },
+                          ].map(({ label, value, icon: Icon, color }) => (
+                            <div
+                              key={label}
+                              className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <Icon className={`w-4 h-4 ${color}`} />
+                                <span className="text-xs text-gray-500">
+                                  {label}
+                                </span>
+                              </div>
+                              <span className={`text-lg font-bold ${color}`}>
+                                {value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Alertas rápidos */}
+                        <div className="flex flex-wrap gap-3">
+                          {det.produtosCriticos > 0 && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {det.produtosCriticos} produto(s) com estoque
+                              crítico
+                            </span>
+                          )}
+                          {det.totalAlertas > 0 && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {det.totalAlertas} alerta(s) pendente(s)
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                            <Users className="w-3.5 h-3.5" />
+                            {det.totalMembros} membro(s) na equipe
+                          </span>
+                        </div>
+
+                        {/* Movimentos recentes */}
+                        {det.movimentosRecentes.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Últimos movimentos
+                            </h4>
+                            <div className="space-y-2">
+                              {det.movimentosRecentes.map((mov, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 text-sm"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span
+                                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                        mov.tipo === 'entrada'
+                                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                      }`}
+                                    >
+                                      {mov.tipo === 'entrada' ? '↓ Entrada' : '↑ Saída'}
+                                    </span>
+                                    <span className="text-gray-700 dark:text-gray-300">
+                                      {mov.produto}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <span
+                                      className={`font-semibold ${
+                                        mov.tipo === 'entrada'
+                                          ? 'text-green-600'
+                                          : 'text-red-600'
+                                      }`}
+                                    >
+                                      {mov.tipo === 'entrada' ? '+' : '-'}
+                                      {mov.quantidade}
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                      {formatarData(mov.data)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {det.movimentosRecentes.length === 0 &&
+                          det.totalProdutos === 0 && (
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                              👤 Usuário ainda não usou o sistema
+                            </div>
+                          )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500 text-sm">
+                        Erro ao carregar detalhes
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Receita */}
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-xl p-5">
+        <p className="text-sm text-green-700 dark:text-green-400 font-medium">
+          💰 Receita mensal estimada
+        </p>
+        <p className="text-3xl font-bold text-green-800 dark:text-green-300 mt-1">
+          R$ {(totalAtivos * 79.9).toFixed(2).replace('.', ',')}
+        </p>
+        <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+          {totalAtivos} assinante(s) × R$ 79,90/mês
+        </p>
+      </div>
     </div>
   )
 }
@@ -3761,7 +5189,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
-import { Mail, Lock } from 'lucide-react'
+import { Mail, Lock, Package, BarChart3, ShoppingCart, Zap } from 'lucide-react'
 
 export default function Login() {
   const router = useRouter()
@@ -3782,7 +5210,11 @@ export default function Login() {
       })
 
       if (signInError) {
-        setError(signInError.message)
+        if (signInError.message === 'Invalid login credentials') {
+          setError('Email ou senha incorretos.')
+        } else {
+          setError(signInError.message)
+        }
         return
       }
 
@@ -3796,47 +5228,126 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-blue-600">
-      <div className="w-full max-w-md mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-primary mb-2">📦</h1>
-            <h2 className="text-2xl font-bold text-gray-900">EstoqueSystem</h2>
-            <p className="text-gray-600 mt-2">Sistema de Estoque para Mercados</p>
+    <div className="min-h-screen flex">
+
+      {/* ══════════ LADO ESQUERDO — Branding ══════════ */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-600 via-green-700 to-emerald-800 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          <Link href="/" className="flex items-center gap-3">
+            <span className="text-3xl">📦</span>
+            <span className="text-2xl font-bold text-white">EstoqueSystem</span>
+          </Link>
+
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h1 className="text-4xl font-bold text-white leading-tight">
+                Gerencie seu estoque de forma simples e inteligente
+              </h1>
+              <p className="text-green-100 text-lg leading-relaxed">
+                Tudo que seu comércio precisa em um só lugar — do controle de
+                estoque ao ponto de venda.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  icon: Package,
+                  titulo: 'Controle total',
+                  desc: 'Cadastre produtos e acompanhe quantidades em tempo real',
+                },
+                {
+                  icon: ShoppingCart,
+                  titulo: 'PDV integrado',
+                  desc: 'Venda direto pelo celular com leitor de código de barras',
+                },
+                {
+                  icon: BarChart3,
+                  titulo: 'Relatórios claros',
+                  desc: 'Veja vendas, lucro e movimentação em gráficos simples',
+                },
+              ].map(({ icon: Icon, titulo, desc }) => (
+                <div key={titulo} className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5 text-green-200" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">{titulo}</p>
+                    <p className="text-green-200 text-sm">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-green-300 text-sm">
+            © {new Date().getFullYear()} EstoqueSystem · Por Lucas Machado
+          </p>
+        </div>
+      </div>
+
+      {/* ══════════ LADO DIREITO — Formulário ══════════ */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-white dark:bg-gray-950">
+        <div className="w-full max-w-md space-y-8">
+
+          {/* Logo mobile */}
+          <div className="lg:hidden text-center space-y-2">
+            <Link href="/" className="inline-flex items-center gap-2">
+              <span className="text-3xl">📦</span>
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                EstoqueSystem
+              </span>
+            </Link>
+          </div>
+
+          {/* Header */}
+          <div className="space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+              Bem-vindo de volta 👋
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400">
+              Entre na sua conta para acessar o dashboard
+            </p>
           </div>
 
           {error && <Alert message={error} type="error" />}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+          {/* Formulário */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="input-field pl-10"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="seu@email.com"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Senha
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="input-field pl-10"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Sua senha"
                 />
               </div>
@@ -3845,24 +5356,50 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Entrando...
+                </>
+              ) : (
+                'Entrar'
+              )}
             </button>
           </form>
 
-          <p className="text-center text-gray-600 mt-6">
-            Não tem conta?{' '}
-            <Link href="/signup" className="text-primary font-medium hover:underline">
-              Crie uma agora
+          {/* Divisor */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-800" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white dark:bg-gray-950 px-4 text-gray-400">
+                ou
+              </span>
+            </div>
+          </div>
+
+          {/* Criar conta */}
+          <div className="text-center space-y-4">
+            <Link
+              href="/signup"
+              className="block w-full py-3.5 border-2 border-green-600 text-green-600 dark:text-green-400 font-semibold rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 transition text-center"
+            >
+              Criar conta grátis
             </Link>
-          </p>
+
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+              <Zap className="w-4 h-4 text-green-500" />
+              <span>15 dias grátis — sem cartão de crédito</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\reset-password\page.tsx ===
@@ -3967,7 +5504,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
-import { Mail, Lock, User } from 'lucide-react'
+import { Mail, Lock, User, CheckCircle } from 'lucide-react'
 
 export default function Signup() {
   const router = useRouter()
@@ -3991,6 +5528,12 @@ export default function Signup() {
       return
     }
 
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres')
+      setLoading(false)
+      return
+    }
+
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -4003,15 +5546,19 @@ export default function Signup() {
       })
 
       if (signUpError) {
-        setError(signUpError.message)
+        if (signUpError.message.includes('already registered')) {
+          setError('Este email já está cadastrado. Tente fazer login.')
+        } else {
+          setError(signUpError.message)
+        }
         return
       }
 
       if (data.user) {
-        setSuccess('Cadastro realizado com sucesso! Verifique seu email.')
+        setSuccess('Conta criada com sucesso! Redirecionando...')
         setTimeout(() => {
-          router.push('/login')
-        }, 2000)
+          router.push('/dashboard')
+        }, 1500)
       }
     } catch (err) {
       setError('Erro ao criar conta. Tente novamente.')
@@ -4022,108 +5569,237 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-blue-600">
-      <div className="w-full max-w-md mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-primary mb-2">📦</h1>
-            <h2 className="text-2xl font-bold text-gray-900">EstoqueSystem</h2>
-            <p className="text-gray-600 mt-2">Crie sua conta</p>
+    <div className="min-h-screen flex">
+
+      {/* ══════════ LADO ESQUERDO — Branding ══════════ */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-600 via-green-700 to-emerald-800 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          <Link href="/" className="flex items-center gap-3">
+            <span className="text-3xl">📦</span>
+            <span className="text-2xl font-bold text-white">EstoqueSystem</span>
+          </Link>
+
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h1 className="text-4xl font-bold text-white leading-tight">
+                Comece a organizar seu estoque agora mesmo
+              </h1>
+              <p className="text-green-100 text-lg leading-relaxed">
+                Crie sua conta em segundos e tenha 15 dias grátis para testar
+                tudo — sem compromisso.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  icon: CheckCircle,
+                  texto: 'Cadastro rápido — sem burocracia',
+                },
+                {
+                  icon: CheckCircle,
+                  texto: '15 dias grátis com acesso completo',
+                },
+                {
+                  icon: CheckCircle,
+                  texto: 'Sem cartão de crédito',
+                },
+                {
+                  icon: CheckCircle,
+                  texto: 'Funciona no celular e no computador',
+                },
+                {
+                  icon: CheckCircle,
+                  texto: 'Suporte direto via WhatsApp',
+                },
+              ].map(({ icon: Icon, texto }) => (
+                <div key={texto} className="flex items-center gap-3">
+                  <Icon className="w-5 h-5 text-green-300 shrink-0" />
+                  <p className="text-green-100">{texto}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className="text-yellow-400 text-sm">★</span>
+                  ))}
+                </div>
+                <span className="text-green-200 text-sm font-medium">
+                  Feito para pequenos comércios
+                </span>
+              </div>
+              <p className="text-green-100 text-sm italic leading-relaxed">
+                &ldquo;Sistema simples, direto ao ponto. Exatamente o que meu
+                mercadinho precisava.&rdquo;
+              </p>
+            </div>
+          </div>
+
+          <p className="text-green-300 text-sm">
+            © {new Date().getFullYear()} EstoqueSystem · Por Lucas Machado
+          </p>
+        </div>
+      </div>
+
+      {/* ══════════ LADO DIREITO — Formulário ══════════ */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-white dark:bg-gray-950">
+        <div className="w-full max-w-md space-y-8">
+
+          {/* Logo mobile */}
+          <div className="lg:hidden text-center space-y-2">
+            <Link href="/" className="inline-flex items-center gap-2">
+              <span className="text-3xl">📦</span>
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                EstoqueSystem
+              </span>
+            </Link>
+          </div>
+
+          {/* Header */}
+          <div className="space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+              Crie sua conta grátis 🚀
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400">
+              15 dias grátis — comece a usar em 2 minutos
+            </p>
           </div>
 
           {error && <Alert message={error} type="error" />}
           {success && <Alert message={success} type="success" />}
 
-          <form onSubmit={handleSignup} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nome Completo
+          {/* Formulário */}
+          <form onSubmit={handleSignup} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Nome completo
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-3 text-gray-400" size={20} />
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
                   value={nomeCompleto}
                   onChange={(e) => setNomeCompleto(e.target.value)}
                   required
-                  className="input-field pl-10"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Seu nome"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="input-field pl-10"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="seu@email.com"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Senha
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="input-field pl-10"
-                  placeholder="Sua senha"
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+                  placeholder="Mínimo 6 caracteres"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Confirmar Senha
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Confirmar senha
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="input-field pl-10"
-                  placeholder="Confirme sua senha"
+                  className={`w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition ${
+                    confirmPassword && password !== confirmPassword
+                      ? 'border-red-400'
+                      : 'border-gray-200 dark:border-gray-800'
+                  }`}
+                  placeholder="Repita a senha"
                 />
               </div>
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-red-500 text-xs mt-1">As senhas não coincidem</p>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
             >
-              {loading ? 'Criando conta...' : 'Criar Conta'}
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Criando conta...
+                </>
+              ) : (
+                'Criar minha conta grátis'
+              )}
             </button>
           </form>
 
-          <p className="text-center text-gray-600 mt-6">
-            Já tem conta?{' '}
-            <Link href="/login" className="text-primary font-medium hover:underline">
-              Faça login
+          {/* Divisor */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-800" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white dark:bg-gray-950 px-4 text-gray-400">
+                ou
+              </span>
+            </div>
+          </div>
+
+          {/* Login */}
+          <div className="text-center space-y-4">
+            <Link
+              href="/login"
+              className="block w-full py-3.5 border-2 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900 transition text-center"
+            >
+              Já tenho conta — Entrar
             </Link>
-          </p>
+
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Ao criar sua conta, você concorda com nossos termos de uso.
+              Seus dados estão protegidos e seguros.
+            </p>
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\alerts.tsx ===
@@ -4909,6 +6585,7 @@ export default function Loading() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\navbar.tsx ===
 'use client'
 
+import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -4926,6 +6603,7 @@ const navItems = [
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 
 export default function Navbar() {
@@ -5029,6 +6707,70 @@ export default function Navbar() {
   )
 }
 
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\pix-qrcode.tsx ===
+'use client'
+
+import { useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { gerarPixPayload } from '@/lib/pix'
+
+interface PixQRCodeProps {
+  chavePix: string
+  nomeRecebedor: string
+  cidadeRecebedor: string
+  valor?: number
+}
+
+export default function PixQRCode({
+  chavePix,
+  nomeRecebedor,
+  cidadeRecebedor,
+  valor,
+}: PixQRCodeProps) {
+  const [copiado, setCopiado] = useState(false)
+
+  const payload = gerarPixPayload({
+    chavePix,
+    nomeRecebedor,
+    cidadeRecebedor,
+    valor,
+    identificador: 'ESTOQUESYSTEM',
+  })
+
+  const handleCopiar = () => {
+    navigator.clipboard.writeText(payload)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2500)
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      {/* QR Code */}
+      <div className="bg-white p-4 rounded-2xl">
+        <QRCodeSVG
+          value={payload}
+          size={220}
+          level="M"
+          includeMargin={false}
+        />
+      </div>
+
+      <p className="text-gray-400 text-xs text-center">
+        Abra o app do seu banco → Pix → Pagar com QR Code
+      </p>
+
+      {/* Copia e Cola */}
+      <button
+        onClick={handleCopiar}
+        className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium py-2.5 px-4 rounded-xl transition-colors"
+      >
+        {copiado ? '✅ Código copiado!' : '📋 Copiar PIX Copia e Cola'}
+      </button>
+    </div>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\search-command.tsx ===
@@ -5270,10 +7012,12 @@ export default function SearchCommand() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\sidebar.tsx ===
 'use client'
 
+import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
 import { useMembro } from '@/hooks/useMembro'
+
 
 const allNavItems = [
   { href: '/dashboard',            label: 'Dashboard',  icon: Home, requiredLevel: 'dono' },
@@ -5284,6 +7028,7 @@ const allNavItems = [
   { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 
 export default function Sidebar() {
@@ -5442,6 +7187,38 @@ export default function ToastContainer() {
   )
 }
 
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\trial-banner.tsx ===
+'use client'
+
+import Link from 'next/link'
+
+interface TrialBannerProps {
+  diasRestantes: number
+}
+
+export default function TrialBanner({ diasRestantes }: TrialBannerProps) {
+  const texto =
+    diasRestantes === 0
+      ? '⏰ Seu teste expira HOJE!'
+      : diasRestantes === 1
+        ? '⏰ Seu teste termina amanhã!'
+        : `⏰ Seu teste termina em ${diasRestantes} dias`
+
+  return (
+    <div className="w-full bg-yellow-400 text-yellow-900 px-4 py-3 text-center text-sm font-medium flex items-center justify-center gap-3 flex-wrap fixed top-0 left-0 z-[60]">
+      <span>{texto}</span>
+      <span className="hidden sm:inline">—</span>
+      <Link
+        href="/assinar"
+        className="inline-flex items-center gap-1.5 bg-yellow-900 text-yellow-50 px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-yellow-800 transition-colors"
+      >
+        Assinar agora 🚀
+      </Link>
+    </div>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\contexts\NotificationContext.tsx ===

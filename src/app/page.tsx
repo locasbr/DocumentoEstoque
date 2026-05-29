@@ -58,8 +58,6 @@ const BENEFICIOS = [
   'Atualizações inclusas',
 ]
 
-
-
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -69,9 +67,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">📦</span>
-            <span className="text-xl font-bold text-gray-900">
-              EstoqueSystem
-            </span>
+            <span className="text-xl font-bold text-gray-900">EstoqueSystem</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -126,8 +122,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-sm text-gray-400 pt-2">
-            ✅ Sem cartão &nbsp;·&nbsp; ✅ Cancele quando quiser &nbsp;·&nbsp; ✅
-            Suporte via WhatsApp
+            ✅ Sem cartão &nbsp;·&nbsp; ✅ Cancele quando quiser &nbsp;·&nbsp; ✅ Suporte via WhatsApp
           </p>
         </div>
       </section>
@@ -142,19 +137,11 @@ export default function LandingPage() {
                   { label: 'Produtos', valor: '247', cor: 'text-blue-400' },
                   { label: 'Vendas Hoje', valor: '38', cor: 'text-green-400' },
                   { label: 'Alertas', valor: '5', cor: 'text-yellow-400' },
-                  {
-                    label: 'Estoque',
-                    valor: 'R$ 12.450',
-                    cor: 'text-purple-400',
-                  },
+                  { label: 'Estoque', valor: 'R$ 12.450', cor: 'text-purple-400' },
                 ].map(({ label, valor, cor }) => (
                   <div key={label} className="space-y-1">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">
-                      {label}
-                    </p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${cor}`}>
-                      {valor}
-                    </p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${cor}`}>{valor}</p>
                   </div>
                 ))}
               </div>
@@ -195,30 +182,13 @@ export default function LandingPage() {
       <section className="py-20 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Comece em 2 minutos
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Comece em 2 minutos</h2>
           </div>
           <div className="grid sm:grid-cols-3 gap-8">
             {[
-              {
-                passo: '1',
-                titulo: 'Crie sua conta',
-                desc: 'Cadastro rápido com email e senha. Sem burocracia.',
-                emoji: '📝',
-              },
-              {
-                passo: '2',
-                titulo: 'Cadastre produtos',
-                desc: 'Adicione seus produtos manualmente ou com a câmera do celular.',
-                emoji: '📦',
-              },
-              {
-                passo: '3',
-                titulo: 'Comece a vender',
-                desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda.',
-                emoji: '🚀',
-              },
+              { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rápido com email e senha. Sem burocracia.', emoji: '📝' },
+              { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou com a câmera do celular.', emoji: '📦' },
+              { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda.', emoji: '🚀' },
             ].map(({ passo, titulo, desc, emoji }) => (
               <div key={passo} className="text-center space-y-3">
                 <span className="text-4xl">{emoji}</span>
@@ -234,90 +204,79 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════ QUEM CRIOU ══════════ */}
-<section className="py-20 px-4 bg-gray-50">
-  <div className="max-w-4xl mx-auto">
-    <div className="flex flex-col md:flex-row items-center gap-10">
-
-      {/* Foto */}
-      <div className="shrink-0">
-        <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
-          {/* Coloque sua foto em /public/lucas.jpg */}
-          <img
-            src="/lucas.jpg"
-            alt="Lucas Machado - Criador do EstoqueSystem"
-            className="w-full h-full object-cover"
-          />
-        </div>
-      </div>
-
-      {/* Texto */}
-      <div className="space-y-5 text-center md:text-left">
-        <div>
-          <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
-            Quem está por trás
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
-            Prazer, Lucas Machado 👋
-          </h2>
-        </div>
-
-        <div className="text-gray-600 text-lg leading-relaxed space-y-4">
-          <p>
-            Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
-            criar projetos que resolvam problemas reais e que possam gerar
-            valor de verdade pra quem usa.
-          </p>
-          <p>
-            O EstoqueSystem nasceu de uma percepção simples: pequenos
-            comerciantes <strong>não precisam de sistemas caros e
-            complicados</strong> — precisam de algo que funcione no celular,
-            que seja fácil de usar e que caiba no bolso.
-          </p>
-          <p>
-            Eu construí cada tela, cada botão e cada funcionalidade pensando
-            em quem está atrás do balcão, vendendo e tentando manter o negócio
-            de pé. Se você é essa pessoa,{' '}
-            <strong className="text-gray-900">
-              o EstoqueSystem foi feito pra você.
-            </strong>
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🎯</span>
-            <div className="text-left">
-              <p className="font-semibold text-sm text-gray-900">Missão</p>
-              <p className="text-gray-500 text-xs">
-                Tornar o controle de estoque acessível pra todo pequeno comércio
-              </p>
+      <section className="py-20 px-4 bg-gray-50">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center gap-10">
+            <div className="shrink-0">
+              <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
+                <img
+                  src="/lucas.jpg"
+                  alt="Lucas Machado - Criador do EstoqueSystem"
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">💬</span>
-            <div className="text-left">
-              <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
-              <p className="text-gray-500 text-xs">
-                Fale comigo pelo WhatsApp — sem robô, sem fila
-              </p>
+            <div className="space-y-5 text-center md:text-left">
+              <div>
+                <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
+                  Quem está por trás
+                </p>
+                <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
+                  Prazer, Lucas Machado 👋
+                </h2>
+              </div>
+              <div className="text-gray-600 text-lg leading-relaxed space-y-4">
+                <p>
+                  Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
+                  criar projetos que resolvam problemas reais e que possam gerar
+                  valor de verdade pra quem usa.
+                </p>
+                <p>
+                  O EstoqueSystem nasceu de uma percepção simples: pequenos
+                  comerciantes <strong>não precisam de sistemas caros e
+                  complicados</strong> — precisam de algo que funcione no celular,
+                  que seja fácil de usar e que caiba no bolso.
+                </p>
+                <p>
+                  Eu construí cada tela, cada botão e cada funcionalidade pensando
+                  em quem está atrás do balcão, vendendo e tentando manter o negócio
+                  de pé. Se você é essa pessoa,{' '}
+                  <strong className="text-gray-900">
+                    o EstoqueSystem foi feito pra você.
+                  </strong>
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🎯</span>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm text-gray-900">Missão</p>
+                    <p className="text-gray-500 text-xs">
+                      Tornar o controle de estoque acessível pra todo pequeno comércio
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">💬</span>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
+                    <p className="text-gray-500 text-xs">
+                      Fale comigo pelo WhatsApp — sem robô, sem fila
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
 
       {/* ══════════ PREÇO ══════════ */}
       <section className="py-20 px-4" id="preco">
         <div className="max-w-lg mx-auto">
           <div className="text-center mb-10">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Simples e acessível
-            </h2>
-            <p className="text-gray-600 mt-3">
-              Um plano só, com tudo incluso. Sem surpresas.
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold">Simples e acessível</h2>
+            <p className="text-gray-600 mt-3">Um plano só, com tudo incluso. Sem surpresas.</p>
           </div>
 
           <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
@@ -365,36 +324,16 @@ export default function LandingPage() {
       <section className="py-20 px-4 bg-gray-50">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Perguntas frequentes
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Perguntas frequentes</h2>
           </div>
           <div className="space-y-4">
             {[
-              {
-                p: 'Preciso instalar alguma coisa?',
-                r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.',
-              },
-              {
-                p: 'Funciona no celular?',
-                r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.',
-              },
-              {
-                p: 'Como funciona o período de teste?',
-                r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.',
-              },
-              {
-                p: 'Como faço o pagamento?',
-                r: 'O pagamento é feito via PIX. Após o pagamento, seu acesso é liberado em até 1 hora.',
-              },
-              {
-                p: 'Posso adicionar funcionários?',
-                r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.',
-              },
-              {
-                p: 'Meus dados ficam seguros?',
-                r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.',
-              },
+              { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
+              { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
+              { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
+              { p: 'Como faço o pagamento?', r: 'O pagamento é feito via PIX. Após o pagamento, seu acesso é liberado em até 1 hora.' },
+              { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
+              { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
             ].map(({ p, r }) => (
               <details
                 key={p}
@@ -402,7 +341,15 @@ export default function LandingPage() {
               >
                 <summary className="px-6 py-4 cursor-pointer font-medium text-gray-900 flex items-center justify-between hover:bg-gray-50 rounded-xl transition">
                   {p}
-                  <ChevronIcon />
+                  <svg
+                    className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform shrink-0 ml-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </summary>
                 <div className="px-6 pb-4 text-gray-600 text-sm leading-relaxed">
                   {r}
@@ -424,7 +371,7 @@ export default function LandingPage() {
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 px-10 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
           >
             Criar minha conta grátis
             <ArrowRight className="w-5 h-5" />
@@ -451,20 +398,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  )
-}
-
-// Ícone do accordion do FAQ
-function ChevronIcon() {
-  return (
-    <svg
-      className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
   )
 }
