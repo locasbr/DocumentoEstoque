@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -18,7 +19,7 @@ const BENEFICIOS = [
   'Atualizações e novos recursos inclusos',
 ]
 
-export default function AssinarPage() {
+function AssinarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
@@ -26,7 +27,6 @@ export default function AssinarPage() {
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
 
-  // Verifica parâmetros de retorno do Mercado Pago
   const statusPagamento = searchParams.get('pagamento')
 
   useEffect(() => {
@@ -41,7 +41,6 @@ export default function AssinarPage() {
       setUserId(data.session.user.id)
       setUserEmail(data.session.user.email ?? '')
 
-      // Se o plano já está ativo, manda pro dashboard
       const { data: perfil } = await supabase
         .from('perfis')
         .select('plano')
@@ -72,7 +71,6 @@ export default function AssinarPage() {
       const data = await response.json()
 
       if (data.init_point) {
-        // Redireciona pro checkout do Mercado Pago
         window.location.href = data.init_point
       } else {
         alert('Erro ao criar pagamento. Tente novamente.')
@@ -91,7 +89,6 @@ export default function AssinarPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center p-4">
       <div className="max-w-lg w-full space-y-8">
 
-        {/* Alerta de status do pagamento */}
         {statusPagamento === 'falhou' && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
             <p className="text-red-400 font-medium">
@@ -107,7 +104,6 @@ export default function AssinarPage() {
           </div>
         )}
 
-        {/* Header */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-500/10 mb-2">
             <span className="text-4xl">🔒</span>
@@ -122,10 +118,8 @@ export default function AssinarPage() {
           </p>
         </div>
 
-        {/* Card do Plano */}
         <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-8 space-y-6 backdrop-blur-sm">
 
-          {/* Preço */}
           <div className="text-center space-y-1">
             <p className="text-sm text-gray-400 uppercase tracking-wider font-medium">
               Plano Profissional
@@ -140,7 +134,6 @@ export default function AssinarPage() {
 
           <div className="border-t border-gray-700" />
 
-          {/* Benefícios */}
           <ul className="space-y-3">
             {BENEFICIOS.map((b) => (
               <li key={b} className="flex items-start gap-3 text-gray-300">
@@ -152,7 +145,6 @@ export default function AssinarPage() {
 
           <div className="border-t border-gray-700" />
 
-          {/* Métodos aceitos */}
           <div className="flex items-center justify-center gap-6 text-gray-400">
             <div className="flex items-center gap-2 text-sm">
               <QrCode className="w-5 h-5" />
@@ -168,7 +160,6 @@ export default function AssinarPage() {
             </div>
           </div>
 
-          {/* Botão de pagamento */}
           <button
             onClick={handlePagar}
             disabled={processando}
@@ -187,7 +178,6 @@ export default function AssinarPage() {
             )}
           </button>
 
-          {/* Segurança */}
           <div className="text-center space-y-2">
             <p className="text-gray-500 text-sm">
               🔒 Pagamento 100% seguro via Mercado Pago
@@ -204,5 +194,14 @@ export default function AssinarPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
+export default function AssinarPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <AssinarContent />
+    </Suspense>
   )
 }

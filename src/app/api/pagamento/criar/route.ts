@@ -1,9 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MercadoPagoConfig, Preference } from 'mercadopago'
-
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN!,
-})
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
@@ -19,48 +14,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const preference = new Preference(client)
-
-    const response = await preference.create({
-      body: {
-        items: [
-          {
-            id: 'estoquesystem-mensal',
-            title: 'EstoqueSystem — Plano Profissional (Mensal)',
-            description: 'Acesso completo ao sistema de estoque, PDV e relatórios',
-            quantity: 1,
-            currency_id: 'BRL',
-            unit_price: 79.90,
-          },
-        ],
-        // Referência para identificar o usuário no webhook
-        external_reference: userId,
-        // Dados do comprador
-        payer: {
-          email: userEmail,
+    const response = await fetch(
+      'https://api.mercadopago.com/checkout/preferences',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
         },
-        // Sem parcelamento — só à vista
-        payment_methods: {
-          installments: 1,
-          excluded_payment_types: [
-            { id: 'ticket' }, // remove boleto (opcional)
+        body: JSON.stringify({
+          items: [
+            {
+              id: 'estoquesystem-mensal',
+              title: 'EstoqueSystem — Plano Profissional (Mensal)',
+              description: 'Acesso completo ao sistema de estoque, PDV e relatórios',
+              quantity: 1,
+              currency_id: 'BRL',
+              unit_price: 79.90,
+            },
           ],
-        },
-        // URLs de retorno
-        back_urls: {
-          success: `${appUrl}/dashboard?pagamento=sucesso`,
-          failure: `${appUrl}/assinar?pagamento=falhou`,
-          pending: `${appUrl}/assinar?pagamento=pendente`,
-        },
-        auto_return: 'approved',
-        // Webhook
-        notification_url: `${appUrl}/api/pagamento/webhook`,
-      },
-    })
+          external_reference: userId,
+          payer: {
+            email: userEmail,
+          },
+          payment_methods: {
+            installments: 1,
+          },
+          back_urls: {
+            success: `${appUrl}/dashboard?pagamento=sucesso`,
+            failure: `${appUrl}/assinar?pagamento=falhou`,
+            pending: `${appUrl}/assinar?pagamento=pendente`,
+          },
+          auto_return: 'approved',
+          notification_url: `${appUrl}/api/pagamento/webhook`,
+        }),
+      }
+    )
+
+    const data = await response.json()
 
     return NextResponse.json({
-      id: response.id,
-      init_point: response.init_point,
+      id: data.id,
+      init_point: data.init_point,
     })
   } catch (error: any) {
     console.error('Erro ao criar preferência:', error)
