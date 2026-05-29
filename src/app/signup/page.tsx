@@ -36,37 +36,48 @@ export default function Signup() {
     }
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            nome_completo: nomeCompleto,
-          },
-        },
-      })
+  const { data, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        nome_completo: nomeCompleto,
+      },
+    },
+  })
 
-      if (signUpError) {
-        if (signUpError.message.includes('already registered')) {
-          setError('Este email já está cadastrado. Tente fazer login.')
-        } else {
-          setError(signUpError.message)
-        }
-        return
-      }
-
-      if (data.user) {
-        setSuccess('Conta criada com sucesso! Redirecionando...')
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 1500)
-      }
-    } catch (err) {
-      setError('Erro ao criar conta. Tente novamente.')
-      console.error(err)
-    } finally {
-      setLoading(false)
+  if (signUpError) {
+    if (signUpError.message.includes('already registered')) {
+      setError('Este email já está cadastrado. Tente fazer login.')
+    } else {
+      setError(signUpError.message)
     }
+    return
+  }
+
+  if (data.user) {
+    // Envia email de boas-vindas
+    fetch('/api/email/boas-vindas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        nome: nomeCompleto,
+      }),
+    }).catch(console.error)
+
+    setSuccess('Conta criada com sucesso! Redirecionando...')
+    setTimeout(() => {
+      router.push('/dashboard')
+    }, 1500)
+  }
+} catch (err) {
+  setError('Erro ao criar conta. Tente novamente.')
+  console.error(err)
+} finally {
+  setLoading(false)
+}
+    
   }
 
   return (
@@ -292,9 +303,15 @@ export default function Signup() {
             </Link>
 
             <p className="text-xs text-gray-400 leading-relaxed">
-              Ao criar sua conta, você concorda com nossos termos de uso.
-              Seus dados estão protegidos e seguros.
-            </p>
+  Ao criar sua conta, você concorda com nossos{' '}
+  <Link href="/termos" className="text-green-600 hover:underline" target="_blank">
+    Termos de Uso
+  </Link>{' '}
+  e{' '}
+  <Link href="/privacidade" className="text-green-600 hover:underline" target="_blank">
+    Política de Privacidade
+  </Link>.
+</p>
           </div>
         </div>
       </div>

@@ -1,8 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// Cliente ADMIN — só roda no servidor (API routes)
-// Usa a service_role key que ignora RLS
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+let instance: SupabaseClient | null = null
+
+export const supabaseAdmin = new Proxy({} as SupabaseClient, {
+  get: (_, prop) => {
+    if (!instance) {
+      instance = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+    }
+    return (instance as any)[prop]
+  },
+})

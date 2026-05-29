@@ -1,10 +1,17 @@
 'use client'
 
+
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { User, Lock, Store, Mail, Save, Eye, EyeOff, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+
+interface PlanoInfo {
+  plano: string
+  diasRestantes: number | null
+}
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -21,26 +28,39 @@ export default function PerfilPage() {
   const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [salvandoSenha, setSalvandoSenha] = useState(false)
   const [resetEnviado, setResetEnviado] = useState(false)
-
+  const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
   useEffect(() => {
-    async function carregarPerfil() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  async function carregarPerfil() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
-      setUserEmail(user.email || '')
-      setNovoEmail(user.email || '')
+    setUserEmail(user.email || '')
+    setNovoEmail(user.email || '')
 
-      const { data: perfil } = await supabase
-        .from('perfis')
-        .select('nome_negocio')
-        .eq('id', user.id)
-        .single()
+    const { data: perfil } = await supabase
+      .from('perfis')
+      .select('nome_negocio, plano, trial_fim')
+      .eq('id', user.id)
+      .single()
 
-      if (perfil) setNomeNegocio(perfil.nome_negocio)
-      setLoading(false)
+    if (perfil) {
+      setNomeNegocio(perfil.nome_negocio)
+
+      // Info do plano
+      let diasRestantes: number | null = null
+      if (perfil.plano === 'trial' && perfil.trial_fim) {
+        const fim = new Date(perfil.trial_fim)
+        diasRestantes = Math.ceil(
+          (fim.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        )
+      }
+      setPlanoInfo({ plano: perfil.plano, diasRestantes })
     }
-    carregarPerfil()
-  }, [])
+
+    setLoading(false)
+  }
+  carregarPerfil()
+}, [])
 
   // Salvar nome do negócio
   async function salvarNegocio() {
@@ -129,6 +149,76 @@ export default function PerfilPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
         </div>
       </div>
+
+      {/* ══════════ MEU PLANO ══════════ */}
+<div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-4">
+  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+    💳 Meu Plano
+  </h3>
+
+  {planoInfo ? (
+    <div className="space-y-4">
+      {/* Status do plano */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">
+            {planoInfo.plano === 'ativo' ? '✅' : '⏳'}
+          </span>
+          <div>
+            <p className="font-semibold text-gray-900 dark:text-white">
+              {planoInfo.plano === 'ativo'
+                ? 'Plano Profissional'
+                : 'Período de Teste'
+              }
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {planoInfo.plano === 'ativo'
+                ? 'R$ 79,90/mês — Acesso completo'
+                : planoInfo.diasRestantes !== null
+                  ? `${planoInfo.diasRestantes} dias restantes`
+                  : 'Trial ativo'
+              }
+            </p>
+          </div>
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+          planoInfo.plano === 'ativo'
+            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+        }`}>
+          {planoInfo.plano === 'ativo' ? 'Ativo' : 'Trial'}
+        </span>
+      </div>
+
+      {/* Barra de progresso do trial */}
+      {planoInfo.plano === 'trial' && planoInfo.diasRestantes !== null && (
+        <div className="space-y-2">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all"
+              style={{ width: `${Math.max(0, Math.min(100, ((15 - planoInfo.diasRestantes) / 15) * 100))}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-400 text-right">
+            {planoInfo.diasRestantes} de 15 dias restantes
+          </p>
+        </div>
+      )}
+
+      {/* Botão */}
+      {planoInfo.plano !== 'ativo' && (
+        <Link
+          href="/assinar"
+          className="block w-full text-center py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition"
+        >
+          Assinar agora — R$ 79,90/mês
+        </Link>
+      )}
+    </div>
+  ) : (
+    <p className="text-gray-500 text-sm">Carregando informações do plano...</p>
+  )}
+</div>
 
       {/* Nome do negócio */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">

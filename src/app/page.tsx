@@ -272,53 +272,61 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════ PREÇO ══════════ */}
-      <section className="py-20 px-4" id="preco">
-        <div className="max-w-lg mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl sm:text-4xl font-bold">Simples e acessível</h2>
-            <p className="text-gray-600 mt-3">Um plano só, com tudo incluso. Sem surpresas.</p>
-          </div>
+<section className="py-20 px-4" id="preco">
+  <div className="max-w-lg mx-auto">
+    <div className="text-center mb-10">
+      <h2 className="text-3xl sm:text-4xl font-bold">Simples e acessível</h2>
+      <p className="text-gray-600 mt-3">Um plano só, com tudo incluso. Sem surpresas.</p>
+    </div>
 
-          <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
-            <div className="text-center space-y-1 mb-6">
-              <p className="text-sm text-gray-500 uppercase tracking-wider font-medium">
-                Plano Profissional
-              </p>
-              <div className="flex items-baseline justify-center gap-1">
-                <span className="text-sm text-gray-400">R$</span>
-                <span className="text-5xl font-extrabold">79</span>
-                <span className="text-2xl font-bold">,90</span>
-                <span className="text-gray-400 ml-1">/mês</span>
-              </div>
-              <p className="text-green-600 font-medium text-sm">
-                15 dias grátis para testar
-              </p>
-            </div>
+    <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
+      <div className="text-center space-y-1 mb-6">
+        <p className="text-sm text-gray-500 uppercase tracking-wider font-medium">
+          Plano Profissional
+        </p>
+        <div className="flex items-baseline justify-center gap-1">
+          <span className="text-sm text-gray-400">R$</span>
+          <span className="text-5xl font-extrabold">79</span>
+          <span className="text-2xl font-bold">,90</span>
+          <span className="text-gray-400 ml-1">/mês</span>
+        </div>
+        <p className="text-green-600 font-medium text-sm">
+          15 dias grátis para testar
+        </p>
+      </div>
 
-            <div className="border-t border-gray-100 my-6" />
+      <div className="border-t border-gray-100 my-6" />
 
-            <ul className="space-y-3 mb-8">
-              {BENEFICIOS.map((b) => (
-                <li key={b} className="flex items-start gap-3 text-sm">
-                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
+      <ul className="space-y-3 mb-8">
+        {BENEFICIOS.map((b) => (
+          <li key={b} className="flex items-start gap-3 text-sm">
+            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
 
             <Link
-              href="/signup"
-              className="block w-full text-center px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition"
-            >
-              Começar teste grátis
-            </Link>
+          href="/signup"
+          className="block w-full text-center px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition"
+        >
+          Começar teste grátis
+        </Link>
 
-            <p className="text-center text-xs text-gray-400 mt-3">
-              Sem cartão de crédito · Cancele quando quiser
-            </p>
-          </div>
-        </div>
-      </section>
+      <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
+        <span>💳 Cartão</span>
+        <span>•</span>
+        <span>📱 PIX</span>
+        <span>•</span>
+        <span>🔒 Mercado Pago</span>
+      </div>
+
+      <p className="text-center text-xs text-gray-400 mt-2">
+        Sem cartão de crédito no teste · Cancele quando quiser
+      </p>
+    </div>
+  </div>
+</section>
 
       {/* ══════════ FAQ ══════════ */}
       <section className="py-20 px-4 bg-gray-50">
@@ -331,7 +339,10 @@ export default function LandingPage() {
               { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
               { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
               { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
-              { p: 'Como faço o pagamento?', r: 'O pagamento é feito via PIX. Após o pagamento, seu acesso é liberado em até 1 hora.' },
+              {
+                p: 'Como faço o pagamento?',
+                r: 'O pagamento é feito de forma segura pelo Mercado Pago. Aceitamos PIX e cartão de crédito/débito à vista. Seu acesso é liberado automaticamente após a confirmação.',
+              },
               { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
               { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
             ].map(({ p, r }) => (
@@ -381,22 +392,20 @@ export default function LandingPage() {
 
       {/* ══════════ FOOTER ══════════ */}
       <footer className="border-t border-gray-100 py-8 px-4">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-          <div className="flex items-center gap-2">
-            <span>📦</span>
-            <span className="font-semibold text-gray-700">EstoqueSystem</span>
-          </div>
-          <p>© {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.</p>
-          <div className="flex gap-4">
-            <Link href="/login" className="hover:text-gray-700 transition">
-              Entrar
-            </Link>
-            <Link href="/signup" className="hover:text-gray-700 transition">
-              Criar conta
-            </Link>
-          </div>
-        </div>
-      </footer>
+  <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+    <div className="flex items-center gap-2">
+      <span>📦</span>
+      <span className="font-semibold text-gray-700">EstoqueSystem</span>
+    </div>
+    <p>© {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.</p>
+    <div className="flex gap-4">
+      <Link href="/login" className="hover:text-gray-700 transition">Entrar</Link>
+      <Link href="/signup" className="hover:text-gray-700 transition">Criar conta</Link>
+      <Link href="/termos" className="hover:text-gray-700 transition">Termos</Link>
+      <Link href="/privacidade" className="hover:text-gray-700 transition">Privacidade</Link>
+    </div>
+  </div>
+</footer>
     </div>
   )
 }

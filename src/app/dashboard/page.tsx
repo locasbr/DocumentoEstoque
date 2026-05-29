@@ -1,5 +1,7 @@
 'use client'
 
+import { Suspense } from 'react'
+import Onboarding from '@/components/onboarding'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -16,7 +18,7 @@ interface PlanoInfo {
   diasRestantes: number | null
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const searchParams = useSearchParams()
   const pagamentoSucesso = searchParams.get('pagamento') === 'sucesso'
 
@@ -32,16 +34,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [mostrarBannerPagamento, setMostrarBannerPagamento] = useState(pagamentoSucesso)
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
+  const [mostrarOnboarding, setMostrarOnboarding] = useState(false)
+  const [userId, setUserId] = useState('')
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Busca info do plano
         const { data: sessionData } = await supabase.auth.getSession()
         if (sessionData.session) {
+          setUserId(sessionData.session.user.id)
+
           const { data: perfil } = await supabase
             .from('perfis')
-            .select('plano, trial_fim')
+            .select('plano, trial_fim, onboarding_completo')
             .eq('id', sessionData.session.user.id)
             .single()
 
@@ -49,16 +54,18 @@ export default function Dashboard() {
             let diasRestantes: number | null = null
             if (perfil.plano === 'trial' && perfil.trial_fim) {
               const fim = new Date(perfil.trial_fim)
-              const agora = new Date()
               diasRestantes = Math.ceil(
-                (fim.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
+                (fim.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
               )
             }
             setPlanoInfo({ plano: perfil.plano, diasRestantes })
+
+            if (!perfil.onboarding_completo) {
+              setMostrarOnboarding(true)
+            }
           }
         }
 
-        // Busca produtos
         const { data: produtos } = await supabase.from('produtos').select('*')
         if (produtos) {
           const valorTotal = produtos.reduce(
@@ -176,6 +183,14 @@ export default function Dashboard() {
             </Link>
           )}
         </div>
+      )}
+
+      {/* Onboarding */}
+      {mostrarOnboarding && userId && (
+        <Onboarding
+          userId={userId}
+          onComplete={() => setMostrarOnboarding(false)}
+        />
       )}
 
       <div>
@@ -312,5 +327,18 @@ export default function Dashboard() {
         </div>
       )}
     </div>
+  )
+}
+
+// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
+export default function Dashboard() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   )
 }

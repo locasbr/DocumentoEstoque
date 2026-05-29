@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true })
       }
 
-      // Busca detalhes do pagamento direto na API do MP
       const response = await fetch(
         `https://api.mercadopago.com/v1/payments/${paymentId}`,
         {
@@ -38,18 +38,39 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ received: true })
         }
 
-        const { error } = await supabaseAdmin
+        // Import dinâmico pra evitar erro no build
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        )
+
+        const { error } = await supabase
           .from('perfis')
-          .update({
-            plano: 'ativo',
-            trial_fim: null,
-          })
+          .update({ plano: 'ativo', trial_fim: null })
           .eq('id', userId)
 
         if (error) {
           console.error('Erro ao ativar plano:', error)
         } else {
           console.log(`✅ Plano ativado para usuário ${userId}`)
+
+          // Envia email
+          try {
+            const { enviarConfirmacaoPagamento } = await import('@/lib/email')
+            const { data: perfilData } = await supabase
+              .from('perfis')
+              .select('nome_negocio')
+              .eq('id', userId)
+              .single()
+
+            const payerEmail = paymentData.payer?.email
+            if (payerEmail) {
+              await enviarConfirmacaoPagamento(payerEmail, perfilData?.nome_negocio || '')
+            }
+          } catch (emailErr) {
+            console.error('Erro ao enviar email:', emailErr)
+          }
         }
       }
     }
