@@ -1,5 +1,6 @@
 'use client'
 
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -10,7 +11,15 @@ import {
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
+interface PlanoInfo {
+  plano: string
+  diasRestantes: number | null
+}
+
 export default function Dashboard() {
+  const searchParams = useSearchParams()
+  const pagamentoSucesso = searchParams.get('pagamento') === 'sucesso'
+
   const [stats, setStats] = useState({
     totalProdutos: 0,
     totalMovimentos: 0,
@@ -21,10 +30,35 @@ export default function Dashboard() {
   const [movimentosHoje, setMovimentosHoje] = useState<MovimentoEstoque[]>([])
   const [alertasRecentes, setAlertasRecentes] = useState<Alerta[]>([])
   const [loading, setLoading] = useState(true)
+  const [mostrarBannerPagamento, setMostrarBannerPagamento] = useState(pagamentoSucesso)
+  const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
+        // Busca info do plano
+        const { data: sessionData } = await supabase.auth.getSession()
+        if (sessionData.session) {
+          const { data: perfil } = await supabase
+            .from('perfis')
+            .select('plano, trial_fim')
+            .eq('id', sessionData.session.user.id)
+            .single()
+
+          if (perfil) {
+            let diasRestantes: number | null = null
+            if (perfil.plano === 'trial' && perfil.trial_fim) {
+              const fim = new Date(perfil.trial_fim)
+              const agora = new Date()
+              diasRestantes = Math.ceil(
+                (fim.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
+              )
+            }
+            setPlanoInfo({ plano: perfil.plano, diasRestantes })
+          }
+        }
+
+        // Busca produtos
         const { data: produtos } = await supabase.from('produtos').select('*')
         if (produtos) {
           const valorTotal = produtos.reduce(
@@ -70,6 +104,13 @@ export default function Dashboard() {
     fetchDashboardData()
   }, [])
 
+  useEffect(() => {
+    if (mostrarBannerPagamento) {
+      const timer = setTimeout(() => setMostrarBannerPagamento(false), 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [mostrarBannerPagamento])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -81,6 +122,62 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 p-4 md:p-0">
 
+      {/* Banner pagamento aprovado */}
+      {mostrarBannerPagamento && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center justify-between">
+          <p className="text-green-700 dark:text-green-400 font-semibold">
+            🎉 Pagamento confirmado! Seu plano foi ativado com sucesso.
+          </p>
+          <button
+            onClick={() => setMostrarBannerPagamento(false)}
+            className="text-green-500 hover:text-green-700 text-xl font-bold ml-4"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Info do plano */}
+      {planoInfo && (
+        <div className={`rounded-xl p-4 flex items-center justify-between ${
+          planoInfo.plano === 'ativo'
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+            : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">
+              {planoInfo.plano === 'ativo' ? '✅' : '⏳'}
+            </span>
+            <div>
+              <p className={`font-semibold text-sm ${
+                planoInfo.plano === 'ativo'
+                  ? 'text-green-700 dark:text-green-400'
+                  : 'text-blue-700 dark:text-blue-400'
+              }`}>
+                {planoInfo.plano === 'ativo'
+                  ? 'Plano Profissional — Ativo'
+                  : `Período de teste — ${planoInfo.diasRestantes} dias restantes`
+                }
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {planoInfo.plano === 'ativo'
+                  ? 'Acesso completo a todas as funcionalidades'
+                  : 'Aproveite para conhecer todas as funcionalidades'
+                }
+              </p>
+            </div>
+          </div>
+          {planoInfo.plano === 'trial' && (
+            <Link
+              href="/assinar"
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition hidden sm:block"
+            >
+              Assinar agora
+            </Link>
+          )}
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">Dashboard</h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Bem-vindo ao seu sistema de estoque</p>
@@ -89,10 +186,10 @@ export default function Dashboard() {
       {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
-          { icon: Package,     label: 'Total de Produtos', value: stats.totalProdutos,                color: 'bg-blue-500' },
-          { icon: BarChart3,   label: 'Movimentos Hoje',   value: stats.totalMovimentos,               color: 'bg-green-500' },
-          { icon: AlertCircle, label: 'Alertas Críticos',  value: stats.alertas,                       color: stats.alertas > 0 ? 'bg-red-500' : 'bg-gray-400' },
-          { icon: TrendingUp,  label: 'Valor em Estoque',  value: formatarMoeda(stats.valorEstoque),   color: 'bg-purple-500' },
+          { icon: Package, label: 'Total de Produtos', value: stats.totalProdutos, color: 'bg-blue-500' },
+          { icon: BarChart3, label: 'Movimentos Hoje', value: stats.totalMovimentos, color: 'bg-green-500' },
+          { icon: AlertCircle, label: 'Alertas Críticos', value: stats.alertas, color: stats.alertas > 0 ? 'bg-red-500' : 'bg-gray-400' },
+          { icon: TrendingUp, label: 'Valor em Estoque', value: formatarMoeda(stats.valorEstoque), color: 'bg-purple-500' },
         ].map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-center gap-3">
             <div className={`${color} p-2.5 rounded-lg flex-shrink-0`}>
@@ -108,7 +205,6 @@ export default function Dashboard() {
 
       {/* Produtos críticos + Movimentos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
         {produtosCriticos.length > 0 && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
