@@ -1,9 +1,11 @@
 'use client'
 
+import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
 import { useMembro } from '@/hooks/useMembro'
+
 
 const allNavItems = [
   { href: '/dashboard',            label: 'Dashboard',  icon: Home, requiredLevel: 'dono' },
@@ -14,6 +16,7 @@ const allNavItems = [
   { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 
 export default function Sidebar() {

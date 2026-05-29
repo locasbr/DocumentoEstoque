@@ -1,5 +1,6 @@
 'use client'
 
+import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -17,6 +18,7 @@ const navItems = [
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 
 export default function Navbar() {

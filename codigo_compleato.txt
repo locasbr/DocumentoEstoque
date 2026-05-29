@@ -1629,6 +1629,7 @@ import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import CupomImpressao from '@/components/cupom-impressao'
 import BarcodeScanner from '@/components/barcode-scanner'
+import { buscarProdutoPorBarcode } from '@/lib/barcode-api'
 import { useCupom } from '@/hooks/useCupom'
 import { useNotification } from '@/contexts/NotificationContext'
 import { X, Plus, Minus, ShoppingCart, Check, CreditCard, Banknote, QrCode, Camera } from 'lucide-react'
@@ -1654,7 +1655,6 @@ export default function PDVPage() {
   const [filtro, setFiltro] = useState('')
   const [error, setError] = useState('')
   const [processando, setProcessando] = useState(false)
-  const [scannerAberto, setScannerAberto] = useState(false)
 
   // Pagamento
   const [modalPagamento, setModalPagamento] = useState(false)
@@ -1662,12 +1662,17 @@ export default function PDVPage() {
   const [valorRecebido, setValorRecebido] = useState('')
   const [desconto, setDesconto] = useState('')
 
+  // Scanner e cadastro rápido
+  const [scannerAberto, setScannerAberto] = useState(false)
+  const [modalCadastroRapido, setModalCadastroRapido] = useState(false)
+  const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
+  const [skuParaCadastro, setSkuParaCadastro] = useState('')
+
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
 
   useEffect(() => {
     fetchProdutos()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchProdutos = async () => {
@@ -1684,17 +1689,6 @@ export default function PDVPage() {
       addNotification('Erro ao carregar produtos', 'error')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    const produtoEncontrado = produtos.find((p) => p.sku.toLowerCase() === codigoBarras.toLowerCase())
-    
-    if (produtoEncontrado) {
-      adicionarAoCarrinho(produtoEncontrado)
-      addNotification(`✅ ${produtoEncontrado.nome} adicionado via código de barras`, 'success', 2000)
-    } else {
-      addNotification('❌ Produto não cadastrado', 'warning', 3000)
     }
   }
 
@@ -1728,6 +1722,82 @@ export default function PDVPage() {
     }
   }
 
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+    // 1. Busca no banco local
+    const produtoLocal = produtos.find(p => p.sku === codigoBarras)
+    if (produtoLocal) {
+      adicionarAoCarrinho(produtoLocal)
+      addNotification(`✅ ${produtoLocal.nome} adicionado`, 'success', 2000)
+      return
+    }
+
+    // 2. Não achou local: consulta APIs externas
+    addNotification(`🔍 Buscando ${codigoBarras}...`, 'info', 2000)
+    const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
+
+    if (resultadoAPI.encontrado) {
+      setSkuParaCadastro(codigoBarras)
+      setDadosProdutoAPI(resultadoAPI)
+      setModalCadastroRapido(true)
+    } else {
+      addNotification(`❌ Produto ${codigoBarras} não encontrado. Cadastre manualmente.`, 'warning', 5000)
+    }
+  }
+
+  const salvarProdutoRapido = async () => {
+    const nomeInput = document.getElementById('cadastroNome') as HTMLInputElement
+    const marcaInput = document.getElementById('cadastroMarca') as HTMLInputElement
+    const descricaoInput = document.getElementById('cadastroDescricao') as HTMLTextAreaElement
+    const categoriaInput = document.getElementById('cadastroCategoria') as HTMLInputElement
+    const precoInput = document.getElementById('cadastroPreco') as HTMLInputElement
+    const quantidadeInput = document.getElementById('cadastroQuantidade') as HTMLInputElement
+    const imagemInput = document.getElementById('cadastroImagem') as HTMLInputElement
+
+    const nome = nomeInput?.value.trim()
+    const marca = marcaInput?.value.trim()
+    const descricao = descricaoInput?.value.trim()
+    const categoria = categoriaInput?.value.trim()
+    const preco = parseFloat(precoInput?.value || '0')
+    const quantidade = parseInt(quantidadeInput?.value || '0')
+    const imagem = imagemInput?.value || dadosProdutoAPI?.imagem_url || ''
+
+    if (!nome || isNaN(preco) || preco <= 0) {
+      addNotification('Nome e preço são obrigatórios', 'error')
+      return
+    }
+
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error('Usuário não autenticado')
+
+      const { error: insertError } = await supabase.from('produtos').insert({
+        sku: skuParaCadastro,
+        nome,
+        marca,
+        descricao,
+        categoria,
+        preco_venda: preco,
+        quantidade_atual: quantidade,
+        imagem_url: imagem,
+        ativo: true,
+        usuario_id: userData.user.id,
+        quantidade_minima: 10,
+        preco_custo: 0,
+      })
+
+      if (insertError) throw insertError
+
+      addNotification(`✅ Produto "${nome}" cadastrado com sucesso!`, 'success')
+      setModalCadastroRapido(false)
+      await fetchProdutos()
+      // Tenta adicionar ao carrinho após cadastro
+      const novoProduto = { id: 'temp', sku: skuParaCadastro, nome, preco_venda: preco, quantidade_atual: quantidade } as Produto
+      adicionarAoCarrinho(novoProduto)
+    } catch (err: any) {
+      addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
+    }
+  }
+
   const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0)
   const subtotal   = carrinho.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0)
   const descontoVal = parseFloat(desconto) || 0
@@ -1749,7 +1819,6 @@ export default function PDVPage() {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) { setError('Usuário não autenticado'); return }
 
-      // Registra movimentos e atualiza estoque
       for (const item of carrinho) {
         const produto = produtos.find((p) => p.id === item.produto_id)
         if (!produto) continue
@@ -1766,7 +1835,6 @@ export default function PDVPage() {
         const novaQtd = produto.quantidade_atual - item.quantidade
         await supabase.from('produtos').update({ quantidade_atual: novaQtd }).eq('id', item.produto_id)
 
-        // Alerta automático de estoque baixo
         if (novaQtd < produto.quantidade_minima) {
           await supabase.from('alertas').insert([{
             produto_id: item.produto_id,
@@ -1777,7 +1845,6 @@ export default function PDVPage() {
         }
       }
 
-      // Gera o cupom
       await gerarCupom({
         itens: carrinho.map((item) => {
           const produto = produtos.find((p) => p.id === item.produto_id)!
@@ -1816,7 +1883,6 @@ export default function PDVPage() {
 
   if (loading) return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Carregando...</div>
 
-  // ─── CARD DE PRODUTO ───────────────────────────────────────────────────────
   const ProdutoCard = ({ produto }: { produto: Produto }) => {
     const item = carrinho.find((i) => i.produto_id === produto.id)
     return (
@@ -1840,7 +1906,6 @@ export default function PDVPage() {
     )
   }
 
-  // ─── ITEM DO CARRINHO ──────────────────────────────────────────────────────
   const ItemCarrinhoCard = ({ item }: { item: ItemCarrinho }) => {
     const produto = produtos.find((p) => p.id === item.produto_id)
     return (
@@ -1873,35 +1938,30 @@ export default function PDVPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-40 md:pb-0">
 
-      {/* ── DESKTOP ── */}
+      {/* DESKTOP */}
       <div className="hidden md:grid lg:grid-cols-3 gap-6 p-6">
-
-        {/* Produtos */}
         <div className="lg:col-span-2 space-y-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">PDV</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
-          </div>
-          {error && <Alert message={error} type="error" />}
-          <div className="flex gap-2">
-            <input type="text" placeholder="Buscar produto, SKU ou categoria..."
-              value={filtro} onChange={(e) => setFiltro(e.target.value)}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">PDV</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
+            </div>
             <button
               onClick={() => setScannerAberto(true)}
-              className="btn-primary px-4 flex items-center gap-2 whitespace-nowrap"
-              title="Ler código de barras"
+              className="btn-primary flex items-center gap-2 px-4"
             >
-              <Camera size={18} />
-              <span className="hidden sm:inline">Câmera</span>
+              <Camera size={18} /> <span>Ler código</span>
             </button>
           </div>
+          {error && <Alert message={error} type="error" />}
+          <input type="text" placeholder="Buscar produto, SKU ou categoria..."
+            value={filtro} onChange={(e) => setFiltro(e.target.value)}
+            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
             {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
           </div>
         </div>
 
-        {/* Carrinho Desktop */}
         <div className="card dark:bg-gray-900 dark:border-gray-800 flex flex-col h-fit sticky top-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b dark:border-gray-700">
             <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart size={20} />Carrinho</h2>
@@ -1909,72 +1969,52 @@ export default function PDVPage() {
               <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-0.5">{totalItens} un</span>
             )}
           </div>
-
           <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
             {carrinho.length === 0
               ? <p className="text-gray-400 text-sm text-center py-8">Carrinho vazio</p>
               : carrinho.map((i) => <ItemCarrinhoCard key={i.produto_id} item={i} />)}
           </div>
-
           {carrinho.length > 0 && (
             <>
-              {/* Desconto */}
               <div className="mb-3">
                 <label className="text-xs text-gray-500 mb-1 block">Desconto (R$)</label>
                 <input type="number" min="0" step="0.01" placeholder="0,00"
                   value={desconto} onChange={(e) => setDesconto(e.target.value)}
                   className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm" />
               </div>
-
-              {/* Totais */}
               <div className="border-t dark:border-gray-700 pt-3 space-y-1 mb-4 text-sm">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span><span>{formatarMoeda(subtotal)}</span>
-                </div>
-                {descontoVal > 0 && (
-                  <div className="flex justify-between text-red-500">
-                    <span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatarMoeda(subtotal)}</span></div>
+                {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
                 <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 pt-1">
                   <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
                 </div>
               </div>
-
-              <button onClick={abrirPagamento}
-                className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2">
+              <button onClick={abrirPagamento} className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2">
                 <Check size={18} />Finalizar Venda
               </button>
-              <button onClick={() => setCarrinho([])} className="btn-secondary w-full py-2 text-sm">
-                Limpar carrinho
-              </button>
+              <button onClick={() => setCarrinho([])} className="btn-secondary w-full py-2 text-sm">Limpar carrinho</button>
             </>
           )}
         </div>
       </div>
 
-      {/* ── MOBILE ── */}
+      {/* MOBILE */}
       <div className="md:hidden space-y-3 p-3">
-        <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
-        {error && <Alert message={error} type="error" />}
-        <div className="flex gap-2">
-          <input type="text" placeholder="Buscar..." value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
-            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
-          <button
-            onClick={() => setScannerAberto(true)}
-            className="btn-primary px-3 flex items-center gap-1"
-            title="Ler código de barras"
-          >
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
+          <button onClick={() => setScannerAberto(true)} className="btn-primary px-3 py-2">
             <Camera size={18} />
           </button>
         </div>
+        {error && <Alert message={error} type="error" />}
+        <input type="text" placeholder="Buscar..." value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
         <div className="grid grid-cols-2 gap-2">
           {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
         </div>
       </div>
 
-      {/* ── MOBILE CARRINHO FLUTUANTE ── */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl p-4 z-40">
           <div className="flex justify-between items-center mb-3">
@@ -1992,7 +2032,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ── MODAL DE PAGAMENTO ── */}
+      {/* MODAL DE PAGAMENTO */}
       {modalPagamento && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -2002,23 +2042,13 @@ export default function PDVPage() {
                 <X size={22} />
               </button>
             </div>
-
-            {/* Resumo */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-5 space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500">
-                <span>{totalItens} item(ns)</span><span>{formatarMoeda(subtotal)}</span>
-              </div>
-              {descontoVal > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-gray-500"><span>{totalItens} item(ns)</span><span>{formatarMoeda(subtotal)}</span></div>
+              {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
               <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 border-t dark:border-gray-700 pt-2 mt-2">
                 <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
               </div>
             </div>
-
-            {/* Forma de pagamento */}
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de pagamento</p>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
@@ -2033,17 +2063,12 @@ export default function PDVPage() {
                 </button>
               ))}
             </div>
-
-            {/* Valor recebido (só para dinheiro) */}
             {formaPagamento === 'Dinheiro' && (
               <div className="mb-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
-                  Valor recebido (R$)
-                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Valor recebido (R$)</label>
                 <input type="number" min={totalPagar} step="0.01"
                   value={valorRecebido} onChange={(e) => setValorRecebido(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
-                  placeholder={totalPagar.toFixed(2)} />
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold" />
                 {trocoVal > 0 && (
                   <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg flex justify-between">
                     <span className="text-green-700 dark:text-green-400 font-medium">Troco</span>
@@ -2052,7 +2077,6 @@ export default function PDVPage() {
                 )}
               </div>
             )}
-
             <button onClick={processarVenda} disabled={processando}
               className="btn-primary w-full py-3.5 text-base font-bold flex items-center justify-center gap-2">
               <Check size={20} />
@@ -2062,22 +2086,54 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ── CUPOM ── */}
-      {cupomAberto && dadosCupom && (
-        <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
+      {/* MODAL DE CADASTRO RÁPIDO */}
+      {modalCadastroRapido && dadosProdutoAPI && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold dark:text-white">Cadastrar novo produto</h2>
+              <button onClick={() => setModalCadastroRapido(false)} className="text-gray-400">
+                <X size={22} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
+            </p>
+            <div className="space-y-3">
+              <div><label className="block text-sm font-medium mb-1">SKU (código)</label><input type="text" value={skuParaCadastro} disabled className="input-field bg-gray-100 dark:bg-gray-800" /></div>
+              <div><label className="block text-sm font-medium mb-1">Nome *</label><input id="cadastroNome" defaultValue={dadosProdutoAPI.nome} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Marca</label><input id="cadastroMarca" defaultValue={dadosProdutoAPI.marca} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Descrição</label><textarea id="cadastroDescricao" defaultValue={dadosProdutoAPI.descricao} rows={2} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Categoria</label><input id="cadastroCategoria" defaultValue={dadosProdutoAPI.categoria} className="input-field" /></div>
+              <div><label className="block text-sm font-medium mb-1">Preço de venda *</label><input id="cadastroPreco" type="number" step="0.01" className="input-field" placeholder="0,00" /></div>
+              <div><label className="block text-sm font-medium mb-1">Quantidade inicial</label><input id="cadastroQuantidade" type="number" defaultValue="0" className="input-field" /></div>
+              {dadosProdutoAPI.imagem_url && (
+                <div><label className="block text-sm font-medium mb-1">Imagem</label><img src={dadosProdutoAPI.imagem_url} alt="prévia" className="w-24 h-24 object-cover rounded border" /><input id="cadastroImagem" type="hidden" value={dadosProdutoAPI.imagem_url} /></div>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={salvarProdutoRapido} className="btn-primary flex-1">Salvar e usar</button>
+              <button onClick={() => setModalCadastroRapido(false)} className="btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {/* SCANNER */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
           onClose={() => setScannerAberto(false)}
         />
       )}
+
+      {/* CUPOM */}
+      {cupomAberto && dadosCupom && (
+        <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
+      )}
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\perfil\page.tsx ===
@@ -2599,6 +2655,8 @@ export default function ProdutosPage() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\produtos\novo\page.tsx ===
 'use client'
 
+import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
+import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -2618,6 +2676,10 @@ export default function NovoProdutoPage() {
   const [success, setSuccess] = useState('')
   const [imagemUpload, setImagemUpload] = useState(false)
   const [scannerAberto, setScannerAberto] = useState(false)
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
+  const [barcodeDetectado, setBarcodeDetectado] = useState('')
+  const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -2639,14 +2701,32 @@ export default function NovoProdutoPage() {
     }))
   }
 
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      sku: codigoBarras,
-    }))
-    setScannerAberto(false)
-    addNotification('✅ SKU preenchido via código de barras', 'success', 2000)
-  }
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+  setScannerAberto(false)
+  setBarcodeDetectado(codigoBarras)
+  setBarcodeModalAberto(true)
+  setBuscandoBarcode(true)
+  setProdutoBarcode(null)
+
+  // Preenche SKU imediatamente
+  setFormData((prev) => ({ ...prev, sku: codigoBarras }))
+
+  // Busca informações na API
+  const resultado = await buscarProdutoPorBarcode(codigoBarras)
+  setProdutoBarcode(resultado)
+  setBuscandoBarcode(false)
+}
+
+  const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
+  setFormData((prev) => ({
+    ...prev,
+    nome: produto.nome || prev.nome,
+    descricao: produto.descricao || prev.descricao,
+    categoria: produto.categoria || prev.categoria,
+  }))
+  setBarcodeModalAberto(false)
+  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
+}
 
   const handleImageSelected = async (file: File) => {
     try {
@@ -2903,15 +2983,29 @@ export default function NovoProdutoPage() {
           onClose={() => setScannerAberto(false)}
         />
       )}
+
+      {/* ── MODAL BARCODE PRODUTO ── */}
+      {barcodeModalAberto && produtoBarcode !== null && (
+      <BarcodeProductModal
+        codigo={barcodeDetectado}
+        produto={produtoBarcode}
+        loading={buscandoBarcode}
+        onConfirmar={handleConfirmarBarcode}
+        onCancelar={() => setBarcodeModalAberto(false)}
+       />
+)}
     </div>
   )
 }
 
 
 
+
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\produtos\[id]\page.tsx ===
 'use client'
 
+import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
+import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -2939,6 +3033,10 @@ export default function EditarProdutoPage() {
   const [scannerAberto, setScannerAberto] = useState(false)
 
   const [formData, setFormData] = useState<Produto | null>(null)
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
+  const [barcodeDetectado, setBarcodeDetectado] = useState('')
+  const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
 
   useEffect(() => {
     if (!id) {
@@ -2986,6 +3084,17 @@ export default function EditarProdutoPage() {
     )
   }
 
+  const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
+  setFormData((prev) => prev ? ({
+    ...prev,
+    nome: produto.nome || prev.nome,
+    descricao: produto.descricao || prev.descricao,
+    categoria: produto.categoria || prev.categoria,
+  }) : null)
+  setBarcodeModalAberto(false)
+  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
+}
+
   const handleImageSelected = async (file: File) => {
     if (!formData || !id) {
       addNotification('Erro: ID do produto não encontrado', 'error')
@@ -3019,19 +3128,20 @@ export default function EditarProdutoPage() {
     }
   }
 
-  const handleCodigoBarrasLido = (codigoBarras: string) => {
-    if (!formData) return
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            sku: codigoBarras,
-          }
-        : null
-    )
-    setScannerAberto(false)
-    addNotification('✅ SKU preenchido via código de barras', 'success', 2000)
-  }
+  const handleCodigoBarrasLido = async (codigoBarras: string) => {
+  setScannerAberto(false)
+  setBarcodeDetectado(codigoBarras)
+  setBarcodeModalAberto(true)
+  setBuscandoBarcode(true)
+  setProdutoBarcode(null)
+
+  // Preenche SKU imediatamente
+  setFormData((prev) => prev ? { ...prev, sku: codigoBarras } : null)
+  // Busca informações na API
+  const resultado = await buscarProdutoPorBarcode(codigoBarras)
+  setProdutoBarcode(resultado)
+  setBuscandoBarcode(false)
+}
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -3262,7 +3372,17 @@ export default function EditarProdutoPage() {
           </div>
         </form>
       </div>
-
+      {/* ── MODAL BARCODE PRODUTO ── */}
+{barcodeModalAberto && produtoBarcode !== null && (
+  <BarcodeProductModal
+    codigo={barcodeDetectado}
+    produto={produtoBarcode}
+    loading={buscandoBarcode}
+    onConfirmar={handleConfirmarBarcode}
+    onCancelar={() => setBarcodeModalAberto(false)}
+  />
+  
+)}
       {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
       {scannerAberto && (
         <BarcodeScanner
@@ -4071,10 +4191,124 @@ export default function Alert({ message, type = 'info', duration = 5000, onClose
 
 
 
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\barcode-product-modal.tsx ===
+// src/components/barcode-product-modal.tsx
+'use client'
+
+import { ProdutoBarcode } from '@/lib/barcode-api'
+import { CheckCircle, X, Search } from 'lucide-react'
+import Image from 'next/image'
+
+interface Props {
+  codigo: string
+  produto: ProdutoBarcode
+  loading: boolean
+  onConfirmar: (produto: ProdutoBarcode) => void
+  onCancelar: () => void
+}
+
+export default function BarcodeProductModal({ codigo, produto, loading, onConfirmar, onCancelar }: Props) {
+  return (
+    <div className="fixed inset-0 z-[9998] bg-black/50 flex items-end md:items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
+          <h2 className="font-bold text-gray-900 dark:text-white">Código detectado</h2>
+          <button onClick={onCancelar} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="p-5">
+          {/* Código lido */}
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg px-4 py-2 mb-4 font-mono text-sm text-center text-gray-600 dark:text-gray-300">
+            {codigo}
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center py-6 gap-3">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">Buscando informações do produto...</p>
+            </div>
+          ) : produto.encontrado ? (
+            <div>
+              {/* Produto encontrado */}
+              <div className="flex items-start gap-4 mb-5">
+                {produto.imagem_url ? (
+                  <Image
+                    src={produto.imagem_url}
+                    alt={produto.nome}
+                    width={64}
+                    height={64}
+                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border dark:border-gray-700"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                    <Search size={24} className="text-gray-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Encontrado via {produto.fonte}</span>
+                  </div>
+                  <p className="font-semibold text-gray-900 dark:text-white">{produto.nome}</p>
+                  {produto.descricao && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{produto.descricao}</p>
+                  )}
+                  {produto.categoria && (
+                    <span className="inline-block mt-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                      {produto.categoria}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Deseja preencher o formulário automaticamente com essas informações?
+              </p>
+
+              <div className="flex gap-3">
+                <button onClick={onCancelar} className="flex-1 btn-secondary py-2.5">
+                  Não, preencher manual
+                </button>
+                <button onClick={() => onConfirmar(produto)} className="flex-1 btn-primary py-2.5">
+                  Sim, preencher!
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* Produto não encontrado */}
+              <div className="text-center py-4 mb-4">
+                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Search size={24} className="text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <p className="font-medium text-gray-900 dark:text-white mb-1">Produto não encontrado</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Não encontramos esse código nas bases públicas. O SKU foi preenchido — complete os demais campos manualmente.
+                </p>
+              </div>
+              <button onClick={onCancelar} className="w-full btn-primary py-2.5">
+                Ok, preencher manualmente
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\barcode-scanner.tsx ===
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, RotateCw } from 'lucide-react'
 
 interface Props {
   onDetected: (code: string) => void
@@ -4086,44 +4320,93 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [erro, setErro] = useState('')
   const [manualInput, setManualInput] = useState('')
-  const [temCamera, setTemCamera] = useState(true)
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
+  const [cameraAtual, setCameraAtual] = useState<string | null>(null)
+  const [mostrarSeletor, setMostrarSeletor] = useState(false)
 
+  // Lista câmeras e escolhe a melhor (maior resolução, evita wide)
   useEffect(() => {
-    let stream: MediaStream | undefined
+    const iniciar = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true })
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(d => d.kind === 'videoinput')
+        setCameras(videoDevices)
+
+        if (videoDevices.length === 0) {
+          setErro('Nenhuma câmera encontrada')
+          return
+        }
+
+        const melhorCamera = await escolherMelhorCamera(videoDevices)
+        setCameraAtual(melhorCamera?.deviceId || videoDevices[0].deviceId)
+      } catch {
+        setErro('Permissão de câmera negada')
+      }
+    }
+    iniciar()
+  }, [])
+
+  async function escolherMelhorCamera(cameras: MediaDeviceInfo[]): Promise<MediaDeviceInfo | null> {
+    const backCameras: MediaDeviceInfo[] = []
+    const wideKeywords = ['wide', 'ultra', '0.6', '0.5', 'angle', 'grande angular']
+
+    for (const cam of cameras) {
+      const label = cam.label.toLowerCase()
+      if (label.includes('back') || label.includes('traseira') || label.includes('environment') || !label.includes('front')) {
+        backCameras.push(cam)
+      }
+    }
+    if (backCameras.length === 0) return null
+
+    const camerasComResolucao = await Promise.all(
+      backCameras.map(async (cam) => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: cam.deviceId } }
+          })
+          const track = stream.getVideoTracks()[0]
+          const capabilities = track.getCapabilities ? track.getCapabilities() : null
+          const maxWidth = capabilities?.width?.max || 0
+          const maxHeight = capabilities?.height?.max || 0
+          const resolucao = maxWidth * maxHeight
+          stream.getTracks().forEach(t => t.stop())
+          return { cam, resolucao, label: cam.label.toLowerCase() }
+        } catch {
+          return { cam, resolucao: 0, label: cam.label.toLowerCase() }
+        }
+      })
+    )
+
+    const ordenadas = camerasComResolucao.sort((a, b) => b.resolucao - a.resolucao)
+    const normal = ordenadas.find(c => !wideKeywords.some(kw => c.label.includes(kw)))
+    return normal?.cam || ordenadas[0]?.cam || null
+  }
+
+  // Inicia a câmera escolhida
+  useEffect(() => {
+    if (!cameraAtual) return
+
+    let stream: MediaStream | null = null
     let intervalo: NodeJS.Timeout
 
-    async function iniciar() {
-      // Verifica suporte a BarcodeDetector
-      if (!('BarcodeDetector' in window)) {
-        console.log('BarcodeDetector não suportado, usando input manual')
-        setTemCamera(false)
-        inputRef.current?.focus()
-        return
-      }
-
+    const iniciarStream = async () => {
       try {
-        // Tenta acessar a câmera
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
+          video: { deviceId: { exact: cameraAtual } }
         })
-
         if (videoRef.current) {
           videoRef.current.srcObject = stream
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(err => {
-              console.error('Erro ao dar play no vídeo:', err)
-              setErro('Erro ao iniciar vídeo. Tente recarregar.')
-            })
-          }
+          videoRef.current.onloadedmetadata = () => videoRef.current?.play()
+        }
+
+        if (!('BarcodeDetector' in window)) {
+          setErro('Navegador não suporta leitura automática')
+          return
         }
 
         const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code']
+          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e']
         })
 
         intervalo = setInterval(async () => {
@@ -4135,32 +4418,29 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
               stream?.getTracks().forEach(t => t.stop())
               onDetected(codes[0].rawValue)
             }
-          } catch (e) {
-            // Silencia erros de detecção
+          } catch {
+            // silencia erros de detecção
           }
         }, 300)
-
-      } catch (e: any) {
-        console.error('Erro ao acessar câmera:', e)
-        if (e.name === 'NotAllowedError') {
-          setErro('Permissão de câmera negada. Digite o código abaixo.')
-        } else if (e.name === 'NotFoundError') {
-          setErro('Nenhuma câmera encontrada. Digite o código abaixo.')
-        } else {
-          setErro('Erro ao acessar câmera. Digite o código abaixo.')
-        }
-        setTemCamera(false)
-        inputRef.current?.focus()
+      } catch {
+        setErro('Erro ao iniciar a câmera. Tente outra.')
+        setMostrarSeletor(true)
       }
     }
 
-    iniciar()
+    iniciarStream()
 
     return () => {
       clearInterval(intervalo)
       stream?.getTracks().forEach(t => t.stop())
     }
-  }, [onDetected])
+  }, [cameraAtual, onDetected])
+
+  const trocarCamera = (deviceId: string) => {
+    setCameraAtual(deviceId)
+    setMostrarSeletor(false)
+    setErro('')
+  }
 
   const handleSubmitManual = () => {
     if (manualInput.trim()) {
@@ -4172,70 +4452,83 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
       <div className="flex items-center justify-between p-4 bg-black border-b border-gray-700">
-        <p className="text-white font-medium text-sm">
-          {temCamera ? 'Aponte para o código de barras' : 'Digite o código'}
-        </p>
+        <p className="text-white font-medium text-sm">Leitor de código de barras</p>
         <button onClick={onClose} className="text-white p-2 hover:bg-gray-800 rounded">
           <X size={24} />
         </button>
       </div>
 
-      {temCamera && !erro ? (
-        <>
-          <video
-            ref={videoRef}
-            className="flex-1 w-full h-full object-cover bg-black"
-            playsInline
-            muted
-            autoPlay
-          />
-          
-          {/* Guia visual */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="border-2 border-dashed border-yellow-400 w-40 h-32 rounded-lg opacity-70"></div>
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          {erro && (
-            <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg max-w-xs">
-              <p className="text-red-300 text-sm">{erro}</p>
+      <div className="relative flex-1">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          playsInline
+          muted
+          autoPlay
+        />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="border-2 border-dashed border-yellow-400 w-40 h-32 rounded-lg opacity-70" />
+        </div>
+      </div>
+
+      {(mostrarSeletor || cameras.length > 1) && (
+        <div className="p-3 bg-gray-900 border-t border-gray-700">
+          <button
+            onClick={() => setMostrarSeletor(!mostrarSeletor)}
+            className="text-gray-300 text-xs flex items-center gap-1 mb-2 hover:text-white"
+          >
+            <RotateCw size={12} /> {mostrarSeletor ? 'Ocultar' : 'Trocar câmera'}
+          </button>
+          {mostrarSeletor && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {cameras.map((cam, idx) => (
+                <button
+                  key={cam.deviceId}
+                  onClick={() => trocarCamera(cam.deviceId)}
+                  className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap ${
+                    cameraAtual === cam.deviceId
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  {cam.label || `Câmera ${idx + 1}`}
+                </button>
+              ))}
             </div>
           )}
-          
-          <div className="w-full max-w-xs">
-            <p className="text-white mb-4 font-medium">Digite o código de barras:</p>
+        </div>
+      )}
+
+      {erro && (
+        <div className="p-4 bg-black border-t border-gray-700">
+          <p className="text-red-400 text-sm mb-2">{erro}</p>
+          <div className="flex gap-2">
             <input
               ref={inputRef}
               type="text"
               value={manualInput}
               onChange={(e) => setManualInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSubmitManual()
-              }}
-              placeholder="1234567890123"
-              className="w-full px-4 py-3 text-center text-lg border-2 border-white rounded-lg bg-transparent text-white placeholder-gray-400 focus:outline-none focus:border-green-400"
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmitManual()}
+              placeholder="Digite o código de barras"
+              className="flex-1 px-3 py-2 bg-gray-800 text-white rounded"
               autoFocus
             />
             <button
               onClick={handleSubmitManual}
-              className="w-full mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition"
+              className="px-4 py-2 bg-green-600 rounded text-white"
             >
-              Confirmar
+              OK
             </button>
           </div>
         </div>
       )}
 
-      <div className="p-3 bg-black border-t border-gray-700 text-center">
-        <p className="text-gray-400 text-xs">
-          {temCamera ? '📱 Chrome Android ou Firefox · Ou toque aqui para digitar' : '⌨️ Digite manualmente'}
-        </p>
+      <div className="p-2 bg-black text-center text-gray-500 text-xs">
+        📱 Aponte para o código | Se não focar, troque a câmera
       </div>
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\cupom-impressao.tsx ===
