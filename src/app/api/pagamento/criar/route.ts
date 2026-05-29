@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
               description: 'Acesso completo ao sistema de estoque, PDV e relatórios',
               quantity: 1,
               currency_id: 'BRL',
-              unit_price: 79.90,
+              unit_price: 1.00,
             },
           ],
           external_reference: userId,

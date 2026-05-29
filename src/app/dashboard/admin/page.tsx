@@ -58,7 +58,7 @@ type FiltroPlano = 'todos' | 'trial' | 'ativo' | 'expirado'
 // ║  COLOQUE AQUI O SEU EMAIL DE ADMIN              ║
 // ╚══════════════════════════════════════════════════╝
 const ADMIN_EMAILS = [
-  'seu-email-admin@email.com',
+  'locasbr@gmail.com',
 ]
 
 export default function AdminPage() {
