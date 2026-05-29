@@ -10,7 +10,6 @@ import {
   QrCode,
   CheckCircle,
   ArrowRight,
-  Star,
   Zap,
 } from 'lucide-react'
 
@@ -59,26 +58,7 @@ const BENEFICIOS = [
   'Atualizações inclusas',
 ]
 
-const DEPOIMENTOS = [
-  {
-    nome: 'Carlos M.',
-    negocio: 'Mercadinho do Carlos',
-    texto: 'Antes eu controlava tudo no caderno. Agora sei exatamente o que tenho e o que preciso comprar.',
-    estrelas: 5,
-  },
-  {
-    nome: 'Ana Paula',
-    negocio: 'Mini Box AP',
-    texto: 'O PDV com leitor de código de barras pelo celular mudou minha vida. Super prático!',
-    estrelas: 5,
-  },
-  {
-    nome: 'Roberto S.',
-    negocio: 'Armazém do Beto',
-    texto: 'Meus funcionários usam o PDV e eu acompanho tudo pelo dashboard. Recomendo demais.',
-    estrelas: 5,
-  },
-]
+
 
 export default function LandingPage() {
   return (
@@ -253,40 +233,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══════════ DEPOIMENTOS ══════════ */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Quem usa, recomenda
-            </h2>
+      {/* ══════════ QUEM CRIOU ══════════ */}
+<section className="py-20 px-4 bg-gray-50">
+  <div className="max-w-4xl mx-auto">
+    <div className="flex flex-col md:flex-row items-center gap-10">
+
+      {/* Foto */}
+      <div className="shrink-0">
+        <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
+          {/* Coloque sua foto em /public/lucas.jpg */}
+          <img
+            src="/lucas.jpg"
+            alt="Lucas Machado - Criador do EstoqueSystem"
+            className="w-full h-full object-cover"
+          />
+        </div>
+      </div>
+
+      {/* Texto */}
+      <div className="space-y-5 text-center md:text-left">
+        <div>
+          <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
+            Quem está por trás
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
+            Prazer, Lucas Machado 👋
+          </h2>
+        </div>
+
+        <div className="text-gray-600 text-lg leading-relaxed space-y-4">
+          <p>
+            Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
+            criar projetos que resolvam problemas reais e que possam gerar
+            valor de verdade pra quem usa.
+          </p>
+          <p>
+            O EstoqueSystem nasceu de uma percepção simples: pequenos
+            comerciantes <strong>não precisam de sistemas caros e
+            complicados</strong> — precisam de algo que funcione no celular,
+            que seja fácil de usar e que caiba no bolso.
+          </p>
+          <p>
+            Eu construí cada tela, cada botão e cada funcionalidade pensando
+            em quem está atrás do balcão, vendendo e tentando manter o negócio
+            de pé. Se você é essa pessoa,{' '}
+            <strong className="text-gray-900">
+              o EstoqueSystem foi feito pra você.
+            </strong>
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎯</span>
+            <div className="text-left">
+              <p className="font-semibold text-sm text-gray-900">Missão</p>
+              <p className="text-gray-500 text-xs">
+                Tornar o controle de estoque acessível pra todo pequeno comércio
+              </p>
+            </div>
           </div>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {DEPOIMENTOS.map(({ nome, negocio, texto, estrelas }) => (
-              <div
-                key={nome}
-                className="bg-white rounded-2xl p-6 border border-gray-100"
-              >
-                <div className="flex gap-1 mb-3">
-                  {Array.from({ length: estrelas }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className="w-4 h-4 fill-yellow-400 text-yellow-400"
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-700 text-sm leading-relaxed mb-4">
-                  &ldquo;{texto}&rdquo;
-                </p>
-                <div>
-                  <p className="font-semibold text-sm">{nome}</p>
-                  <p className="text-gray-500 text-xs">{negocio}</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">💬</span>
+            <div className="text-left">
+              <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
+              <p className="text-gray-500 text-xs">
+                Fale comigo pelo WhatsApp — sem robô, sem fila
+              </p>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+  </div>
+</section>
 
       {/* ══════════ PREÇO ══════════ */}
       <section className="py-20 px-4" id="preco">
