@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
-import { Mail, Lock, User, CheckCircle } from 'lucide-react'
-
+import { Mail, Lock, User, Store, CheckCircle } from 'lucide-react'
 export default function Signup() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -16,6 +15,7 @@ export default function Signup() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [nomeNegocio, setNomeNegocio] = useState('')
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,14 +37,15 @@ export default function Signup() {
 
     try {
   const { data, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        nome_completo: nomeCompleto,
-      },
+  email,
+  password,
+  options: {
+    data: {
+      nome_completo: nomeCompleto,
+      nome_negocio: nomeNegocio,
     },
-  })
+  },
+})
 
   if (signUpError) {
     if (signUpError.message.includes('already registered')) {
@@ -189,97 +190,114 @@ export default function Signup() {
           {success && <Alert message={success} type="success" />}
 
           {/* Formulário */}
-          <form onSubmit={handleSignup} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Nome completo
-              </label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={nomeCompleto}
-                  onChange={(e) => setNomeCompleto(e.target.value)}
-                  required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                  placeholder="Seu nome"
-                />
-              </div>
-            </div>
+<form onSubmit={handleSignup} className="space-y-5">
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      Nome completo
+    </label>
+    <div className="relative">
+      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <input
+        type="text"
+        value={nomeCompleto}
+        onChange={(e) => setNomeCompleto(e.target.value)}
+        required
+        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+        placeholder="Seu nome"
+      />
+    </div>
+  </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                  placeholder="seu@email.com"
-                />
-              </div>
-            </div>
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      Nome do negócio
+    </label>
+    <div className="relative">
+      <Store className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <input
+        type="text"
+        value={nomeNegocio}
+        onChange={(e) => setNomeNegocio(e.target.value)}
+        required
+        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+        placeholder="Ex: Mercadinho do Zé"
+      />
+    </div>
+  </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Senha
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                  placeholder="Mínimo 6 caracteres"
-                />
-              </div>
-            </div>
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      Email
+    </label>
+    <div className="relative">
+      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+        placeholder="seu@email.com"
+      />
+    </div>
+  </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Confirmar senha
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className={`w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition ${
-                    confirmPassword && password !== confirmPassword
-                      ? 'border-red-400'
-                      : 'border-gray-200 dark:border-gray-800'
-                  }`}
-                  placeholder="Repita a senha"
-                />
-              </div>
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-red-500 text-xs mt-1">As senhas não coincidem</p>
-              )}
-            </div>
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      Senha
+    </label>
+    <div className="relative">
+      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+        placeholder="Mínimo 6 caracteres"
+      />
+    </div>
+  </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Criando conta...
-                </>
-              ) : (
-                'Criar minha conta grátis'
-              )}
-            </button>
-          </form>
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      Confirmar senha
+    </label>
+    <div className="relative">
+      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <input
+        type="password"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        required
+        className={`w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition ${
+          confirmPassword && password !== confirmPassword
+            ? 'border-red-400'
+            : 'border-gray-200 dark:border-gray-800'
+        }`}
+        placeholder="Repita a senha"
+      />
+    </div>
+    {confirmPassword && password !== confirmPassword && (
+      <p className="text-red-500 text-xs mt-1">As senhas não coincidem</p>
+    )}
+  </div>
+
+  <button
+    type="submit"
+    disabled={loading}
+    className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
+  >
+    {loading ? (
+      <>
+        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        Criando conta...
+      </>
+    ) : (
+      'Criar minha conta grátis'
+    )}
+  </button>
+</form>
 
           {/* Divisor */}
           <div className="relative">
