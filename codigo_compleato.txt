@@ -711,6 +711,7 @@ const RESTRICTED_ROUTES = [
   '/dashboard/relatorios',
   '/dashboard/alertas',
   '/dashboard/equipe',
+  '/dashboard/clientes',
 ]
 
 export default function DashboardLayout({
@@ -841,13 +842,27 @@ import { supabase } from '@/lib/supabase'
 import { Alerta, Produto, MovimentoEstoque } from '@/lib/types'
 import {
   Package, BarChart3, AlertCircle, TrendingUp,
-  AlertTriangle, Clock, ArrowDownLeft, ArrowUpRight
+  AlertTriangle, Clock, ArrowDownLeft, ArrowUpRight,
+  Calendar, ArrowRight, Users, ShoppingCart, Plus, DollarSign,
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
-
 interface PlanoInfo {
   plano: string
   diasRestantes: number | null
+}
+
+interface ProdutoVencendo {
+  id: string
+  nome: string
+  data_validade: string
+  quantidade_atual: number
+}
+
+interface ClienteDevedor {
+  id: string
+  nome: string
+  telefone: string
+  saldo: number
 }
 
 function DashboardContent() {
@@ -863,6 +878,8 @@ function DashboardContent() {
   const [produtosCriticos, setProdutosCriticos] = useState<Produto[]>([])
   const [movimentosHoje, setMovimentosHoje] = useState<MovimentoEstoque[]>([])
   const [alertasRecentes, setAlertasRecentes] = useState<Alerta[]>([])
+  const [produtosVencendo, setProdutosVencendo] = useState<ProdutoVencendo[]>([])
+  const [topDevedores, setTopDevedores] = useState<ClienteDevedor[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarBannerPagamento, setMostrarBannerPagamento] = useState(pagamentoSucesso)
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
@@ -898,6 +915,7 @@ function DashboardContent() {
           }
         }
 
+        // ── Produtos ──
         const { data: produtos } = await supabase.from('produtos').select('*')
         if (produtos) {
           const valorTotal = produtos.reduce(
@@ -911,6 +929,7 @@ function DashboardContent() {
           setProdutosCriticos(criticos)
         }
 
+        // ── Movimentos de hoje ──
         const hoje = new Date()
         hoje.setHours(0, 0, 0, 0)
         const { data: movimentos } = await supabase
@@ -924,6 +943,7 @@ function DashboardContent() {
           setMovimentosHoje(movimentos)
         }
 
+        // ── Alertas ──
         const { data: alertas } = await supabase
           .from('alertas')
           .select('*, produto:produto_id(nome)')
@@ -934,6 +954,55 @@ function DashboardContent() {
           setStats((prev) => ({ ...prev, alertas: alertas.length }))
           setAlertasRecentes(alertas)
         }
+
+        // ── Produtos vencendo (próximos 7 dias) ──
+        try {
+          const agora = new Date()
+          const em7dias = new Date()
+          em7dias.setDate(agora.getDate() + 7)
+
+          const { data: vencendo } = await supabase
+            .from('produtos')
+            .select('id, nome, data_validade, quantidade_atual')
+            .not('data_validade', 'is', null)
+            .lte('data_validade', em7dias.toISOString().split('T')[0])
+            .gt('quantidade_atual', 0)
+            .order('data_validade', { ascending: true })
+            .limit(5)
+
+          if (vencendo) setProdutosVencendo(vencendo)
+        } catch {
+          // Tabela pode não ter a coluna ainda — ignora silenciosamente
+        }
+
+        // ── Top devedores (fiado) ──
+        try {
+          const { data: clientesData } = await supabase
+            .from('clientes')
+            .select('id, nome, telefone')
+
+          if (clientesData && clientesData.length > 0) {
+            const clientesComSaldo = await Promise.all(
+              clientesData.map(async (c: any) => {
+                const { data: fiadoData } = await supabase
+                  .from('fiado')
+                  .select('tipo, valor')
+                  .eq('cliente_id', c.id)
+                const saldo = (fiadoData || []).reduce((acc: number, f: any) =>
+                  f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor), 0)
+                return { ...c, saldo }
+              })
+            )
+            const devedores = clientesComSaldo
+              .filter((c: any) => c.saldo > 0)
+              .sort((a: any, b: any) => b.saldo - a.saldo)
+              .slice(0, 5)
+            setTopDevedores(devedores)
+          }
+        } catch {
+          // Tabelas podem não existir ainda — ignora silenciosamente
+        }
+
       } catch (error) {
         console.error('Error:', error)
       } finally {
@@ -958,10 +1027,14 @@ function DashboardContent() {
     )
   }
 
+  // ── Saudação com base no horário ──
+  const hora = new Date().getHours()
+  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
+
   return (
     <div className="space-y-6 p-4 md:p-0">
 
-      {/* Banner pagamento aprovado */}
+      {/* ══════════ BANNER PAGAMENTO ══════════ */}
       {mostrarBannerPagamento && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center justify-between">
           <p className="text-green-700 dark:text-green-400 font-semibold">
@@ -976,7 +1049,7 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Info do plano */}
+      {/* ══════════ INFO DO PLANO ══════════ */}
       {planoInfo && (
         <div className={`rounded-xl p-4 flex items-center justify-between ${
           planoInfo.plano === 'ativo'
@@ -1017,7 +1090,7 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Onboarding */}
+      {/* ══════════ ONBOARDING ══════════ */}
       {mostrarOnboarding && userId && (
         <Onboarding
           userId={userId}
@@ -1025,33 +1098,180 @@ function DashboardContent() {
         />
       )}
 
+      {/* ══════════ SAUDAÇÃO ══════════ */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">Dashboard</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Bem-vindo ao seu sistema de estoque</p>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">
+          {saudacao} 👋
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+          Aqui está o resumo do seu negócio hoje
+        </p>
       </div>
 
-      {/* Métricas */}
+      {/* ══════════ MÉTRICAS COM GRADIENTE ══════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
-          { icon: Package, label: 'Total de Produtos', value: stats.totalProdutos, color: 'bg-blue-500' },
-          { icon: BarChart3, label: 'Movimentos Hoje', value: stats.totalMovimentos, color: 'bg-green-500' },
-          { icon: AlertCircle, label: 'Alertas Críticos', value: stats.alertas, color: stats.alertas > 0 ? 'bg-red-500' : 'bg-gray-400' },
-          { icon: TrendingUp, label: 'Valor em Estoque', value: formatarMoeda(stats.valorEstoque), color: 'bg-purple-500' },
-        ].map(({ icon: Icon, label, value, color }) => (
-          <div key={label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-center gap-3">
-            <div className={`${color} p-2.5 rounded-lg flex-shrink-0`}>
-              <Icon size={20} className="text-white" />
+          {
+            icon: Package,
+            label: 'Produtos',
+            value: stats.totalProdutos,
+            gradient: 'from-blue-500 to-blue-600',
+            bgLight: 'bg-blue-50 dark:bg-blue-900/20',
+          },
+          {
+            icon: BarChart3,
+            label: 'Movimentos Hoje',
+            value: stats.totalMovimentos,
+            gradient: 'from-green-500 to-emerald-600',
+            bgLight: 'bg-green-50 dark:bg-green-900/20',
+          },
+          {
+            icon: AlertCircle,
+            label: 'Alertas',
+            value: stats.alertas,
+            gradient: stats.alertas > 0 ? 'from-red-500 to-red-600' : 'from-gray-400 to-gray-500',
+            bgLight: stats.alertas > 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800',
+          },
+          {
+            icon: TrendingUp,
+            label: 'Valor em Estoque',
+            value: formatarMoeda(stats.valorEstoque),
+            gradient: 'from-purple-500 to-purple-600',
+            bgLight: 'bg-purple-50 dark:bg-purple-900/20',
+          },
+        ].map(({ icon: Icon, label, value, gradient, bgLight }) => (
+          <div
+            key={label}
+            className={`${bgLight} rounded-xl p-4 md:p-5 border border-transparent`}
+          >
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3`}>
+              <Icon className="w-5 h-5 text-white" />
             </div>
-            <div className="min-w-0">
-              <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{label}</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-gray-50 truncate">{value}</p>
-            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-50 mt-0.5 truncate">
+              {value}
+            </p>
           </div>
         ))}
       </div>
 
-      {/* Produtos críticos + Movimentos */}
+      {/* ══════════ AÇÕES RÁPIDAS ══════════ */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Novo Produto', href: '/dashboard/produtos/novo', icon: Plus, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+          { label: 'Abrir PDV', href: '/dashboard/pdv', icon: ShoppingCart, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+          { label: 'Novo Movimento', href: '/dashboard/estoque/movimento', icon: BarChart3, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+          { label: 'Clientes', href: '/dashboard/clientes', icon: Users, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+        ].map(({ label, href, icon: Icon, color, bg }) => (
+          <Link
+            key={label}
+            href={href}
+            className={`${bg} rounded-xl p-4 flex flex-col items-center gap-2 hover:shadow-md transition hover:-translate-y-0.5 text-center border border-transparent`}
+          >
+            <Icon className={`w-6 h-6 ${color}`} />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+          </Link>
+        ))}
+      </div>
+
+      {/* ══════════ GRID PRINCIPAL ══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* ── Produtos vencendo ── */}
+        {produtosVencendo.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/40">
+              <div className="flex items-center gap-2">
+                <Calendar size={18} className="text-amber-500 flex-shrink-0" />
+                <h2 className="font-bold text-gray-900 dark:text-gray-50">Produtos Vencendo</h2>
+              </div>
+              <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full font-medium">
+                {produtosVencendo.length} produto(s)
+              </span>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {produtosVencendo.map((p) => {
+                const diasRestantes = Math.ceil(
+                  (new Date(p.data_validade).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                )
+                const vencido = diasRestantes < 0
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                        {p.nome}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {p.quantidade_atual} un. em estoque
+                      </p>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ml-3 flex-shrink-0 ${
+                      vencido
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        : diasRestantes <= 3
+                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                    }`}>
+                      {vencido
+                        ? `Vencido há ${Math.abs(diasRestantes)}d`
+                        : `${diasRestantes}d restantes`
+                      }
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Top devedores (fiado) ── */}
+        {topDevedores.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
+              <div className="flex items-center gap-2">
+                <DollarSign size={18} className="text-red-500 flex-shrink-0" />
+                <h2 className="font-bold text-gray-900 dark:text-gray-50">Clientes com Fiado</h2>
+              </div>
+              <Link
+                href="/dashboard/clientes"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                Ver todos <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {topDevedores.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/dashboard/clientes/${c.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                        {c.nome.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{c.nome}</p>
+                      {c.telefone && (
+                        <p className="text-xs text-gray-400 truncate">{c.telefone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="font-bold text-red-600 dark:text-red-400 text-sm ml-3 flex-shrink-0">
+                    {formatarMoeda(c.saldo)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Produtos críticos ── */}
         {produtosCriticos.length > 0 && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
@@ -1079,6 +1299,7 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* ── Movimentos de hoje ── */}
         {movimentosHoje.length > 0 && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/40">
@@ -1101,7 +1322,7 @@ function DashboardContent() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{movimento.produto?.nome}</p>
-                      <p className="text-xs text-gray-400 truncate">{movimento.motivo || '—'}</p>
+                      <p className="text-xs text-gray-400 truncate">{movimento.motivo || '\u2014'}</p>
                     </div>
                   </div>
                   <p className={`font-bold text-sm ml-3 flex-shrink-0 ${
@@ -1118,7 +1339,7 @@ function DashboardContent() {
         )}
       </div>
 
-      {/* Alertas */}
+      {/* ══════════ ALERTAS PENDENTES ══════════ */}
       {alertasRecentes.length > 0 && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-100 dark:border-yellow-900/40">
@@ -1137,7 +1358,7 @@ function DashboardContent() {
                 }`} />
                 <span className="text-sm text-gray-700 dark:text-gray-300 pl-2">
                   <span className="font-medium">
-                    {alerta.tipo_alerta === 'estoque_baixo' ? 'Estoque Baixo' : 'Estoque Crítico'}:
+                    {alerta.tipo_alerta === 'estoque_baixo' ? 'Estoque Baixo' : 'Estoque Cr\u00edtico'}:
                   </span>{' '}
                   <span className="text-red-600 dark:text-red-400">{alerta.produto?.nome}</span>
                 </span>
@@ -1147,12 +1368,12 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Empty state */}
-      {produtosCriticos.length === 0 && movimentosHoje.length === 0 && alertasRecentes.length === 0 && (
+      {/* ══════════ EMPTY STATE ══════════ */}
+      {produtosCriticos.length === 0 && movimentosHoje.length === 0 && alertasRecentes.length === 0 && produtosVencendo.length === 0 && topDevedores.length === 0 && (
         <div className="text-center py-16 text-gray-400 dark:text-gray-600">
           <Package size={48} className="mx-auto mb-3 opacity-30" />
           <p className="font-medium">Nenhum dado ainda</p>
-          <p className="text-sm mt-1">Adicione produtos para começar</p>
+          <p className="text-sm mt-1">Adicione produtos para come\u00e7ar</p>
           <Link href="/dashboard/produtos/novo" className="inline-block mt-4 btn-primary text-sm px-4 py-2">
             + Adicionar produto
           </Link>
@@ -1174,6 +1395,7 @@ export default function Dashboard() {
     </Suspense>
   )
 }
+
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\admin\page.tsx ===
@@ -1949,6 +2171,243 @@ const vendasHoje = movimentos.filter(
 }
 
 
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\ajuda\page.tsx ===
+'use client'
+
+import { useState } from 'react'
+import {
+  HelpCircle, Search, Book, MessageCircle, Keyboard,
+  Package, ShoppingCart, BarChart3, AlertCircle, Users,
+  ChevronDown, ChevronUp, ExternalLink, CheckCircle, Phone
+} from 'lucide-react'
+
+const FAQ_ITEMS = [
+  {
+    categoria: 'Primeiros Passos',
+    perguntas: [
+      { p: 'Como cadastrar meu primeiro produto?', r: 'Va em Produtos, clique em Novo Produto. Preencha nome, SKU (ou use a camera para ler o codigo de barras), preco de venda e quantidade inicial. Clique em Salvar Produto e pronto!' },
+      { p: 'Como funciona o periodo de teste?', r: 'Voce tem 15 dias gratis com acesso completo a todas as funcionalidades. Nao precisa de cartao de credito. Apos o periodo, basta assinar o plano de R$ 79,90/mes para continuar usando.' },
+      { p: 'Posso usar no celular?', r: 'Sim! O EstoqueSystem e 100% responsivo. O PDV, leitor de codigo de barras e todas as funcionalidades funcionam perfeitamente no celular e tablet.' },
+    ]
+  },
+  {
+    categoria: 'PDV e Vendas',
+    perguntas: [
+      { p: 'Como registrar uma venda?', r: 'Acesse o PDV, selecione os produtos clicando neles (ou escaneie o codigo de barras), escolha a forma de pagamento e clique em Finalizar Venda. O estoque e atualizado automaticamente.' },
+      { p: 'Quais formas de pagamento sao aceitas?', r: 'No PDV voce pode registrar vendas em: Dinheiro (com calculo de troco), PIX, Cartao de Debito e Cartao de Credito.' },
+      { p: 'Como enviar o cupom pelo WhatsApp?', r: 'Apos finalizar a venda, o cupom aparece automaticamente. Clique no botao WhatsApp para enviar o comprovante diretamente ao cliente.' },
+    ]
+  },
+  {
+    categoria: 'Estoque e Produtos',
+    perguntas: [
+      { p: 'O que significam os alertas de estoque?', r: 'Estoque Baixo: a quantidade atual esta abaixo do minimo que voce definiu. Estoque Critico: o produto zerou. Configure a quantidade minima em cada produto para receber alertas automaticos.' },
+      { p: 'Como fazer entrada de mercadoria?', r: 'Va em Estoque, clique em Novo Movimento. Selecione o produto, escolha Entrada, informe a quantidade recebida e um motivo. O estoque sera atualizado.' },
+      { p: 'Como funciona o controle de validade?', r: 'No cadastro do produto, preencha o campo Data de Validade. O sistema exibira avisos na Dashboard quando produtos estiverem proximos de vencer (7 dias ou menos).' },
+    ]
+  },
+  {
+    categoria: 'Clientes e Fiado',
+    perguntas: [
+      { p: 'Como cadastrar um cliente?', r: 'Va em Clientes, clique em Novo Cliente. Preencha nome, telefone e outros dados opcionais. Depois voce pode registrar vendas fiado para esse cliente.' },
+      { p: 'Como controlar o fiado?', r: 'Na pagina do cliente, clique em Novo Debito para adicionar uma venda fiado, ou Registrar Pagamento quando o cliente pagar. O saldo e calculado automaticamente.' },
+    ]
+  },
+  {
+    categoria: 'Equipe e Seguranca',
+    perguntas: [
+      { p: 'Posso adicionar funcionarios?', r: 'Sim! Va em Equipe, informe o email do funcionario e o sistema gera uma senha temporaria. Funcionarios tem acesso apenas ao PDV e Estoque, enquanto voce controla tudo.' },
+      { p: 'Meus dados ficam seguros?', r: 'Sim. Usamos Supabase com criptografia em transito (TLS/SSL) e em repouso. Senhas sao armazenadas em hash seguro e jamais em texto puro. Seus dados pertencem a voce.' },
+    ]
+  },
+]
+
+const TUTORIAIS = [
+  { icon: Package, titulo: 'Cadastrar Produto', desc: 'Adicione seus produtos com nome, preco, foto e codigo de barras.', link: '/dashboard/produtos/novo' },
+  { icon: ShoppingCart, titulo: 'Usar o PDV', desc: 'Faca vendas, escaneie produtos e emita cupom pelo WhatsApp.', link: '/dashboard/pdv' },
+  { icon: BarChart3, titulo: 'Ver Relatorios', desc: 'Acompanhe vendas, lucro e movimentacao com graficos.', link: '/dashboard/relatorios' },
+  { icon: AlertCircle, titulo: 'Gerenciar Alertas', desc: 'Monitore produtos com estoque baixo ou critico.', link: '/dashboard/alertas' },
+  { icon: Users, titulo: 'Convidar Equipe', desc: 'Adicione funcionarios com acesso limitado ao PDV.', link: '/dashboard/equipe' },
+  { icon: HelpCircle, titulo: 'Cadastrar Cliente', desc: 'Registre clientes e controle vendas fiado.', link: '/dashboard/clientes' },
+]
+
+const ATALHOS = [
+  { tecla: 'Ctrl + K', acao: 'Busca rapida de produtos' },
+  { tecla: 'Esc', acao: 'Fechar modais e popups' },
+]
+
+export default function AjudaPage() {
+  const [busca, setBusca] = useState('')
+  const [aberto, setAberto] = useState<string | null>(null)
+
+  const toggleFaq = (key: string) => {
+    setAberto(aberto === key ? null : key)
+  }
+
+  const faqFiltrado = FAQ_ITEMS.map(cat => ({
+    ...cat,
+    perguntas: cat.perguntas.filter(
+      item =>
+        item.p.toLowerCase().includes(busca.toLowerCase()) ||
+        item.r.toLowerCase().includes(busca.toLowerCase())
+    ),
+  })).filter(cat => cat.perguntas.length > 0)
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-3">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-medium">
+          <CheckCircle className="w-4 h-4" />
+          Sistema online — tudo funcionando normalmente
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+          Central de Ajuda
+        </h2>
+        <p className="text-gray-500 dark:text-gray-400 max-w-lg mx-auto">
+          Encontre respostas, aprenda a usar o sistema e fale com o suporte.
+        </p>
+      </div>
+
+      {/* Busca */}
+      <div className="max-w-2xl mx-auto relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Buscar nos artigos de ajuda..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          className="input-field pl-12 w-full text-lg py-4 rounded-2xl"
+        />
+      </div>
+
+      {/* Cards de Acesso Rapido */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a
+          href="https://wa.me/5522999467499?text=Preciso de ajuda com o EstoqueSystem"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="card p-5 flex items-center gap-4 hover:border-green-400 dark:hover:border-green-500 transition group"
+        >
+          <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center shrink-0">
+            <MessageCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-900 dark:text-white">Suporte via WhatsApp</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Fale direto com o Lucas</p>
+          </div>
+          <ExternalLink className="w-4 h-4 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition" />
+        </a>
+        <div className="card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center shrink-0">
+            <Book className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-900 dark:text-white">FAQ Completo</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{FAQ_ITEMS.reduce((acc, c) => acc + c.perguntas.length, 0)} perguntas respondidas</p>
+          </div>
+        </div>
+        <div className="card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center shrink-0">
+            <Keyboard className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-900 dark:text-white">Atalhos do Teclado</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Agilize seu trabalho</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tutoriais */}
+      <div>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Tutoriais Rapidos</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {TUTORIAIS.map(({ icon: Icon, titulo, desc, link }) => (
+            <a key={titulo} href={link} className="card p-5 hover:shadow-lg transition hover:-translate-y-0.5 group">
+              <Icon className="w-8 h-8 text-blue-500 dark:text-blue-400 mb-3" />
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{titulo}</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{desc}</p>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* FAQ */}
+      <div>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Perguntas Frequentes</h3>
+        {faqFiltrado.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            {`Nenhum resultado encontrado para \u201c${busca}\u201d`}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {faqFiltrado.map((cat) => (
+              <div key={cat.categoria}>
+                <h4 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{cat.categoria}</h4>
+                <div className="space-y-2">
+                  {cat.perguntas.map(({ p, r }) => {
+                    const key = `${cat.categoria}-${p}`
+                    const isOpen = aberto === key
+                    return (
+                      <div key={key} className="card overflow-hidden">
+                        <button
+                          onClick={() => toggleFaq(key)}
+                          className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition"
+                        >
+                          <span className="font-medium text-gray-900 dark:text-white pr-4">{p}</span>
+                          {isOpen
+                            ? <ChevronUp className="w-5 h-5 text-gray-400 shrink-0" />
+                            : <ChevronDown className="w-5 h-5 text-gray-400 shrink-0" />
+                          }
+                        </button>
+                        {isOpen && (
+                          <div className="px-4 pb-4 text-gray-600 dark:text-gray-300 text-sm leading-relaxed border-t border-gray-100 dark:border-gray-700 pt-3">{r}</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Atalhos */}
+      <div>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Atalhos do Teclado</h3>
+        <div className="card p-5">
+          <div className="space-y-3">
+            {ATALHOS.map(({ tecla, acao }) => (
+              <div key={tecla} className="flex items-center justify-between">
+                <span className="text-gray-600 dark:text-gray-300">{acao}</span>
+                <kbd className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-mono font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">{tecla}</kbd>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* CTA Suporte */}
+      <div className="card p-8 text-center bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
+        <Phone className="w-10 h-10 text-green-600 dark:text-green-400 mx-auto mb-3" />
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Nao encontrou o que procurava?</h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">Fale diretamente comigo pelo WhatsApp. Sem robo, sem fila.</p>
+        <a
+          href="https://wa.me/5522999467499?text=Preciso de ajuda com o EstoqueSystem"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition"
+        >
+          <MessageCircle className="w-5 h-5" />
+          Falar no WhatsApp
+        </a>
+      </div>
+    </div>
+  )
+}
+
+
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\alertas\page.tsx ===
 'use client'
 
@@ -2152,6 +2611,770 @@ export default function AlertasPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\clientes\page.tsx ===
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { useNotification } from '@/contexts/NotificationContext'
+import { formatarMoeda } from '@/lib/utils'
+import {
+  Users, Plus, Search, Phone, DollarSign,
+  AlertTriangle, Trash2, Eye
+} from 'lucide-react'
+
+interface Cliente {
+  id: string
+  nome: string
+  telefone: string
+  cpf: string
+  email: string
+  endereco: string
+  notas: string
+  criado_em: string
+  saldo_fiado?: number
+}
+
+export default function ClientesPage() {
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filtro, setFiltro] = useState('')
+  const { addNotification } = useNotification()
+
+  const fetchClientes = useCallback(async () => {
+    try {
+      const { data: clientesData, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .order('nome')
+
+      if (error) throw error
+
+      // Buscar saldos de fiado para cada cliente
+      const clientesComSaldo = await Promise.all(
+        (clientesData || []).map(async (cliente: Cliente) => {
+          const { data: fiadoData } = await supabase
+            .from('fiado')
+            .select('tipo, valor')
+            .eq('cliente_id', cliente.id)
+
+          const saldo = (fiadoData || []).reduce((acc: number, f: any) => {
+            return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
+          }, 0)
+
+          return { ...cliente, saldo_fiado: saldo }
+        })
+      )
+
+      setClientes(clientesComSaldo)
+    } catch (error) {
+      console.error('Erro ao buscar clientes:', error)
+      addNotification('Erro ao carregar clientes', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [addNotification])
+
+  useEffect(() => {
+    fetchClientes()
+  }, [fetchClientes])
+
+  const handleDeletar = async (id: string, nome: string) => {
+    if (!confirm(`Tem certeza que deseja remover "${nome}"? Os registros de fiado também serão removidos.`)) return
+    try {
+      const { error } = await supabase.from('clientes').delete().eq('id', id)
+      if (error) throw error
+      addNotification(`Cliente "${nome}" removido`, 'success')
+      fetchClientes()
+    } catch (error) {
+      addNotification('Erro ao remover cliente', 'error')
+    }
+  }
+
+  const clientesFiltrados = clientes.filter(c =>
+    c.nome.toLowerCase().includes(filtro.toLowerCase()) ||
+    c.telefone.includes(filtro) ||
+    c.cpf.includes(filtro)
+  )
+
+  const totalFiado = clientes.reduce((acc, c) => acc + Math.max(0, c.saldo_fiado || 0), 0)
+  const clientesComDebito = clientes.filter(c => (c.saldo_fiado || 0) > 0).length
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clientes</h2>
+          <p className="text-gray-500 dark:text-gray-400">Gerencie seus clientes e controle o fiado</p>
+        </div>
+        <Link
+          href="/dashboard/clientes/novo"
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Novo Cliente
+        </Link>
+      </div>
+
+      {/* Métricas */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total de Clientes</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{clientes.length}</p>
+          </div>
+        </div>
+
+        <div className="card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
+            <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Fiado Pendente</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatarMoeda(totalFiado)}</p>
+          </div>
+        </div>
+
+        <div className="card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Clientes com Débito</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{clientesComDebito}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Busca */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Buscar por nome, telefone ou CPF..."
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          className="input-field pl-10 w-full"
+        />
+      </div>
+
+      {/* Lista de Clientes */}
+      {clientesFiltrados.length === 0 ? (
+        <div className="text-center py-16">
+          <Users className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400 mb-2">
+            {filtro ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+          </h3>
+          <p className="text-gray-400 dark:text-gray-500 mb-4">
+            {filtro ? 'Tente buscar com outros termos' : 'Cadastre seu primeiro cliente para controlar o fiado'}
+          </p>
+          {!filtro && (
+            <Link href="/dashboard/clientes/novo" className="btn-primary inline-flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Cadastrar primeiro cliente
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {clientesFiltrados.map((cliente) => (
+            <div key={cliente.id} className="card p-5 hover:shadow-lg transition">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                    <span className="font-bold text-blue-600 dark:text-blue-400">
+                      {cliente.nome.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{cliente.nome}</h4>
+                    {cliente.telefone && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {cliente.telefone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Saldo Fiado */}
+              <div className={`p-3 rounded-xl mb-4 ${
+                (cliente.saldo_fiado || 0) > 0
+                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                  : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+              }`}>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Saldo Fiado</p>
+                <p className={`text-lg font-bold ${
+                  (cliente.saldo_fiado || 0) > 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-green-600 dark:text-green-400'
+                }`}>
+                  {(cliente.saldo_fiado || 0) > 0
+                    ? `${formatarMoeda(cliente.saldo_fiado || 0)} devendo`
+                    : 'Em dia ✓'
+                  }
+                </p>
+              </div>
+
+              {/* Ações */}
+              <div className="flex gap-2">
+                <Link
+                  href={`/dashboard/clientes/${cliente.id}`}
+                  className="flex-1 btn-primary text-xs flex items-center justify-center gap-1 py-2"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Ver detalhes
+                </Link>
+                <button
+                  onClick={() => handleDeletar(cliente.id, cliente.nome)}
+                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                  title="Remover"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\clientes\novo\page.tsx ===
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { useNotification } from '@/contexts/NotificationContext'
+import Alert from '@/components/alerts'
+import { ArrowLeft, User, Phone, Mail, MapPin } from 'lucide-react'
+
+export default function NovoClientePage() {
+  const router = useRouter()
+  const { addNotification } = useNotification()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [formData, setFormData] = useState({
+    nome: '',
+    telefone: '',
+    cpf: '',
+    email: '',
+    endereco: '',
+    notas: '',
+  })
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!formData.nome.trim()) {
+      setError('Nome é obrigatório')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) {
+        setError('Usuário não autenticado')
+        return
+      }
+
+      const { error: insertError } = await supabase.from('clientes').insert({
+        ...formData,
+        usuario_id: userData.user.id,
+      })
+
+      if (insertError) throw insertError
+
+      addNotification(`✅ Cliente "${formData.nome}" cadastrado!`, 'success')
+      router.push('/dashboard/clientes')
+    } catch (err: any) {
+      setError(err.message || 'Erro ao cadastrar cliente')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <Link href="/dashboard/clientes" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Novo Cliente</h2>
+          <p className="text-gray-500 dark:text-gray-400">Cadastre um novo cliente para controlar fiado</p>
+        </div>
+      </div>
+
+      {error && <Alert message={error} type="error" />}
+
+      <form onSubmit={handleSubmit} className="card p-6 space-y-5">
+        {/* Nome */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Nome *</label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              name="nome"
+              value={formData.nome}
+              onChange={handleChange}
+              className="input-field pl-10 w-full"
+              placeholder="Nome completo do cliente"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Telefone */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Telefone</label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              name="telefone"
+              value={formData.telefone}
+              onChange={handleChange}
+              className="input-field pl-10 w-full"
+              placeholder="(21) 99999-9999"
+            />
+          </div>
+        </div>
+
+        {/* CPF */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">CPF (opcional)</label>
+          <input
+            name="cpf"
+            value={formData.cpf}
+            onChange={handleChange}
+            className="input-field w-full"
+            placeholder="000.000.000-00"
+          />
+        </div>
+
+        {/* Email */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Email (opcional)</label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="input-field pl-10 w-full"
+              placeholder="email@exemplo.com"
+            />
+          </div>
+        </div>
+
+        {/* Endereço */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Endereço (opcional)</label>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+            <input
+              name="endereco"
+              value={formData.endereco}
+              onChange={handleChange}
+              className="input-field pl-10 w-full"
+              placeholder="Rua, número, bairro"
+            />
+          </div>
+        </div>
+
+        {/* Notas */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Observações (opcional)</label>
+          <textarea
+            name="notas"
+            value={formData.notas}
+            onChange={handleChange}
+            className="input-field w-full"
+            rows={3}
+            placeholder="Anotações sobre o cliente..."
+          />
+        </div>
+
+        {/* Ações */}
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary flex-1 py-3"
+          >
+            {loading ? 'Salvando...' : 'Salvar Cliente'}
+          </button>
+          <Link href="/dashboard/clientes" className="btn-secondary px-6 py-3">
+            Cancelar
+          </Link>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\clientes\[id]\page.tsx ===
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import { useParams } from 'next/navigation'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { useNotification } from '@/contexts/NotificationContext'
+import { formatarMoeda, formatarData } from '@/lib/utils'
+import {
+  ArrowLeft, User, Phone, Mail, MapPin, Plus, Minus,
+  DollarSign, Clock, TrendingDown, TrendingUp, X
+} from 'lucide-react'
+
+interface Cliente {
+  id: string
+  nome: string
+  telefone: string
+  cpf: string
+  email: string
+  endereco: string
+  notas: string
+  criado_em: string
+}
+
+interface Fiado {
+  id: string
+  tipo: 'debito' | 'pagamento'
+  valor: number
+  descricao: string
+  criado_em: string
+}
+
+export default function ClienteDetalhePage() {
+  const params = useParams()
+  const id = params?.id as string
+  const { addNotification } = useNotification()
+
+  const [cliente, setCliente] = useState<Cliente | null>(null)
+  const [fiados, setFiados] = useState<Fiado[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Modal
+  const [modalAberto, setModalAberto] = useState(false)
+  const [modalTipo, setModalTipo] = useState<'debito' | 'pagamento'>('debito')
+  const [modalValor, setModalValor] = useState('')
+  const [modalDesc, setModalDesc] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [clienteRes, fiadoRes] = await Promise.all([
+        supabase.from('clientes').select('*').eq('id', id).single(),
+        supabase.from('fiado').select('*').eq('cliente_id', id).order('criado_em', { ascending: false }),
+      ])
+
+      if (clienteRes.data) setCliente(clienteRes.data)
+      if (fiadoRes.data) setFiados(fiadoRes.data)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const saldo = fiados.reduce((acc, f) => {
+    return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
+  }, 0)
+
+  const totalDebitos = fiados.filter(f => f.tipo === 'debito').reduce((a, f) => a + Number(f.valor), 0)
+  const totalPagamentos = fiados.filter(f => f.tipo === 'pagamento').reduce((a, f) => a + Number(f.valor), 0)
+
+  const abrirModal = (tipo: 'debito' | 'pagamento') => {
+    setModalTipo(tipo)
+    setModalValor('')
+    setModalDesc('')
+    setModalAberto(true)
+  }
+
+  const handleSalvarFiado = async () => {
+    const valor = parseFloat(modalValor)
+    if (isNaN(valor) || valor <= 0) {
+      addNotification('Informe um valor válido', 'warning')
+      return
+    }
+
+    setSalvando(true)
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) return
+
+      const { error } = await supabase.from('fiado').insert({
+        cliente_id: id,
+        usuario_id: userData.user.id,
+        tipo: modalTipo,
+        valor,
+        descricao: modalDesc,
+      })
+
+      if (error) throw error
+
+      addNotification(
+        modalTipo === 'debito'
+          ? `Débito de ${formatarMoeda(valor)} registrado`
+          : `Pagamento de ${formatarMoeda(valor)} registrado ✓`,
+        'success'
+      )
+      setModalAberto(false)
+      fetchData()
+    } catch {
+      addNotification('Erro ao registrar', 'error')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+  }
+
+  if (!cliente) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500">Cliente não encontrado</p>
+        <Link href="/dashboard/clientes" className="text-blue-600 mt-2 inline-block">← Voltar</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Link href="/dashboard/clientes" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{cliente.nome}</h2>
+          <p className="text-gray-500 dark:text-gray-400">Cliente desde {formatarData(cliente.criado_em)}</p>
+        </div>
+      </div>
+
+      {/* Info + Saldo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Info do cliente */}
+        <div className="card p-5 space-y-3">
+          <h4 className="font-semibold text-gray-900 dark:text-white">Informações</h4>
+          {cliente.telefone && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+              <Phone className="w-4 h-4 text-gray-400" /> {cliente.telefone}
+            </p>
+          )}
+          {cliente.email && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-gray-400" /> {cliente.email}
+            </p>
+          )}
+          {cliente.endereco && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-gray-400" /> {cliente.endereco}
+            </p>
+          )}
+          {cliente.cpf && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+              <User className="w-4 h-4 text-gray-400" /> CPF: {cliente.cpf}
+            </p>
+          )}
+          {cliente.notas && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-2">{`\u201c${cliente.notas}\u201d`}</p>
+          )}
+        </div>
+
+        {/* Saldo */}
+        <div className={`card p-5 flex flex-col justify-center items-center ${
+          saldo > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+        }`}>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Saldo Devedor</p>
+          <p className={`text-3xl font-bold ${saldo > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            {formatarMoeda(Math.abs(saldo))}
+          </p>
+          <p className="text-sm mt-1 text-gray-500">
+            {saldo > 0 ? 'Deve para você' : saldo < 0 ? 'Você deve para ele' : 'Sem débitos ✓'}
+          </p>
+        </div>
+
+        {/* Resumo */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <TrendingDown className="w-4 h-4 text-red-500" />
+            <span className="text-gray-600 dark:text-gray-300">Total Débitos:</span>
+            <span className="font-bold text-red-600 ml-auto">{formatarMoeda(totalDebitos)}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <TrendingUp className="w-4 h-4 text-green-500" />
+            <span className="text-gray-600 dark:text-gray-300">Total Pagamentos:</span>
+            <span className="font-bold text-green-600 ml-auto">{formatarMoeda(totalPagamentos)}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm pt-2 border-t dark:border-gray-700">
+            <Clock className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-600 dark:text-gray-300">Movimentações:</span>
+            <span className="font-bold ml-auto">{fiados.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Botões de Ação */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => abrirModal('debito')}
+          className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition"
+        >
+          <Plus className="w-5 h-5" /> Novo Débito (Fiado)
+        </button>
+        <button
+          onClick={() => abrirModal('pagamento')}
+          className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition"
+        >
+          <DollarSign className="w-5 h-5" /> Registrar Pagamento
+        </button>
+      </div>
+
+      {/* Histórico */}
+      <div>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Histórico de Fiado</h3>
+        {fiados.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            Nenhuma movimentação registrada
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {fiados.map((f) => (
+              <div key={f.id} className="card p-4 flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                  f.tipo === 'debito'
+                    ? 'bg-red-100 dark:bg-red-900/30'
+                    : 'bg-green-100 dark:bg-green-900/30'
+                }`}>
+                  {f.tipo === 'debito'
+                    ? <Minus className="w-5 h-5 text-red-600 dark:text-red-400" />
+                    : <Plus className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {f.tipo === 'debito' ? 'Débito (Fiado)' : 'Pagamento recebido'}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                    {f.descricao || 'Sem descrição'} · {formatarData(f.criado_em)}
+                  </p>
+                </div>
+                <span className={`font-bold text-lg ${
+                  f.tipo === 'debito' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                }`}>
+                  {f.tipo === 'debito' ? '+' : '-'}{formatarMoeda(Number(f.valor))}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {modalAberto && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="card p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                {modalTipo === 'debito' ? '📝 Novo Débito' : '💰 Registrar Pagamento'}
+              </h3>
+              <button onClick={() => setModalAberto(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Valor (R$) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={modalValor}
+                onChange={(e) => setModalValor(e.target.value)}
+                className="input-field w-full text-2xl font-bold text-center py-4"
+                placeholder="0,00"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Descrição (opcional)</label>
+              <input
+                type="text"
+                value={modalDesc}
+                onChange={(e) => setModalDesc(e.target.value)}
+                className="input-field w-full"
+                placeholder={modalTipo === 'debito' ? 'Ex: Compras do dia' : 'Ex: Pagou em dinheiro'}
+              />
+            </div>
+
+            {saldo > 0 && modalTipo === 'pagamento' && (
+              <button
+                onClick={() => setModalValor(saldo.toFixed(2))}
+                className="w-full text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                💡 Pagar tudo ({formatarMoeda(saldo)})
+              </button>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleSalvarFiado}
+                disabled={salvando}
+                className={`flex-1 py-3 font-semibold rounded-xl text-white transition ${
+                  modalTipo === 'debito'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {salvando ? 'Salvando...' : 'Confirmar'}
+              </button>
+              <button onClick={() => setModalAberto(false)} className="btn-secondary px-6 py-3">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -4338,7 +5561,7 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
 
 export default function NovoProdutoPage() {
   const router = useRouter()
@@ -4362,6 +5585,7 @@ export default function NovoProdutoPage() {
     quantidade_minima: 10,
     preco_custo: 0,
     preco_venda: 0,
+    data_validade: '',
     imagem_url: '',
   })
 
@@ -4374,36 +5598,35 @@ export default function NovoProdutoPage() {
   }
 
   const handleCodigoBarrasLido = async (codigoBarras: string) => {
-  setScannerAberto(false)
-  setBarcodeDetectado(codigoBarras)
-  setBarcodeModalAberto(true)
-  setBuscandoBarcode(true)
-  setProdutoBarcode(null)
+    setScannerAberto(false)
+    setBarcodeDetectado(codigoBarras)
+    setBarcodeModalAberto(true)
+    setBuscandoBarcode(true)
+    setProdutoBarcode(null)
 
-  // Preenche SKU imediatamente
-  setFormData((prev) => ({ ...prev, sku: codigoBarras }))
+    // Preenche SKU imediatamente
+    setFormData((prev) => ({ ...prev, sku: codigoBarras }))
 
-  // Busca informações na API
-  const resultado = await buscarProdutoPorBarcode(codigoBarras)
-  setProdutoBarcode(resultado)
-  setBuscandoBarcode(false)
-}
+    // Busca informações na API
+    const resultado = await buscarProdutoPorBarcode(codigoBarras)
+    setProdutoBarcode(resultado)
+    setBuscandoBarcode(false)
+  }
 
   const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
-  setFormData((prev) => ({
-    ...prev,
-    nome: produto.nome || prev.nome,
-    descricao: produto.descricao || prev.descricao,
-    categoria: produto.categoria || prev.categoria,
-  }))
-  setBarcodeModalAberto(false)
-  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
-}
+    setFormData((prev) => ({
+      ...prev,
+      nome: produto.nome || prev.nome,
+      descricao: produto.descricao || prev.descricao,
+      categoria: produto.categoria || prev.categoria,
+    }))
+    setBarcodeModalAberto(false)
+    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
+  }
 
   const handleImageSelected = async (file: File) => {
     try {
       setImagemUpload(true)
-      // Criar um ID temporário para a imagem antes do produto ser criado
       const tempId = `temp-${Date.now()}`
       const result = await uploadProductImage(file, tempId)
       if (!result) {
@@ -4423,28 +5646,45 @@ export default function NovoProdutoPage() {
     }
   }
 
+  // Calcula info de validade para avisos visuais
+  const getValidadeInfo = () => {
+    if (!formData.data_validade) return null
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const validade = new Date(formData.data_validade + 'T00:00:00')
+    const diffMs = validade.getTime() - hoje.getTime()
+    const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return { diasRestantes, vencido: diasRestantes < 0 }
+  }
+
+  const validadeInfo = getValidadeInfo()
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      // Get the current user
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
+
       if (userError || !user) {
         setError('Usuário não autenticado')
         addNotification('Erro: usuário não autenticado', 'error')
         return
       }
 
-      const { error: insertError } = await supabase.from('produtos').insert([
-        {
-          ...formData,
-          ativo: true,
-          usuario_id: user.id,
-        },
-      ]).select()
+      // Prepara dados — converte data_validade vazia em null
+      const dadosParaSalvar = {
+        ...formData,
+        data_validade: formData.data_validade || null,
+        ativo: true,
+        usuario_id: user.id,
+      }
+
+      const { error: insertError } = await supabase
+        .from('produtos')
+        .insert([dadosParaSalvar])
+        .select()
 
       if (insertError) {
         setError(insertError.message)
@@ -4453,7 +5693,7 @@ export default function NovoProdutoPage() {
       }
 
       setSuccess('Produto criado com sucesso!')
-      addNotification('✅ Produto adicionado ao estoque!', 'success', 3000)
+      addNotification('\u2705 Produto adicionado ao estoque!', 'success', 3000)
       setTimeout(() => {
         router.push('/dashboard/produtos')
       }, 1500)
@@ -4637,6 +5877,52 @@ export default function NovoProdutoPage() {
             />
           </div>
 
+          {/* ══════════ DATA DE VALIDADE (NOVO) ══════════ */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+              <Calendar size={16} className="text-gray-400" />
+              Data de Validade
+            </label>
+            <input
+              type="date"
+              name="data_validade"
+              value={formData.data_validade}
+              onChange={handleInputChange}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+              Deixe em branco se o produto não tem validade
+            </p>
+
+            {/* Aviso visual de validade */}
+            {validadeInfo && validadeInfo.vencido && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                  Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                </p>
+              </div>
+            )}
+
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                </p>
+              </div>
+            )}
+
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  Validade: {validadeInfo.diasRestantes} dias restantes
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={loading || imagemUpload} className="btn-primary">
               {loading ? 'Salvando...' : 'Salvar Produto'}
@@ -4648,7 +5934,7 @@ export default function NovoProdutoPage() {
         </form>
       </div>
 
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {/* Scanner de código de barras */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -4656,20 +5942,19 @@ export default function NovoProdutoPage() {
         />
       )}
 
-      {/* ── MODAL BARCODE PRODUTO ── */}
+      {/* Modal barcode produto */}
       {barcodeModalAberto && produtoBarcode !== null && (
-      <BarcodeProductModal
-        codigo={barcodeDetectado}
-        produto={produtoBarcode}
-        loading={buscandoBarcode}
-        onConfirmar={handleConfirmarBarcode}
-        onCancelar={() => setBarcodeModalAberto(false)}
-       />
-)}
+        <BarcodeProductModal
+          codigo={barcodeDetectado}
+          produto={produtoBarcode}
+          loading={buscandoBarcode}
+          onConfirmar={handleConfirmarBarcode}
+          onCancelar={() => setBarcodeModalAberto(false)}
+        />
+      )}
     </div>
   )
 }
-
 
 
 
@@ -4687,7 +5972,7 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
 import { Produto } from '@/lib/types'
 import { useParams } from 'next/navigation'
 
@@ -4757,15 +6042,19 @@ export default function EditarProdutoPage() {
   }
 
   const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
-  setFormData((prev) => prev ? ({
-    ...prev,
-    nome: produto.nome || prev.nome,
-    descricao: produto.descricao || prev.descricao,
-    categoria: produto.categoria || prev.categoria,
-  }) : null)
-  setBarcodeModalAberto(false)
-  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
-}
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            nome: produto.nome || prev.nome,
+            descricao: produto.descricao || prev.descricao,
+            categoria: produto.categoria || prev.categoria,
+          }
+        : null
+    )
+    setBarcodeModalAberto(false)
+    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
+  }
 
   const handleImageSelected = async (file: File) => {
     if (!formData || !id) {
@@ -4801,19 +6090,33 @@ export default function EditarProdutoPage() {
   }
 
   const handleCodigoBarrasLido = async (codigoBarras: string) => {
-  setScannerAberto(false)
-  setBarcodeDetectado(codigoBarras)
-  setBarcodeModalAberto(true)
-  setBuscandoBarcode(true)
-  setProdutoBarcode(null)
+    setScannerAberto(false)
+    setBarcodeDetectado(codigoBarras)
+    setBarcodeModalAberto(true)
+    setBuscandoBarcode(true)
+    setProdutoBarcode(null)
 
-  // Preenche SKU imediatamente
-  setFormData((prev) => prev ? { ...prev, sku: codigoBarras } : null)
-  // Busca informações na API
-  const resultado = await buscarProdutoPorBarcode(codigoBarras)
-  setProdutoBarcode(resultado)
-  setBuscandoBarcode(false)
-}
+    // Preenche SKU imediatamente
+    setFormData((prev) => (prev ? { ...prev, sku: codigoBarras } : null))
+
+    // Busca informações na API
+    const resultado = await buscarProdutoPorBarcode(codigoBarras)
+    setProdutoBarcode(resultado)
+    setBuscandoBarcode(false)
+  }
+
+  // ── Calcula info de validade para avisos visuais ──
+  const getValidadeInfo = () => {
+    if (!formData?.data_validade) return null
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const validade = new Date(formData.data_validade + 'T00:00:00')
+    const diffMs = validade.getTime() - hoje.getTime()
+    const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return { diasRestantes, vencido: diasRestantes < 0 }
+  }
+
+  const validadeInfo = getValidadeInfo()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -4823,9 +6126,15 @@ export default function EditarProdutoPage() {
     setSaving(true)
 
     try {
+      // Prepara dados — converte data_validade vazia em null
+      const dadosParaSalvar = {
+        ...formData,
+        data_validade: formData.data_validade || null,
+      }
+
       const { error: updateError } = await supabase
         .from('produtos')
-        .update(formData)
+        .update(dadosParaSalvar)
         .eq('id', id)
 
       if (updateError) {
@@ -4835,7 +6144,7 @@ export default function EditarProdutoPage() {
       }
 
       setSuccess('Produto atualizado com sucesso!')
-      addNotification('✅ Produto atualizado!', 'success', 3000)
+      addNotification('\u2705 Produto atualizado!', 'success', 3000)
       setTimeout(() => {
         router.push('/dashboard/produtos')
       }, 1500)
@@ -4856,7 +6165,10 @@ export default function EditarProdutoPage() {
     return (
       <div>
         <Alert message={error || 'Produto não encontrado'} type="error" />
-        <Link href="/dashboard/produtos" className="btn-outline mt-4 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800">
+        <Link
+          href="/dashboard/produtos"
+          className="btn-outline mt-4 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+        >
           Voltar
         </Link>
       </div>
@@ -5034,28 +6346,80 @@ export default function EditarProdutoPage() {
             />
           </div>
 
+          {/* ══════════ DATA DE VALIDADE ══════════ */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+              <Calendar size={16} className="text-gray-400" />
+              Data de Validade
+            </label>
+            <input
+              type="date"
+              name="data_validade"
+              value={formData.data_validade || ''}
+              onChange={handleInputChange}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+              Deixe em branco se o produto não tem validade
+            </p>
+
+            {/* Aviso: produto já vencido */}
+            {validadeInfo && validadeInfo.vencido && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                  Atenção: este produto está vencido (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                </p>
+              </div>
+            )}
+
+            {/* Aviso: vence em até 7 dias */}
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                </p>
+              </div>
+            )}
+
+            {/* Info: vence em 8-30 dias */}
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  Validade: {validadeInfo.diasRestantes} dias restantes
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={saving || imagemUpload} className="btn-primary">
               {saving ? 'Salvando...' : 'Atualizar Produto'}
             </button>
-            <Link href="/dashboard/produtos" className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800">
+            <Link
+              href="/dashboard/produtos"
+              className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+            >
               Cancelar
             </Link>
           </div>
         </form>
       </div>
-      {/* ── MODAL BARCODE PRODUTO ── */}
-{barcodeModalAberto && produtoBarcode !== null && (
-  <BarcodeProductModal
-    codigo={barcodeDetectado}
-    produto={produtoBarcode}
-    loading={buscandoBarcode}
-    onConfirmar={handleConfirmarBarcode}
-    onCancelar={() => setBarcodeModalAberto(false)}
-  />
-  
-)}
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+
+      {/* Modal barcode produto */}
+      {barcodeModalAberto && produtoBarcode !== null && (
+        <BarcodeProductModal
+          codigo={barcodeDetectado}
+          produto={produtoBarcode}
+          loading={buscandoBarcode}
+          onConfirmar={handleConfirmarBarcode}
+          onCancelar={() => setBarcodeModalAberto(false)}
+        />
+      )}
+
+      {/* Scanner de código de barras */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -7059,6 +8423,7 @@ export default function Loading() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\navbar.tsx ===
 'use client'
 
+import { HelpCircle } from 'lucide-react'
 import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -7067,6 +8432,7 @@ import { LogOut, Menu, Moon, Sun, Home, Package, BarChart3, ShoppingCart, AlertC
 import { useState } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useMembro } from '@/hooks/useMembro'
+
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono' },
@@ -7077,6 +8443,8 @@ const navItems = [
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },
+  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 
@@ -7623,29 +8991,30 @@ export default function SearchCommand() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\sidebar.tsx ===
 'use client'
 
-import { Shield } from 'lucide-react'
+import { Shield, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
 import { useMembro } from '@/hooks/useMembro'
 
-
 const allNavItems = [
-  { href: '/dashboard',            label: 'Dashboard',  icon: Home, requiredLevel: 'dono' },
-  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package, requiredLevel: 'dono' },
-  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3, requiredLevel: null },
+  { href: '/dashboard',            label: 'Dashboard',  icon: Home,         requiredLevel: 'dono' },
+  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package,      requiredLevel: 'dono' },
+  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3,    requiredLevel: null },
   { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
-  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle, requiredLevel: 'dono' },
-  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle, requiredLevel: null },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp,   requiredLevel: 'dono' },
+  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle,  requiredLevel: 'dono' },
+  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users,        requiredLevel: 'dono' },
+  { href: '/dashboard/clientes',   label: 'Clientes',   icon: Users,        requiredLevel: 'dono' },
+  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle,   requiredLevel: null },
+  { href: '/dashboard/ajuda',      label: 'Ajuda',      icon: HelpCircle,   requiredLevel: null },
+  { href: '/dashboard/admin',      label: 'Admin',      icon: Shield,       requiredLevel: 'dono' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { isDono } = useMembro()
-  
+
   const isActive = (path: string) => pathname === path
 
   // Filtra itens baseado no nível do usuário
@@ -7677,8 +9046,6 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
-
-       
       </aside>
 
       {/* Mobile Bottom Navigation */}

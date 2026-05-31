@@ -10,39 +10,40 @@ import {
   QrCode,
   CheckCircle,
   ArrowRight,
-  Zap,
+  XCircle,
+  Smartphone,
 } from 'lucide-react'
 
 const FUNCIONALIDADES = [
   {
     icon: Package,
-    titulo: 'Controle de Estoque',
-    desc: 'Cadastre produtos, defina mínimos e acompanhe tudo em tempo real.',
+    titulo: 'Controle de Estoque Completo',
+    desc: 'Cadastre produtos, defina estoques mínimos e saiba exatamente o que tem e o que está faltando.',
   },
   {
     icon: ShoppingCart,
-    titulo: 'PDV Completo',
-    desc: 'Ponto de venda integrado com leitor de código de barras pela câmera.',
+    titulo: 'PDV no Celular',
+    desc: 'Ponto de venda integrado com leitor de código de barras pela câmera. Venda direto do bolso.',
   },
   {
     icon: BarChart3,
-    titulo: 'Relatórios Inteligentes',
-    desc: 'Veja vendas, lucro, margem e movimentação diária com gráficos.',
+    titulo: 'Relatórios que Fazem Sentido',
+    desc: 'Veja vendas, lucro, margem e movimentação com gráficos simples — sem precisar ser contador.',
   },
   {
     icon: AlertCircle,
     titulo: 'Alertas Automáticos',
-    desc: 'Receba avisos quando o estoque estiver baixo ou zerado.',
+    desc: 'Receba avisos antes que o produto acabe. Nunca mais perca uma venda por falta de estoque.',
   },
   {
     icon: Users,
     titulo: 'Equipe & Funcionários',
-    desc: 'Adicione funcionários com acesso limitado ao PDV.',
+    desc: 'Adicione funcionários com acesso limitado ao PDV. Você controla tudo, eles só vendem.',
   },
   {
     icon: QrCode,
     titulo: 'Leitor de Código de Barras',
-    desc: 'Escaneie produtos pela câmera do celular. Sem equipamento extra.',
+    desc: 'Escaneie produtos pela câmera do celular. Sem precisar comprar equipamento extra.',
   },
 ]
 
@@ -60,25 +61,19 @@ const BENEFICIOS = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <main className="min-h-screen bg-gray-950 text-white">
 
       {/* ══════════ NAVBAR ══════════ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">📦</span>
-            <span className="text-xl font-bold text-gray-900">EstoqueSystem</span>
-          </Link>
+      <nav className="fixed top-0 w-full z-50 bg-gray-950/80 backdrop-blur-xl border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <span className="text-xl font-bold">📦 EstoqueSystem</span>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition"
-            >
+            <Link href="/login" className="text-sm text-gray-400 hover:text-white transition">
               Entrar
             </Link>
             <Link
               href="/signup"
-              className="px-5 py-2.5 text-sm font-semibold bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+              className="text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition"
             >
               Teste grátis
             </Link>
@@ -87,325 +82,331 @@ export default function LandingPage() {
       </nav>
 
       {/* ══════════ HERO ══════════ */}
-      <section className="pt-32 pb-20 px-4">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-1.5 rounded-full text-sm font-medium">
-            <Zap className="w-4 h-4" />
-            15 dias grátis — sem cartão de crédito
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
-            Controle seu estoque{' '}
-            <span className="text-green-600">sem complicação</span>
-          </h1>
-
-          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Sistema completo de estoque, PDV e relatórios feito para{' '}
-            <strong>pequenos mercados, mercearias e comércios</strong>. Funciona
-            no celular e no computador.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link
-              href="/signup"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
-            >
-              Começar grátis agora
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-gray-100 text-gray-700 text-lg font-medium rounded-2xl hover:bg-gray-200 transition"
-            >
-              Já tenho conta
-            </Link>
-          </div>
-
-          <p className="text-sm text-gray-400 pt-2">
-            ✅ Sem cartão &nbsp;·&nbsp; ✅ Cancele quando quiser &nbsp;·&nbsp; ✅ Suporte via WhatsApp
-          </p>
+      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto text-center">
+        <div className="inline-block mb-6 px-4 py-1.5 bg-green-900/30 border border-green-800 rounded-full text-green-400 text-sm font-medium">
+          15 dias grátis — sem cartão de crédito
         </div>
+
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+          Você está{' '}
+          <span className="text-red-400">perdendo dinheiro</span> no seu estoque
+          <br className="hidden sm:block" />
+          {' '}e nem sabe
+        </h1>
+
+        <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          Controle tudo pelo celular.{' '}
+          <span className="text-white font-medium">Sem planilha, sem caderno, sem erro.</span>{' '}
+          Sistema completo de estoque, PDV e relatórios feito para pequenos mercados, mercearias e comércios.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+          <Link
+            href="/signup"
+            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition transform hover:scale-105 flex items-center justify-center gap-2"
+          >
+            Testar grátis agora <ArrowRight className="w-5 h-5" />
+          </Link>
+          <Link
+            href="/login"
+            className="w-full sm:w-auto border border-gray-700 hover:border-gray-500 text-gray-300 px-8 py-4 rounded-xl font-medium transition text-center"
+          >
+            Já tenho conta
+          </Link>
+        </div>
+
+        <p className="text-sm text-gray-500">
+          ✅ Sem cartão · ✅ Cancele quando quiser · ✅ Suporte via WhatsApp
+        </p>
       </section>
 
-      {/* ══════════ DEMO VISUAL ══════════ */}
-      <section className="pb-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-4 sm:p-8 shadow-2xl">
-            <div className="bg-gray-950 rounded-2xl p-6 sm:p-10 text-center">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-                {[
-                  { label: 'Produtos', valor: '247', cor: 'text-blue-400' },
-                  { label: 'Vendas Hoje', valor: '38', cor: 'text-green-400' },
-                  { label: 'Alertas', valor: '5', cor: 'text-yellow-400' },
-                  { label: 'Estoque', valor: 'R$ 12.450', cor: 'text-purple-400' },
-                ].map(({ label, valor, cor }) => (
-                  <div key={label} className="space-y-1">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${cor}`}>{valor}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* ══════════ PROPOSTA DE VALOR (substitui números fake) ══════════ */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 rounded-2xl p-8 sm:p-12 text-center">
+          <Smartphone className="w-12 h-12 text-green-400 mx-auto mb-4" />
+          <h2 className="text-2xl sm:text-3xl font-bold mb-4">
+            Tudo na palma da sua mão
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
+            Saiba exatamente o que está vendendo, o que está faltando e onde você está perdendo dinheiro —{' '}
+            <span className="text-white font-medium">tudo em tempo real, direto no celular.</span>
+          </p>
         </div>
       </section>
 
       {/* ══════════ FUNCIONALIDADES ══════════ */}
-      <section className="py-20 px-4 bg-gray-50" id="funcionalidades">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Tudo que você precisa em um só lugar
-            </h2>
-            <p className="text-gray-600 mt-3 text-lg">
-              Sem planilha, sem caderno, sem complicação.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
-              <div
-                key={titulo}
-                className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center mb-4 group-hover:bg-green-100 transition">
-                  <Icon className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">{titulo}</h3>
-                <p className="text-gray-600 text-sm leading-relaxed">{desc}</p>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Tudo que você precisa em um só lugar
+        </h2>
+        <p className="text-gray-400 text-center mb-14 text-lg">
+          Sem planilha, sem caderno, sem complicação.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
+            <div
+              key={titulo}
+              className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-green-800 transition group"
+            >
+              <div className="w-12 h-12 bg-green-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-900/50 transition">
+                <Icon className="w-6 h-6 text-green-400" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-lg font-bold mb-2">{titulo}</h3>
+              <p className="text-gray-400 leading-relaxed">{desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ══════════ COMO FUNCIONA ══════════ */}
-      <section className="py-20 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">Comece em 2 minutos</h2>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-8">
-            {[
-              { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rápido com email e senha. Sem burocracia.', emoji: '📝' },
-              { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou com a câmera do celular.', emoji: '📦' },
-              { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda.', emoji: '🚀' },
-            ].map(({ passo, titulo, desc, emoji }) => (
-              <div key={passo} className="text-center space-y-3">
-                <span className="text-4xl">{emoji}</span>
-                <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white text-sm font-bold">
-                  {passo}
-                </div>
-                <h3 className="text-lg font-semibold">{titulo}</h3>
-                <p className="text-gray-600 text-sm">{desc}</p>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-14">
+          Comece em 2 minutos
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {[
+            { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rápido com email e senha. Sem burocracia, sem cartão.', emoji: '📝' },
+            { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou escaneie o código de barras com a câmera.', emoji: '📦' },
+            { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda por falta de estoque.', emoji: '🚀' },
+          ].map(({ passo, titulo, desc, emoji }) => (
+            <div key={passo} className="text-center">
+              <div className="text-4xl mb-4">{emoji}</div>
+              <div className="inline-flex w-8 h-8 bg-green-600 text-white rounded-full text-sm font-bold items-center justify-center mx-auto mb-3">
+                {passo}
               </div>
-            ))}
+              <h3 className="text-xl font-bold mb-2">{titulo}</h3>
+              <p className="text-gray-400">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ ANTES vs DEPOIS ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-14">
+          A diferença é clara
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* ANTES */}
+          <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-8">
+            <h3 className="text-xl font-bold text-red-400 mb-6 flex items-center gap-2">
+              <XCircle className="w-6 h-6" /> Antes do EstoqueSystem
+            </h3>
+            <ul className="space-y-4">
+              {[
+                'Controle no caderno ou planilha',
+                'Produto vence e você nem percebe',
+                'Não sabe o lucro real do mês',
+                'Funcionário vende e você não vê',
+                'Estoque acaba e você perde venda',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-gray-300">
+                  <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* DEPOIS */}
+          <div className="bg-green-950/30 border border-green-900/50 rounded-2xl p-8">
+            <h3 className="text-xl font-bold text-green-400 mb-6 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6" /> Depois do EstoqueSystem
+            </h3>
+            <ul className="space-y-4">
+              {[
+                'Controle completo no celular',
+                'Alertas automáticos de vencimento',
+                'Relatórios de lucro e margem em tempo real',
+                'Cada venda registrada automaticamente',
+                'Avisos antes do estoque acabar',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* ══════════ QUEM CRIOU ══════════ */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center gap-10">
-            <div className="shrink-0">
-              <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
-                <img
-                  src="/lucas.jpg"
-                  alt="Lucas Machado - Criador do EstoqueSystem"
-                  className="w-full h-full object-cover"
-                />
-              </div>
+      {/* ══════════ POR QUE FUNCIONA (prova sem mentir) ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Por que o EstoqueSystem funciona?
+        </h2>
+        <p className="text-gray-400 text-center mb-12 text-lg">
+          Não é mágica — é simplicidade com propósito.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
+          {[
+            'Criado por quem entende de pequenos comércios',
+            'Feito pra funcionar direto no celular',
+            'Pensado para quem não gosta de sistemas complicados',
+            'Tudo em um só lugar: estoque, vendas e relatórios',
+            'Suporte humano direto pelo WhatsApp',
+            'Atualizações constantes sem custo extra',
+          ].map((item) => (
+            <div key={item} className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span className="text-gray-300">{item}</span>
             </div>
-            <div className="space-y-5 text-center md:text-left">
-              <div>
-                <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
-                  Quem está por trás
-                </p>
-                <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
-                  Prazer, Lucas Machado 👋
-                </h2>
-              </div>
-              <div className="text-gray-600 text-lg leading-relaxed space-y-4">
-                <p>
-                  Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
-                  criar projetos que resolvam problemas reais e que possam gerar
-                  valor de verdade pra quem usa.
-                </p>
-                <p>
-                  O EstoqueSystem nasceu de uma percepção simples: pequenos
-                  comerciantes <strong>não precisam de sistemas caros e
-                  complicados</strong> — precisam de algo que funcione no celular,
-                  que seja fácil de usar e que caiba no bolso.
-                </p>
-                <p>
-                  Eu construí cada tela, cada botão e cada funcionalidade pensando
-                  em quem está atrás do balcão, vendendo e tentando manter o negócio
-                  de pé. Se você é essa pessoa,{' '}
-                  <strong className="text-gray-900">
-                    o EstoqueSystem foi feito pra você.
-                  </strong>
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎯</span>
-                  <div className="text-left">
-                    <p className="font-semibold text-sm text-gray-900">Missão</p>
-                    <p className="text-gray-500 text-xs">
-                      Tornar o controle de estoque acessível pra todo pequeno comércio
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">💬</span>
-                  <div className="text-left">
-                    <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
-                    <p className="text-gray-500 text-xs">
-                      Fale comigo pelo WhatsApp — sem robô, sem fila
-                    </p>
-                  </div>
-                </div>
-              </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ QUEM CRIOU ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 sm:p-12">
+          <p className="text-green-400 text-sm font-semibold uppercase tracking-wider mb-2">
+            Quem está por trás
+          </p>
+          <h2 className="text-3xl font-bold mb-6">Prazer, Lucas Machado 👋</h2>
+
+          <div className="space-y-4 text-gray-400 leading-relaxed text-lg">
+            <p>
+              Tenho 20 anos e sou desenvolvedor. Criei o EstoqueSystem porque vi de perto pequenos comerciantes{' '}
+              <span className="text-white font-medium">perdendo dinheiro por falta de controle</span> — usando caderno, planilha ou simplesmente confiando na memória.
+            </p>
+            <p>
+              Então resolvi construir algo{' '}
+              <span className="text-white font-medium">simples, direto e que realmente funcionasse no dia a dia</span> de quem está atrás do balcão.
+            </p>
+            <p>
+              Cada tela, cada botão e cada funcionalidade foi pensada para quem não tem tempo de aprender sistemas complicados.{' '}
+              <span className="text-white font-medium">Se você é essa pessoa, o EstoqueSystem foi feito pra você.</span>
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-2xl mb-1">🎯</p>
+              <p className="text-sm font-semibold text-white">Missão</p>
+              <p className="text-sm text-gray-400">Tornar o controle de estoque acessível pra todo pequeno comércio</p>
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-2xl mb-1">💬</p>
+              <p className="text-sm font-semibold text-white">Suporte direto</p>
+              <p className="text-sm text-gray-400">Fale comigo pelo WhatsApp — sem robô, sem fila</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* ══════════ PREÇO ══════════ */}
-<section className="py-20 px-4" id="preco">
-  <div className="max-w-lg mx-auto">
-    <div className="text-center mb-10">
-      <h2 className="text-3xl sm:text-4xl font-bold">Simples e acessível</h2>
-      <p className="text-gray-600 mt-3">Um plano só, com tudo incluso. Sem surpresas.</p>
-    </div>
-
-    <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
-      <div className="text-center space-y-1 mb-6">
-        <p className="text-sm text-gray-500 uppercase tracking-wider font-medium">
-          Plano Profissional
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto text-center">
+        <h2 className="text-3xl sm:text-4xl font-bold mb-4">Simples e acessível</h2>
+        <p className="text-gray-400 text-lg mb-10">
+          Um plano só, com tudo incluso. Sem surpresas.
         </p>
-        <div className="flex items-baseline justify-center gap-1">
-          <span className="text-sm text-gray-400">R$</span>
-          <span className="text-5xl font-extrabold">79</span>
-          <span className="text-2xl font-bold">,90</span>
-          <span className="text-gray-400 ml-1">/mês</span>
+
+        <div className="bg-gray-900 border-2 border-green-800 rounded-2xl p-8 sm:p-10">
+          <p className="text-green-400 font-semibold text-sm uppercase tracking-wider mb-2">
+            Plano Profissional
+          </p>
+
+          <div className="flex items-baseline justify-center gap-1 mb-1">
+            <span className="text-5xl font-extrabold">R$ 79</span>
+            <span className="text-2xl font-bold text-gray-400">,90</span>
+            <span className="text-gray-500">/mês</span>
+          </div>
+
+          <p className="text-green-400 font-medium mb-2">
+            Menos de R$ 3 por dia para controlar todo seu negócio
+          </p>
+
+          <p className="text-sm text-gray-500 mb-8">
+            15 dias grátis para testar — sem compromisso
+          </p>
+
+          <ul className="text-left space-y-3 mb-8 max-w-sm mx-auto">
+            {BENEFICIOS.map((b) => (
+              <li key={b} className="flex items-center gap-3 text-gray-300">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          <Link
+            href="/signup"
+            className="block w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold text-lg transition transform hover:scale-105"
+          >
+            Começar teste grátis
+          </Link>
+
+          <p className="text-sm text-gray-500 mt-4">
+            💳 Cartão • 📱 PIX • 🔒 Mercado Pago
+          </p>
+          <p className="text-xs text-gray-600 mt-2">
+            Sem cartão de crédito no teste · Cancele quando quiser
+          </p>
         </div>
-        <p className="text-green-600 font-medium text-sm">
-          15 dias grátis para testar
-        </p>
-      </div>
-
-      <div className="border-t border-gray-100 my-6" />
-
-      <ul className="space-y-3 mb-8">
-        {BENEFICIOS.map((b) => (
-          <li key={b} className="flex items-start gap-3 text-sm">
-            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
-
-            <Link
-          href="/signup"
-          className="block w-full text-center px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition"
-        >
-          Começar teste grátis
-        </Link>
-
-      <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
-        <span>💳 Cartão</span>
-        <span>•</span>
-        <span>📱 PIX</span>
-        <span>•</span>
-        <span>🔒 Mercado Pago</span>
-      </div>
-
-      <p className="text-center text-xs text-gray-400 mt-2">
-        Sem cartão de crédito no teste · Cancele quando quiser
-      </p>
-    </div>
-  </div>
-</section>
+      </section>
 
       {/* ══════════ FAQ ══════════ */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">Perguntas frequentes</h2>
-          </div>
-          <div className="space-y-4">
-            {[
-              { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
-              { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
-              { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
-              {
-                p: 'Como faço o pagamento?',
-                r: 'O pagamento é feito de forma segura pelo Mercado Pago. Aceitamos PIX e cartão de crédito/débito à vista. Seu acesso é liberado automaticamente após a confirmação.',
-              },
-              { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
-              { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
-            ].map(({ p, r }) => (
-              <details
-                key={p}
-                className="bg-white rounded-xl border border-gray-100 group"
-              >
-                <summary className="px-6 py-4 cursor-pointer font-medium text-gray-900 flex items-center justify-between hover:bg-gray-50 rounded-xl transition">
-                  {p}
-                  <svg
-                    className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform shrink-0 ml-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="px-6 pb-4 text-gray-600 text-sm leading-relaxed">
-                  {r}
-                </div>
-              </details>
-            ))}
-          </div>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-12">
+          Perguntas frequentes
+        </h2>
+
+        <div className="space-y-4">
+          {[
+            { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
+            { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
+            { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
+            { p: 'Como faço o pagamento?', r: 'O pagamento é feito de forma segura pelo Mercado Pago. Aceitamos PIX e cartão de crédito/débito à vista. Seu acesso é liberado automaticamente após a confirmação.' },
+            { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
+            { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
+          ].map(({ p, r }) => (
+            <details key={p} className="bg-gray-900 border border-gray-800 rounded-xl group">
+              <summary className="flex items-center justify-between p-5 cursor-pointer font-semibold hover:text-green-400 transition">
+                {p}
+              </summary>
+              <div className="px-5 pb-5 text-gray-400 leading-relaxed">
+                {r}
+              </div>
+            </details>
+          ))}
         </div>
       </section>
 
       {/* ══════════ CTA FINAL ══════════ */}
-      <section className="py-20 px-4">
-        <div className="max-w-3xl mx-auto text-center space-y-6">
-          <h2 className="text-3xl sm:text-4xl font-bold">
-            Chega de perder dinheiro com estoque descontrolado
-          </h2>
-          <p className="text-gray-600 text-lg">
-            Comece agora, é grátis por 15 dias. Sem compromisso.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
-          >
-            Criar minha conta grátis
-            <ArrowRight className="w-5 h-5" />
-          </Link>
-        </div>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto text-center">
+        <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          Quanto dinheiro você já perdeu por falta de controle?
+        </h2>
+        <p className="text-gray-400 text-lg mb-8">
+          Comece agora e veja a diferença em poucos dias. É grátis por 15 dias, sem compromisso.
+        </p>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition transform hover:scale-105"
+        >
+          Quero organizar meu estoque <ArrowRight className="w-5 h-5" />
+        </Link>
       </section>
 
       {/* ══════════ FOOTER ══════════ */}
-      <footer className="border-t border-gray-100 py-8 px-4">
-  <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-    <div className="flex items-center gap-2">
-      <span>📦</span>
-      <span className="font-semibold text-gray-700">EstoqueSystem</span>
-    </div>
-    <p>© {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.</p>
-    <div className="flex gap-4">
-      <Link href="/login" className="hover:text-gray-700 transition">Entrar</Link>
-      <Link href="/signup" className="hover:text-gray-700 transition">Criar conta</Link>
-      <Link href="/termos" className="hover:text-gray-700 transition">Termos</Link>
-      <Link href="/privacidade" className="hover:text-gray-700 transition">Privacidade</Link>
-    </div>
-  </div>
-</footer>
-    </div>
+      <footer className="border-t border-gray-800 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-gray-500">📦 EstoqueSystem</p>
+          <p className="text-sm text-gray-600">
+            © {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.
+          </p>
+          <div className="flex gap-4 text-sm text-gray-500">
+            <Link href="/login" className="hover:text-white transition">Entrar</Link>
+            <Link href="/signup" className="hover:text-white transition">Criar conta</Link>
+            <Link href="/termos" className="hover:text-white transition">Termos</Link>
+            <Link href="/privacidade" className="hover:text-white transition">Privacidade</Link>
+          </div>
+        </div>
+      </footer>
+    </main>
   )
 }
