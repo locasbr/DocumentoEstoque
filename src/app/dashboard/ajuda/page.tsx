@@ -110,7 +110,7 @@ export default function AjudaPage() {
       {/* Cards de Acesso Rapido */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <a
-          href="https://wa.me/5521999999999?text=Preciso de ajuda com o EstoqueSystem"
+          href="https://wa.me/5522999467499?text=Preciso de ajuda com o EstoqueSystem"
           target="_blank"
           rel="noopener noreferrer"
           className="card p-5 flex items-center gap-4 hover:border-green-400 dark:hover:border-green-500 transition group"
@@ -220,7 +220,7 @@ export default function AjudaPage() {
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Nao encontrou o que procurava?</h3>
         <p className="text-gray-600 dark:text-gray-400 mb-4">Fale diretamente comigo pelo WhatsApp. Sem robo, sem fila.</p>
         <a
-          href="https://wa.me/5521999999999?text=Preciso de ajuda com o EstoqueSystem"
+          href="https://wa.me/5522999467499?text=Preciso de ajuda com o EstoqueSystem"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition"
