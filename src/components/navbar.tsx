@@ -1,5 +1,6 @@
 'use client'
 
+import { HelpCircle } from 'lucide-react'
 import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -8,6 +9,7 @@ import { LogOut, Menu, Moon, Sun, Home, Package, BarChart3, ShoppingCart, AlertC
 import { useState } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useMembro } from '@/hooks/useMembro'
+
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono' },
@@ -18,6 +20,8 @@ const navItems = [
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
+  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },
+  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
 ]
 

@@ -11,7 +11,7 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
 import { Produto } from '@/lib/types'
 import { useParams } from 'next/navigation'
 
@@ -81,15 +81,19 @@ export default function EditarProdutoPage() {
   }
 
   const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
-  setFormData((prev) => prev ? ({
-    ...prev,
-    nome: produto.nome || prev.nome,
-    descricao: produto.descricao || prev.descricao,
-    categoria: produto.categoria || prev.categoria,
-  }) : null)
-  setBarcodeModalAberto(false)
-  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
-}
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            nome: produto.nome || prev.nome,
+            descricao: produto.descricao || prev.descricao,
+            categoria: produto.categoria || prev.categoria,
+          }
+        : null
+    )
+    setBarcodeModalAberto(false)
+    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
+  }
 
   const handleImageSelected = async (file: File) => {
     if (!formData || !id) {
@@ -125,19 +129,33 @@ export default function EditarProdutoPage() {
   }
 
   const handleCodigoBarrasLido = async (codigoBarras: string) => {
-  setScannerAberto(false)
-  setBarcodeDetectado(codigoBarras)
-  setBarcodeModalAberto(true)
-  setBuscandoBarcode(true)
-  setProdutoBarcode(null)
+    setScannerAberto(false)
+    setBarcodeDetectado(codigoBarras)
+    setBarcodeModalAberto(true)
+    setBuscandoBarcode(true)
+    setProdutoBarcode(null)
 
-  // Preenche SKU imediatamente
-  setFormData((prev) => prev ? { ...prev, sku: codigoBarras } : null)
-  // Busca informações na API
-  const resultado = await buscarProdutoPorBarcode(codigoBarras)
-  setProdutoBarcode(resultado)
-  setBuscandoBarcode(false)
-}
+    // Preenche SKU imediatamente
+    setFormData((prev) => (prev ? { ...prev, sku: codigoBarras } : null))
+
+    // Busca informações na API
+    const resultado = await buscarProdutoPorBarcode(codigoBarras)
+    setProdutoBarcode(resultado)
+    setBuscandoBarcode(false)
+  }
+
+  // ── Calcula info de validade para avisos visuais ──
+  const getValidadeInfo = () => {
+    if (!formData?.data_validade) return null
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const validade = new Date(formData.data_validade + 'T00:00:00')
+    const diffMs = validade.getTime() - hoje.getTime()
+    const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return { diasRestantes, vencido: diasRestantes < 0 }
+  }
+
+  const validadeInfo = getValidadeInfo()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -147,9 +165,15 @@ export default function EditarProdutoPage() {
     setSaving(true)
 
     try {
+      // Prepara dados — converte data_validade vazia em null
+      const dadosParaSalvar = {
+        ...formData,
+        data_validade: formData.data_validade || null,
+      }
+
       const { error: updateError } = await supabase
         .from('produtos')
-        .update(formData)
+        .update(dadosParaSalvar)
         .eq('id', id)
 
       if (updateError) {
@@ -159,7 +183,7 @@ export default function EditarProdutoPage() {
       }
 
       setSuccess('Produto atualizado com sucesso!')
-      addNotification('✅ Produto atualizado!', 'success', 3000)
+      addNotification('\u2705 Produto atualizado!', 'success', 3000)
       setTimeout(() => {
         router.push('/dashboard/produtos')
       }, 1500)
@@ -180,7 +204,10 @@ export default function EditarProdutoPage() {
     return (
       <div>
         <Alert message={error || 'Produto não encontrado'} type="error" />
-        <Link href="/dashboard/produtos" className="btn-outline mt-4 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800">
+        <Link
+          href="/dashboard/produtos"
+          className="btn-outline mt-4 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+        >
           Voltar
         </Link>
       </div>
@@ -358,28 +385,80 @@ export default function EditarProdutoPage() {
             />
           </div>
 
+          {/* ══════════ DATA DE VALIDADE ══════════ */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+              <Calendar size={16} className="text-gray-400" />
+              Data de Validade
+            </label>
+            <input
+              type="date"
+              name="data_validade"
+              value={formData.data_validade || ''}
+              onChange={handleInputChange}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+              Deixe em branco se o produto não tem validade
+            </p>
+
+            {/* Aviso: produto já vencido */}
+            {validadeInfo && validadeInfo.vencido && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                  Atenção: este produto está vencido (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                </p>
+              </div>
+            )}
+
+            {/* Aviso: vence em até 7 dias */}
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                </p>
+              </div>
+            )}
+
+            {/* Info: vence em 8-30 dias */}
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  Validade: {validadeInfo.diasRestantes} dias restantes
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={saving || imagemUpload} className="btn-primary">
               {saving ? 'Salvando...' : 'Atualizar Produto'}
             </button>
-            <Link href="/dashboard/produtos" className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800">
+            <Link
+              href="/dashboard/produtos"
+              className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+            >
               Cancelar
             </Link>
           </div>
         </form>
       </div>
-      {/* ── MODAL BARCODE PRODUTO ── */}
-{barcodeModalAberto && produtoBarcode !== null && (
-  <BarcodeProductModal
-    codigo={barcodeDetectado}
-    produto={produtoBarcode}
-    loading={buscandoBarcode}
-    onConfirmar={handleConfirmarBarcode}
-    onCancelar={() => setBarcodeModalAberto(false)}
-  />
-  
-)}
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+
+      {/* Modal barcode produto */}
+      {barcodeModalAberto && produtoBarcode !== null && (
+        <BarcodeProductModal
+          codigo={barcodeDetectado}
+          produto={produtoBarcode}
+          loading={buscandoBarcode}
+          onConfirmar={handleConfirmarBarcode}
+          onCancelar={() => setBarcodeModalAberto(false)}
+        />
+      )}
+
+      {/* Scanner de código de barras */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}

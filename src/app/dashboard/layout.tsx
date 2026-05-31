@@ -15,6 +15,7 @@ const RESTRICTED_ROUTES = [
   '/dashboard/relatorios',
   '/dashboard/alertas',
   '/dashboard/equipe',
+  '/dashboard/clientes',
 ]
 
 export default function DashboardLayout({

@@ -12,6 +12,7 @@ export interface Produto {
   imagem_url?: string;
   criado_em: string;
   atualizado_em: string;
+  data_validade?: string | null
 }
 
 export interface MovimentoEstoque {
@@ -50,3 +51,25 @@ export interface Membro {
   status: 'pendente' | 'ativo' | 'inativo'
   created_at: string
 }
+ export interface Cliente {
+    id: string
+    usuario_id: string
+    nome: string
+    telefone: string
+    cpf: string
+    email: string
+    endereco: string
+    notas: string
+    criado_em: string
+    atualizado_em: string
+  }
+
+  export interface FiadoRegistro {
+    id: string
+    cliente_id: string
+    usuario_id: string
+    tipo: 'debito' | 'pagamento'
+    valor: number
+    descricao: string
+    criado_em: string
+  }

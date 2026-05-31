@@ -1,28 +1,29 @@
 'use client'
 
-import { Shield } from 'lucide-react'
+import { Shield, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
 import { useMembro } from '@/hooks/useMembro'
 
-
 const allNavItems = [
-  { href: '/dashboard',            label: 'Dashboard',  icon: Home, requiredLevel: 'dono' },
-  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package, requiredLevel: 'dono' },
-  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3, requiredLevel: null },
+  { href: '/dashboard',            label: 'Dashboard',  icon: Home,         requiredLevel: 'dono' },
+  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package,      requiredLevel: 'dono' },
+  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3,    requiredLevel: null },
   { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
-  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle, requiredLevel: 'dono' },
-  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle, requiredLevel: null },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp,   requiredLevel: 'dono' },
+  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle,  requiredLevel: 'dono' },
+  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users,        requiredLevel: 'dono' },
+  { href: '/dashboard/clientes',   label: 'Clientes',   icon: Users,        requiredLevel: 'dono' },
+  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle,   requiredLevel: null },
+  { href: '/dashboard/ajuda',      label: 'Ajuda',      icon: HelpCircle,   requiredLevel: null },
+  { href: '/dashboard/admin',      label: 'Admin',      icon: Shield,       requiredLevel: 'dono' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { isDono } = useMembro()
-  
+
   const isActive = (path: string) => pathname === path
 
   // Filtra itens baseado no nível do usuário
@@ -54,8 +55,6 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
-
-       
       </aside>
 
       {/* Mobile Bottom Navigation */}

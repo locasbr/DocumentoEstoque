@@ -11,7 +11,7 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
 
 export default function NovoProdutoPage() {
   const router = useRouter()
@@ -35,6 +35,7 @@ export default function NovoProdutoPage() {
     quantidade_minima: 10,
     preco_custo: 0,
     preco_venda: 0,
+    data_validade: '',
     imagem_url: '',
   })
 
@@ -47,36 +48,35 @@ export default function NovoProdutoPage() {
   }
 
   const handleCodigoBarrasLido = async (codigoBarras: string) => {
-  setScannerAberto(false)
-  setBarcodeDetectado(codigoBarras)
-  setBarcodeModalAberto(true)
-  setBuscandoBarcode(true)
-  setProdutoBarcode(null)
+    setScannerAberto(false)
+    setBarcodeDetectado(codigoBarras)
+    setBarcodeModalAberto(true)
+    setBuscandoBarcode(true)
+    setProdutoBarcode(null)
 
-  // Preenche SKU imediatamente
-  setFormData((prev) => ({ ...prev, sku: codigoBarras }))
+    // Preenche SKU imediatamente
+    setFormData((prev) => ({ ...prev, sku: codigoBarras }))
 
-  // Busca informações na API
-  const resultado = await buscarProdutoPorBarcode(codigoBarras)
-  setProdutoBarcode(resultado)
-  setBuscandoBarcode(false)
-}
+    // Busca informações na API
+    const resultado = await buscarProdutoPorBarcode(codigoBarras)
+    setProdutoBarcode(resultado)
+    setBuscandoBarcode(false)
+  }
 
   const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
-  setFormData((prev) => ({
-    ...prev,
-    nome: produto.nome || prev.nome,
-    descricao: produto.descricao || prev.descricao,
-    categoria: produto.categoria || prev.categoria,
-  }))
-  setBarcodeModalAberto(false)
-  addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
-}
+    setFormData((prev) => ({
+      ...prev,
+      nome: produto.nome || prev.nome,
+      descricao: produto.descricao || prev.descricao,
+      categoria: produto.categoria || prev.categoria,
+    }))
+    setBarcodeModalAberto(false)
+    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
+  }
 
   const handleImageSelected = async (file: File) => {
     try {
       setImagemUpload(true)
-      // Criar um ID temporário para a imagem antes do produto ser criado
       const tempId = `temp-${Date.now()}`
       const result = await uploadProductImage(file, tempId)
       if (!result) {
@@ -96,28 +96,45 @@ export default function NovoProdutoPage() {
     }
   }
 
+  // Calcula info de validade para avisos visuais
+  const getValidadeInfo = () => {
+    if (!formData.data_validade) return null
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const validade = new Date(formData.data_validade + 'T00:00:00')
+    const diffMs = validade.getTime() - hoje.getTime()
+    const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return { diasRestantes, vencido: diasRestantes < 0 }
+  }
+
+  const validadeInfo = getValidadeInfo()
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      // Get the current user
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
+
       if (userError || !user) {
         setError('Usuário não autenticado')
         addNotification('Erro: usuário não autenticado', 'error')
         return
       }
 
-      const { error: insertError } = await supabase.from('produtos').insert([
-        {
-          ...formData,
-          ativo: true,
-          usuario_id: user.id,
-        },
-      ]).select()
+      // Prepara dados — converte data_validade vazia em null
+      const dadosParaSalvar = {
+        ...formData,
+        data_validade: formData.data_validade || null,
+        ativo: true,
+        usuario_id: user.id,
+      }
+
+      const { error: insertError } = await supabase
+        .from('produtos')
+        .insert([dadosParaSalvar])
+        .select()
 
       if (insertError) {
         setError(insertError.message)
@@ -126,7 +143,7 @@ export default function NovoProdutoPage() {
       }
 
       setSuccess('Produto criado com sucesso!')
-      addNotification('✅ Produto adicionado ao estoque!', 'success', 3000)
+      addNotification('\u2705 Produto adicionado ao estoque!', 'success', 3000)
       setTimeout(() => {
         router.push('/dashboard/produtos')
       }, 1500)
@@ -310,6 +327,52 @@ export default function NovoProdutoPage() {
             />
           </div>
 
+          {/* ══════════ DATA DE VALIDADE (NOVO) ══════════ */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+              <Calendar size={16} className="text-gray-400" />
+              Data de Validade
+            </label>
+            <input
+              type="date"
+              name="data_validade"
+              value={formData.data_validade}
+              onChange={handleInputChange}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+              Deixe em branco se o produto não tem validade
+            </p>
+
+            {/* Aviso visual de validade */}
+            {validadeInfo && validadeInfo.vencido && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                  Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                </p>
+              </div>
+            )}
+
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                </p>
+              </div>
+            )}
+
+            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  Validade: {validadeInfo.diasRestantes} dias restantes
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={loading || imagemUpload} className="btn-primary">
               {loading ? 'Salvando...' : 'Salvar Produto'}
@@ -321,7 +384,7 @@ export default function NovoProdutoPage() {
         </form>
       </div>
 
-      {/* ── SCANNER DE CÓDIGO DE BARRAS ── */}
+      {/* Scanner de código de barras */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -329,17 +392,16 @@ export default function NovoProdutoPage() {
         />
       )}
 
-      {/* ── MODAL BARCODE PRODUTO ── */}
+      {/* Modal barcode produto */}
       {barcodeModalAberto && produtoBarcode !== null && (
-      <BarcodeProductModal
-        codigo={barcodeDetectado}
-        produto={produtoBarcode}
-        loading={buscandoBarcode}
-        onConfirmar={handleConfirmarBarcode}
-        onCancelar={() => setBarcodeModalAberto(false)}
-       />
-)}
+        <BarcodeProductModal
+          codigo={barcodeDetectado}
+          produto={produtoBarcode}
+          loading={buscandoBarcode}
+          onConfirmar={handleConfirmarBarcode}
+          onCancelar={() => setBarcodeModalAberto(false)}
+        />
+      )}
     </div>
   )
 }
-
