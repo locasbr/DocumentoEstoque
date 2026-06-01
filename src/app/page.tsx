@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Package,
   BarChart3,
@@ -60,6 +62,8 @@ const BENEFICIOS = [
 ]
 
 export default function LandingPage() {
+  const [demoAtiva, setDemoAtiva] = useState('dashboard')
+  
   return (
     <main className="min-h-screen bg-gray-950 text-white">
 
@@ -132,6 +136,73 @@ export default function LandingPage() {
             <span className="text-white font-medium">tudo em tempo real, direto no celular.</span>
           </p>
         </div>
+      </section>
+
+      {/* ══════════ DEMONSTRAÇÃO DO SISTEMA ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Veja o sistema funcionando
+        </h2>
+        <p className="text-gray-400 text-center mb-12 text-lg">
+          Simples de usar, poderoso de verdade.
+        </p>
+
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-center mb-8">
+          {[
+            { id: 'dashboard', label: '📊 Dashboard' },
+            { id: 'pdv', label: '🛒 PDV' },
+            { id: 'relatorios', label: '📈 Relatórios' },
+            { id: 'alertas', label: '🔔 Alertas' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setDemoAtiva(id)}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
+                demoAtiva === id
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Screenshot com moldura de browser */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl">
+          {/* Barra do "navegador" — esconde no mobile pequeno */}
+          <div className="hidden sm:flex items-center gap-2 bg-gray-800 px-4 py-3 border-b border-gray-700">
+            <div className="flex gap-1">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div className="flex-1 text-center">
+              <span className="text-xs text-gray-400">estoquesystem.com/dashboard</span>
+            </div>
+          </div>
+
+          {/* Imagem */}
+          <div className="relative w-full h-auto bg-gray-950">
+            <Image
+              src={`/demo/${demoAtiva}.png`}
+              alt={`Demonstração ${demoAtiva}`}
+              width={800}
+              height={600}
+              className="w-full h-auto"
+              unoptimized
+            />
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <p className="text-gray-400 text-center mt-6 text-sm sm:text-base">
+          {demoAtiva === 'dashboard' && '📊 Veja todas as métricas do seu negócio em um só lugar'}
+          {demoAtiva === 'pdv' && '🛒 Venda direto pelo celular com código de barras'}
+          {demoAtiva === 'relatorios' && '📈 Saiba seu lucro real, margem e produtos mais vendidos'}
+          {demoAtiva === 'alertas' && '🔔 Receba avisos automáticos antes do estoque acabar'}
+        </p>
       </section>
 
       {/* ══════════ FUNCIONALIDADES ══════════ */}
