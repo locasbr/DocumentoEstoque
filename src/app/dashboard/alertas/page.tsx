@@ -40,7 +40,7 @@ export default function AlertasPage() {
     try {
       const { data, error } = await supabase
         .from('alertas')
-        .select('*, produtos(*)')
+        .select('*, produto:produto_id(*)')
         .order('criado_em', { ascending: false })
 
       if (!error && data) {
