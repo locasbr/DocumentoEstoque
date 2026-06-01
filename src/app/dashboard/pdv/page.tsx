@@ -584,7 +584,7 @@ export default function PDVPage() {
               onClick={() => setScannerAberto(true)}
               className="btn-primary flex items-center gap-2 px-4"
             >
-              <Camera size={18} /> <span>Ler código</span>
+              <Camera size={18} /> <span>Ler codigo</span>
             </button>
           </div>
 
@@ -687,7 +687,15 @@ export default function PDVPage() {
       {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MOBILE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       <div className="md:hidden space-y-3 p-3">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
+          <div>
+            <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+              Ponto de Venda
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                • Leitor USB ativo
+              </span>
+            </p>
+          </div>
           <button
             onClick={() => setScannerAberto(true)}
             className="btn-primary px-3 py-2"
