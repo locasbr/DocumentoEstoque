@@ -576,7 +576,7 @@ export default function PDVPage() {
               <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
                 Ponto de Venda
                 <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                  \u2022 Leitor USB ativo
+                  • Leitor USB ativo
                 </span>
               </p>
             </div>
@@ -584,7 +584,7 @@ export default function PDVPage() {
               onClick={() => setScannerAberto(true)}
               className="btn-primary flex items-center gap-2 px-4"
             >
-              <Camera size={18} /> <span>Ler c\u00f3digo</span>
+              <Camera size={18} /> <span>Ler código</span>
             </button>
           </div>
 
