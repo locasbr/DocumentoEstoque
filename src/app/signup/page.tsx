@@ -149,10 +149,17 @@ export default function Signup() {
                   Feito para pequenos comércios
                 </span>
               </div>
-              <p className="text-green-100 text-sm italic leading-relaxed">
-                &ldquo;Sistema simples, direto ao ponto. Exatamente o que meu
-                mercadinho precisava.&rdquo;
-              </p>
+              
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+                <p className="text-green-400 font-semibold text-sm mb-2">
+                  💡 Por que o EstoqueSystem?
+                </p>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  Criado por um desenvolvedor que entende a realidade do pequeno comerciante
+                  — simples, direto e sem complicação.
+                </p>
+              </div>
+
             </div>
           </div>
 

@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ericblade/quagga2": "^1.12.1",
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.38.0",
     "lucide-react": "^0.263.1",
