@@ -57,9 +57,7 @@ type FiltroPlano = 'todos' | 'trial' | 'ativo' | 'expirado'
 // ╔══════════════════════════════════════════════════╗
 // ║  COLOQUE AQUI O SEU EMAIL DE ADMIN              ║
 // ╚══════════════════════════════════════════════════╝
-const ADMIN_EMAILS = [
-  'locasbr@gmail.com',
-]
+
 
 export default function AdminPage() {
   const { isLoading: loadingMembro } = useMembro()
@@ -77,16 +75,22 @@ export default function AdminPage() {
   const [detalhes, setDetalhes] = useState<Record<string, DetalhesUsuario>>({})
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false)
 
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        const email = data.session.user.email ?? ''
-        setIsAdmin(ADMIN_EMAILS.includes(email))
-      }
+ // ✅ COLOCA NO LUGAR:
+useEffect(() => {
+  const checkAdmin = async () => {
+    const { data } = await supabase.auth.getSession()
+    if (data.session) {
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('is_admin')
+        .eq('id', data.session.user.id)
+        .single()
+
+      setIsAdmin(perfil?.is_admin === true)
     }
-    checkAdmin()
-  }, [])
+  }
+  checkAdmin()
+}, [])
 
   const fetchPerfis = useCallback(async () => {
     setLoading(true)

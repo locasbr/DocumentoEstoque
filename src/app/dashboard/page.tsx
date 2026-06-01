@@ -96,15 +96,19 @@ function DashboardContent() {
           setProdutosCriticos(criticos)
         }
 
-        // ── Movimentos de hoje ──
+                // ── Movimentos de hoje ──
         const hoje = new Date()
         hoje.setHours(0, 0, 0, 0)
-        const { data: movimentos } = await supabase
+
+        const { data: movimentos, error: movError } = await supabase
           .from('movimentos_estoque')
-          .select('*, produto(*)')
+          .select('*, produto:produto_id(*)')
           .gte('criado_em', hoje.toISOString())
           .order('criado_em', { ascending: false })
           .limit(100)
+
+        if (movError) console.error('Erro movimentos:', movError)
+
         if (movimentos) {
           setStats((prev) => ({ ...prev, totalMovimentos: movimentos.length }))
           setMovimentosHoje(movimentos)
