@@ -44,6 +44,7 @@ export default function Signup() {
       nome_completo: nomeCompleto,
       nome_negocio: nomeNegocio,
     },
+    emailRedirectTo: `${window.location.origin}/auth/callback`,
   },
 })
 
@@ -67,6 +68,14 @@ export default function Signup() {
       }),
     }).catch(console.error)
 
+    // Se o email precisa ser confirmado
+    if (data.user.identities?.length === 0 || !data.session) {
+      setSuccess('📧 Enviamos um email de confirmação! Verifique sua caixa de entrada.')
+      // NÃO redireciona — espera o usuário confirmar
+      return
+    }
+
+    // Se não precisa confirmar (auto-confirm ligado)
     setSuccess('Conta criada com sucesso! Redirecionando...')
     setTimeout(() => {
       router.push('/dashboard')

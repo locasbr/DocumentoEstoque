@@ -58,26 +58,37 @@ function AssinarContent() {
     verificar()
   }, [router])
 
-  const handlePagar = async () => {
+  const handlePagarPix = async () => {
     setProcessando(true)
-
     try {
       const response = await fetch('/api/pagamento/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, userEmail }),
       })
-
       const data = await response.json()
+      if (data.init_point) window.location.href = data.init_point
+      else alert('Erro ao criar pagamento PIX.')
+    } catch {
+      alert('Erro ao processar.')
+    } finally {
+      setProcessando(false)
+    }
+  }
 
-      if (data.init_point) {
-        window.location.href = data.init_point
-      } else {
-        alert('Erro ao criar pagamento. Tente novamente.')
-      }
-    } catch (error) {
-      console.error('Erro:', error)
-      alert('Erro ao processar. Tente novamente.')
+  const handleAssinarCartao = async () => {
+    setProcessando(true)
+    try {
+      const response = await fetch('/api/pagamento/assinatura', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userEmail }),
+      })
+      const data = await response.json()
+      if (data.init_point) window.location.href = data.init_point
+      else alert('Erro ao criar assinatura.')
+    } catch {
+      alert('Erro ao processar.')
     } finally {
       setProcessando(false)
     }
@@ -160,23 +171,31 @@ function AssinarContent() {
             </div>
           </div>
 
-          <button
-            onClick={handlePagar}
-            disabled={processando}
-            className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl text-lg transition-colors"
-          >
-            {processando ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Redirecionando...
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-6 h-6" />
-                Pagar com Mercado Pago
-              </>
-            )}
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={handlePagarPix}
+              disabled={processando}
+              className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
+            >
+              <QrCode className="w-5 h-5" />
+              Pagar com PIX (R$ 79,90/mês)
+            </button>
+            <p className="text-center text-xs text-gray-500">
+              Pagamento único — você renova manualmente todo mês
+            </p>
+
+            <button
+              onClick={handleAssinarCartao}
+              disabled={processando}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
+            >
+              <CreditCard className="w-5 h-5" />
+              Assinar com Cartão (R$ 79,90/mês)
+            </button>
+            <p className="text-center text-xs text-gray-500">
+              Cobrança automática mensal — cancele quando quiser
+            </p>
+          </div>
 
           <div className="text-center space-y-2">
             <p className="text-gray-500 text-sm">

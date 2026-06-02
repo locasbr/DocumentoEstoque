@@ -28,6 +28,7 @@ export default function DashboardLayout({
   const [isLoading, setIsLoading] = useState(true)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
+  const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -63,7 +64,7 @@ export default function DashboardLayout({
         // ── NOVO: Verifica trial/plano ──
         const { data: perfil } = await supabase
           .from('perfis')
-          .select('plano, trial_fim')
+          .select('plano, trial_fim, plano_fim, tipo_pagamento')
           .eq('id', data.session.user.id)
           .single()
 
@@ -100,6 +101,31 @@ export default function DashboardLayout({
               setMostrarBanner(true)
             }
           }
+
+          // Plano ativo mas vencido (PIX que não renovou)
+          if (perfil.plano === 'ativo' && perfil.plano_fim) {
+            const fimPlano = new Date(perfil.plano_fim)
+            if (fimPlano < agora) {
+              // Expirou! Atualiza pra expirado e redireciona
+              await supabase
+                .from('perfis')
+                .update({ plano: 'expirado' })
+                .eq('id', data.session.user.id)
+              router.push('/assinar')
+              return
+            }
+
+            // Calcula dias restantes do plano ativo
+            const diffMs = fimPlano.getTime() - agora.getTime()
+            const diasPlano = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+
+            // Mostra banner nos últimos 5 dias (só pra PIX)
+            if (diasPlano >= 0 && diasPlano <= 5 && perfil.tipo_pagamento === 'pix') {
+              setDiasRestantes(diasPlano)
+              setMostrarBanner(true)
+              setTipoBanner('renovacao')
+            }
+          }
         }
 
         setIsLoading(false)
@@ -119,7 +145,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen">
       {mostrarBanner && diasRestantes !== null && (
-        <TrialBanner diasRestantes={diasRestantes} />
+        <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
       )}
       <Navbar />
       <div className="flex">

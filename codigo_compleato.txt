@@ -72,7 +72,9 @@ export default function RootLayout({
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\page.tsx ===
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Package,
   BarChart3,
@@ -82,39 +84,40 @@ import {
   QrCode,
   CheckCircle,
   ArrowRight,
-  Zap,
+  XCircle,
+  Smartphone,
 } from 'lucide-react'
 
 const FUNCIONALIDADES = [
   {
     icon: Package,
-    titulo: 'Controle de Estoque',
-    desc: 'Cadastre produtos, defina mínimos e acompanhe tudo em tempo real.',
+    titulo: 'Controle de Estoque Completo',
+    desc: 'Cadastre produtos, defina estoques mínimos e saiba exatamente o que tem e o que está faltando.',
   },
   {
     icon: ShoppingCart,
-    titulo: 'PDV Completo',
-    desc: 'Ponto de venda integrado com leitor de código de barras pela câmera.',
+    titulo: 'PDV no Celular',
+    desc: 'Ponto de venda integrado com leitor de código de barras pela câmera. Venda direto do bolso.',
   },
   {
     icon: BarChart3,
-    titulo: 'Relatórios Inteligentes',
-    desc: 'Veja vendas, lucro, margem e movimentação diária com gráficos.',
+    titulo: 'Relatórios que Fazem Sentido',
+    desc: 'Veja vendas, lucro, margem e movimentação com gráficos simples — sem precisar ser contador.',
   },
   {
     icon: AlertCircle,
     titulo: 'Alertas Automáticos',
-    desc: 'Receba avisos quando o estoque estiver baixo ou zerado.',
+    desc: 'Receba avisos antes que o produto acabe. Nunca mais perca uma venda por falta de estoque.',
   },
   {
     icon: Users,
     titulo: 'Equipe & Funcionários',
-    desc: 'Adicione funcionários com acesso limitado ao PDV.',
+    desc: 'Adicione funcionários com acesso limitado ao PDV. Você controla tudo, eles só vendem.',
   },
   {
     icon: QrCode,
     titulo: 'Leitor de Código de Barras',
-    desc: 'Escaneie produtos pela câmera do celular. Sem equipamento extra.',
+    desc: 'Escaneie produtos pela câmera do celular. Sem precisar comprar equipamento extra.',
   },
 ]
 
@@ -131,26 +134,22 @@ const BENEFICIOS = [
 ]
 
 export default function LandingPage() {
+  const [demoAtiva, setDemoAtiva] = useState('dashboard')
+  
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <main className="min-h-screen bg-gray-950 text-white">
 
       {/* ══════════ NAVBAR ══════════ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">📦</span>
-            <span className="text-xl font-bold text-gray-900">EstoqueSystem</span>
-          </Link>
+      <nav className="fixed top-0 w-full z-50 bg-gray-950/80 backdrop-blur-xl border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <span className="text-xl font-bold">📦 EstoqueSystem</span>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition"
-            >
+            <Link href="/login" className="text-sm text-gray-400 hover:text-white transition">
               Entrar
             </Link>
             <Link
               href="/signup"
-              className="px-5 py-2.5 text-sm font-semibold bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+              className="text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition"
             >
               Teste grátis
             </Link>
@@ -159,326 +158,399 @@ export default function LandingPage() {
       </nav>
 
       {/* ══════════ HERO ══════════ */}
-      <section className="pt-32 pb-20 px-4">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-1.5 rounded-full text-sm font-medium">
-            <Zap className="w-4 h-4" />
-            15 dias grátis — sem cartão de crédito
-          </div>
+      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto text-center">
+        <div className="inline-block mb-6 px-4 py-1.5 bg-green-900/30 border border-green-800 rounded-full text-green-400 text-sm font-medium">
+          15 dias grátis — sem cartão de crédito
+        </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
-            Controle seu estoque{' '}
-            <span className="text-green-600">sem complicação</span>
-          </h1>
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+          Você está{' '}
+          <span className="text-red-400">perdendo dinheiro</span> no seu estoque
+          <br className="hidden sm:block" />
+          {' '}e nem sabe
+        </h1>
 
-          <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Sistema completo de estoque, PDV e relatórios feito para{' '}
-            <strong>pequenos mercados, mercearias e comércios</strong>. Funciona
-            no celular e no computador.
-          </p>
+        <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          Controle tudo pelo celular.{' '}
+          <span className="text-white font-medium">Sem planilha, sem caderno, sem erro.</span>{' '}
+          Sistema completo de estoque, PDV e relatórios feito para pequenos mercados, mercearias e comércios.
+        </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link
-              href="/signup"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
-            >
-              Começar grátis agora
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-gray-100 text-gray-700 text-lg font-medium rounded-2xl hover:bg-gray-200 transition"
-            >
-              Já tenho conta
-            </Link>
-          </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+          <Link
+            href="/signup"
+            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition transform hover:scale-105 flex items-center justify-center gap-2"
+          >
+            Testar grátis agora <ArrowRight className="w-5 h-5" />
+          </Link>
+          <Link
+            href="/login"
+            className="w-full sm:w-auto border border-gray-700 hover:border-gray-500 text-gray-300 px-8 py-4 rounded-xl font-medium transition text-center"
+          >
+            Já tenho conta
+          </Link>
+        </div>
 
-          <p className="text-sm text-gray-400 pt-2">
-            ✅ Sem cartão &nbsp;·&nbsp; ✅ Cancele quando quiser &nbsp;·&nbsp; ✅ Suporte via WhatsApp
+        <p className="text-sm text-gray-500">
+          ✅ Sem cartão · ✅ Cancele quando quiser · ✅ Suporte via WhatsApp
+        </p>
+      </section>
+
+      {/* ══════════ PROPOSTA DE VALOR (substitui números fake) ══════════ */}
+      <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 rounded-2xl p-8 sm:p-12 text-center">
+          <Smartphone className="w-12 h-12 text-green-400 mx-auto mb-4" />
+          <h2 className="text-2xl sm:text-3xl font-bold mb-4">
+            Tudo na palma da sua mão
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
+            Saiba exatamente o que está vendendo, o que está faltando e onde você está perdendo dinheiro —{' '}
+            <span className="text-white font-medium">tudo em tempo real, direto no celular.</span>
           </p>
         </div>
       </section>
 
-      {/* ══════════ DEMO VISUAL ══════════ */}
-      <section className="pb-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-4 sm:p-8 shadow-2xl">
-            <div className="bg-gray-950 rounded-2xl p-6 sm:p-10 text-center">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-                {[
-                  { label: 'Produtos', valor: '247', cor: 'text-blue-400' },
-                  { label: 'Vendas Hoje', valor: '38', cor: 'text-green-400' },
-                  { label: 'Alertas', valor: '5', cor: 'text-yellow-400' },
-                  { label: 'Estoque', valor: 'R$ 12.450', cor: 'text-purple-400' },
-                ].map(({ label, valor, cor }) => (
-                  <div key={label} className="space-y-1">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${cor}`}>{valor}</p>
-                  </div>
-                ))}
-              </div>
+      {/* ══════════ DEMONSTRAÇÃO DO SISTEMA ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Veja o sistema funcionando
+        </h2>
+        <p className="text-gray-400 text-center mb-12 text-lg">
+          Simples de usar, poderoso de verdade.
+        </p>
+
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-center mb-8">
+          {[
+            { id: 'dashboard', label: '📊 Dashboard' },
+            { id: 'pdv', label: '🛒 PDV' },
+            { id: 'relatorios', label: '📈 Relatórios' },
+            { id: 'alertas', label: '🔔 Alertas' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setDemoAtiva(id)}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
+                demoAtiva === id
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Screenshot com moldura de browser */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl">
+          {/* Barra do "navegador" — esconde no mobile pequeno */}
+          <div className="hidden sm:flex items-center gap-2 bg-gray-800 px-4 py-3 border-b border-gray-700">
+            <div className="flex gap-1">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div className="flex-1 text-center">
+              <span className="text-xs text-gray-400">estoquesystem.com/dashboard</span>
             </div>
           </div>
+
+          {/* Imagem */}
+          <div className="relative w-full h-auto bg-gray-950">
+            <Image
+              src={`/demo/${demoAtiva}.png`}
+              alt={`Demonstração ${demoAtiva}`}
+              width={800}
+              height={600}
+              className="w-full h-auto"
+              unoptimized
+            />
+          </div>
         </div>
+
+        {/* Legenda */}
+        <p className="text-gray-400 text-center mt-6 text-sm sm:text-base">
+          {demoAtiva === 'dashboard' && '📊 Veja todas as métricas do seu negócio em um só lugar'}
+          {demoAtiva === 'pdv' && '🛒 Venda direto pelo celular com código de barras'}
+          {demoAtiva === 'relatorios' && '📈 Saiba seu lucro real, margem e produtos mais vendidos'}
+          {demoAtiva === 'alertas' && '🔔 Receba avisos automáticos antes do estoque acabar'}
+        </p>
       </section>
 
       {/* ══════════ FUNCIONALIDADES ══════════ */}
-      <section className="py-20 px-4 bg-gray-50" id="funcionalidades">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Tudo que você precisa em um só lugar
-            </h2>
-            <p className="text-gray-600 mt-3 text-lg">
-              Sem planilha, sem caderno, sem complicação.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
-              <div
-                key={titulo}
-                className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center mb-4 group-hover:bg-green-100 transition">
-                  <Icon className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">{titulo}</h3>
-                <p className="text-gray-600 text-sm leading-relaxed">{desc}</p>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Tudo que você precisa em um só lugar
+        </h2>
+        <p className="text-gray-400 text-center mb-14 text-lg">
+          Sem planilha, sem caderno, sem complicação.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
+            <div
+              key={titulo}
+              className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-green-800 transition group"
+            >
+              <div className="w-12 h-12 bg-green-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-900/50 transition">
+                <Icon className="w-6 h-6 text-green-400" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-lg font-bold mb-2">{titulo}</h3>
+              <p className="text-gray-400 leading-relaxed">{desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ══════════ COMO FUNCIONA ══════════ */}
-      <section className="py-20 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">Comece em 2 minutos</h2>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-8">
-            {[
-              { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rápido com email e senha. Sem burocracia.', emoji: '📝' },
-              { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou com a câmera do celular.', emoji: '📦' },
-              { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda.', emoji: '🚀' },
-            ].map(({ passo, titulo, desc, emoji }) => (
-              <div key={passo} className="text-center space-y-3">
-                <span className="text-4xl">{emoji}</span>
-                <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white text-sm font-bold">
-                  {passo}
-                </div>
-                <h3 className="text-lg font-semibold">{titulo}</h3>
-                <p className="text-gray-600 text-sm">{desc}</p>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-14">
+          Comece em 2 minutos
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {[
+            { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rápido com email e senha. Sem burocracia, sem cartão.', emoji: '📝' },
+            { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou escaneie o código de barras com a câmera.', emoji: '📦' },
+            { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatórios e nunca mais perca uma venda por falta de estoque.', emoji: '🚀' },
+          ].map(({ passo, titulo, desc, emoji }) => (
+            <div key={passo} className="text-center">
+              <div className="text-4xl mb-4">{emoji}</div>
+              <div className="inline-flex w-8 h-8 bg-green-600 text-white rounded-full text-sm font-bold items-center justify-center mx-auto mb-3">
+                {passo}
               </div>
-            ))}
+              <h3 className="text-xl font-bold mb-2">{titulo}</h3>
+              <p className="text-gray-400">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ ANTES vs DEPOIS ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-14">
+          A diferença é clara
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* ANTES */}
+          <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-8">
+            <h3 className="text-xl font-bold text-red-400 mb-6 flex items-center gap-2">
+              <XCircle className="w-6 h-6" /> Antes do EstoqueSystem
+            </h3>
+            <ul className="space-y-4">
+              {[
+                'Controle no caderno ou planilha',
+                'Produto vence e você nem percebe',
+                'Não sabe o lucro real do mês',
+                'Funcionário vende e você não vê',
+                'Estoque acaba e você perde venda',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-gray-300">
+                  <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* DEPOIS */}
+          <div className="bg-green-950/30 border border-green-900/50 rounded-2xl p-8">
+            <h3 className="text-xl font-bold text-green-400 mb-6 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6" /> Depois do EstoqueSystem
+            </h3>
+            <ul className="space-y-4">
+              {[
+                'Controle completo no celular',
+                'Alertas automáticos de vencimento',
+                'Relatórios de lucro e margem em tempo real',
+                'Cada venda registrada automaticamente',
+                'Avisos antes do estoque acabar',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* ══════════ QUEM CRIOU ══════════ */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center gap-10">
-            <div className="shrink-0">
-              <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border-4 border-green-500/20 shadow-xl">
-                <img
-                  src="/lucas.jpg"
-                  alt="Lucas Machado - Criador do EstoqueSystem"
-                  className="w-full h-full object-cover"
-                />
-              </div>
+      {/* ══════════ POR QUE FUNCIONA (prova sem mentir) ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">
+          Por que o EstoqueSystem funciona?
+        </h2>
+        <p className="text-gray-400 text-center mb-12 text-lg">
+          Não é mágica — é simplicidade com propósito.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
+          {[
+            'Criado por quem entende de pequenos comércios',
+            'Feito pra funcionar direto no celular',
+            'Pensado para quem não gosta de sistemas complicados',
+            'Tudo em um só lugar: estoque, vendas e relatórios',
+            'Suporte humano direto pelo WhatsApp',
+            'Atualizações constantes sem custo extra',
+          ].map((item) => (
+            <div key={item} className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <span className="text-gray-300">{item}</span>
             </div>
-            <div className="space-y-5 text-center md:text-left">
-              <div>
-                <p className="text-green-600 font-semibold text-sm uppercase tracking-wider mb-2">
-                  Quem está por trás
-                </p>
-                <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
-                  Prazer, Lucas Machado 👋
-                </h2>
-              </div>
-              <div className="text-gray-600 text-lg leading-relaxed space-y-4">
-                <p>
-                  Tenho 20 anos e sou desenvolvedor. Desde cedo, minha paixão é
-                  criar projetos que resolvam problemas reais e que possam gerar
-                  valor de verdade pra quem usa.
-                </p>
-                <p>
-                  O EstoqueSystem nasceu de uma percepção simples: pequenos
-                  comerciantes <strong>não precisam de sistemas caros e
-                  complicados</strong> — precisam de algo que funcione no celular,
-                  que seja fácil de usar e que caiba no bolso.
-                </p>
-                <p>
-                  Eu construí cada tela, cada botão e cada funcionalidade pensando
-                  em quem está atrás do balcão, vendendo e tentando manter o negócio
-                  de pé. Se você é essa pessoa,{' '}
-                  <strong className="text-gray-900">
-                    o EstoqueSystem foi feito pra você.
-                  </strong>
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎯</span>
-                  <div className="text-left">
-                    <p className="font-semibold text-sm text-gray-900">Missão</p>
-                    <p className="text-gray-500 text-xs">
-                      Tornar o controle de estoque acessível pra todo pequeno comércio
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">💬</span>
-                  <div className="text-left">
-                    <p className="font-semibold text-sm text-gray-900">Suporte direto</p>
-                    <p className="text-gray-500 text-xs">
-                      Fale comigo pelo WhatsApp — sem robô, sem fila
-                    </p>
-                  </div>
-                </div>
-              </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ QUEM CRIOU ══════════ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 sm:p-12">
+          <p className="text-green-400 text-sm font-semibold uppercase tracking-wider mb-2">
+            Quem está por trás
+          </p>
+          <h2 className="text-3xl font-bold mb-6">Prazer, Lucas Machado 👋</h2>
+
+          <div className="space-y-4 text-gray-400 leading-relaxed text-lg">
+            <p>
+              Tenho 20 anos e sou desenvolvedor. Criei o EstoqueSystem porque vi de perto pequenos comerciantes{' '}
+              <span className="text-white font-medium">perdendo dinheiro por falta de controle</span> — usando caderno, planilha ou simplesmente confiando na memória.
+            </p>
+            <p>
+              Então resolvi construir algo{' '}
+              <span className="text-white font-medium">simples, direto e que realmente funcionasse no dia a dia</span> de quem está atrás do balcão.
+            </p>
+            <p>
+              Cada tela, cada botão e cada funcionalidade foi pensada para quem não tem tempo de aprender sistemas complicados.{' '}
+              <span className="text-white font-medium">Se você é essa pessoa, o EstoqueSystem foi feito pra você.</span>
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-2xl mb-1">🎯</p>
+              <p className="text-sm font-semibold text-white">Missão</p>
+              <p className="text-sm text-gray-400">Tornar o controle de estoque acessível pra todo pequeno comércio</p>
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-2xl mb-1">💬</p>
+              <p className="text-sm font-semibold text-white">Suporte direto</p>
+              <p className="text-sm text-gray-400">Fale comigo pelo WhatsApp — sem robô, sem fila</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* ══════════ PREÇO ══════════ */}
-<section className="py-20 px-4" id="preco">
-  <div className="max-w-lg mx-auto">
-    <div className="text-center mb-10">
-      <h2 className="text-3xl sm:text-4xl font-bold">Simples e acessível</h2>
-      <p className="text-gray-600 mt-3">Um plano só, com tudo incluso. Sem surpresas.</p>
-    </div>
-
-    <div className="bg-white border-2 border-green-500 rounded-3xl p-8 shadow-xl shadow-green-600/10">
-      <div className="text-center space-y-1 mb-6">
-        <p className="text-sm text-gray-500 uppercase tracking-wider font-medium">
-          Plano Profissional
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto text-center">
+        <h2 className="text-3xl sm:text-4xl font-bold mb-4">Simples e acessível</h2>
+        <p className="text-gray-400 text-lg mb-10">
+          Um plano só, com tudo incluso. Sem surpresas.
         </p>
-        <div className="flex items-baseline justify-center gap-1">
-          <span className="text-sm text-gray-400">R$</span>
-          <span className="text-5xl font-extrabold">79</span>
-          <span className="text-2xl font-bold">,90</span>
-          <span className="text-gray-400 ml-1">/mês</span>
+
+        <div className="bg-gray-900 border-2 border-green-800 rounded-2xl p-8 sm:p-10">
+          <p className="text-green-400 font-semibold text-sm uppercase tracking-wider mb-2">
+            Plano Profissional
+          </p>
+
+          <div className="flex items-baseline justify-center gap-1 mb-1">
+            <span className="text-5xl font-extrabold">R$ 79</span>
+            <span className="text-2xl font-bold text-gray-400">,90</span>
+            <span className="text-gray-500">/mês</span>
+          </div>
+
+          <p className="text-green-400 font-medium mb-2">
+            Menos de R$ 3 por dia para controlar todo seu negócio
+          </p>
+
+          <p className="text-sm text-gray-500 mb-8">
+            15 dias grátis para testar — sem compromisso
+          </p>
+
+          <ul className="text-left space-y-3 mb-8 max-w-sm mx-auto">
+            {BENEFICIOS.map((b) => (
+              <li key={b} className="flex items-center gap-3 text-gray-300">
+                <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          <Link
+            href="/signup"
+            className="block w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold text-lg transition transform hover:scale-105"
+          >
+            Começar teste grátis
+          </Link>
+
+          <p className="text-sm text-gray-500 mt-4">
+            💳 Cartão • 📱 PIX • 🔒 Mercado Pago
+          </p>
+          <p className="text-xs text-gray-600 mt-2">
+            Sem cartão de crédito no teste · Cancele quando quiser
+          </p>
         </div>
-        <p className="text-green-600 font-medium text-sm">
-          15 dias grátis para testar
-        </p>
-      </div>
-
-      <div className="border-t border-gray-100 my-6" />
-
-      <ul className="space-y-3 mb-8">
-        {BENEFICIOS.map((b) => (
-          <li key={b} className="flex items-start gap-3 text-sm">
-            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
-
-            <Link
-          href="/signup"
-          className="block w-full text-center px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition"
-        >
-          Começar teste grátis
-        </Link>
-
-      <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
-        <span>💳 Cartão</span>
-        <span>•</span>
-        <span>📱 PIX</span>
-        <span>•</span>
-        <span>🔒 Mercado Pago</span>
-      </div>
-
-      <p className="text-center text-xs text-gray-400 mt-2">
-        Sem cartão de crédito no teste · Cancele quando quiser
-      </p>
-    </div>
-  </div>
-</section>
+      </section>
 
       {/* ══════════ FAQ ══════════ */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold">Perguntas frequentes</h2>
-          </div>
-          <div className="space-y-4">
-            {[
-              { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
-              { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
-              { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
-              {
-                p: 'Como faço o pagamento?',
-                r: 'O pagamento é feito de forma segura pelo Mercado Pago. Aceitamos PIX e cartão de crédito/débito à vista. Seu acesso é liberado automaticamente após a confirmação.',
-              },
-              { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
-              { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
-            ].map(({ p, r }) => (
-              <details
-                key={p}
-                className="bg-white rounded-xl border border-gray-100 group"
-              >
-                <summary className="px-6 py-4 cursor-pointer font-medium text-gray-900 flex items-center justify-between hover:bg-gray-50 rounded-xl transition">
-                  {p}
-                  <svg
-                    className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform shrink-0 ml-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="px-6 pb-4 text-gray-600 text-sm leading-relaxed">
-                  {r}
-                </div>
-              </details>
-            ))}
-          </div>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto">
+        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-12">
+          Perguntas frequentes
+        </h2>
+
+        <div className="space-y-4">
+          {[
+            { p: 'Preciso instalar alguma coisa?', r: 'Não! O EstoqueSystem funciona direto no navegador, no celular ou computador. É só acessar e usar.' },
+            { p: 'Funciona no celular?', r: 'Sim! O sistema é 100% responsivo. O PDV e o leitor de código de barras funcionam perfeitamente pelo celular.' },
+            { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a todas as funcionalidades. Sem precisar colocar cartão de crédito.' },
+            { p: 'Como faço o pagamento?', r: 'O pagamento é feito de forma segura pelo Mercado Pago. Aceitamos PIX e cartão de crédito/débito à vista. Seu acesso é liberado automaticamente após a confirmação.' },
+            { p: 'Posso adicionar funcionários?', r: 'Sim! Você pode convidar funcionários que terão acesso apenas ao PDV, enquanto você controla tudo pelo dashboard.' },
+            { p: 'Meus dados ficam seguros?', r: 'Sim! Usamos criptografia e servidores seguros. Seus dados são só seus.' },
+          ].map(({ p, r }) => (
+            <details key={p} className="bg-gray-900 border border-gray-800 rounded-xl group">
+              <summary className="flex items-center justify-between p-5 cursor-pointer font-semibold hover:text-green-400 transition">
+                {p}
+              </summary>
+              <div className="px-5 pb-5 text-gray-400 leading-relaxed">
+                {r}
+              </div>
+            </details>
+          ))}
         </div>
       </section>
 
       {/* ══════════ CTA FINAL ══════════ */}
-      <section className="py-20 px-4">
-        <div className="max-w-3xl mx-auto text-center space-y-6">
-          <h2 className="text-3xl sm:text-4xl font-bold">
-            Chega de perder dinheiro com estoque descontrolado
-          </h2>
-          <p className="text-gray-600 text-lg">
-            Comece agora, é grátis por 15 dias. Sem compromisso.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-600/20"
-          >
-            Criar minha conta grátis
-            <ArrowRight className="w-5 h-5" />
-          </Link>
-        </div>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto text-center">
+        <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          Quanto dinheiro você já perdeu por falta de controle?
+        </h2>
+        <p className="text-gray-400 text-lg mb-8">
+          Comece agora e veja a diferença em poucos dias. É grátis por 15 dias, sem compromisso.
+        </p>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition transform hover:scale-105"
+        >
+          Quero organizar meu estoque <ArrowRight className="w-5 h-5" />
+        </Link>
       </section>
 
       {/* ══════════ FOOTER ══════════ */}
-      <footer className="border-t border-gray-100 py-8 px-4">
-  <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-    <div className="flex items-center gap-2">
-      <span>📦</span>
-      <span className="font-semibold text-gray-700">EstoqueSystem</span>
-    </div>
-    <p>© {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.</p>
-    <div className="flex gap-4">
-      <Link href="/login" className="hover:text-gray-700 transition">Entrar</Link>
-      <Link href="/signup" className="hover:text-gray-700 transition">Criar conta</Link>
-      <Link href="/termos" className="hover:text-gray-700 transition">Termos</Link>
-      <Link href="/privacidade" className="hover:text-gray-700 transition">Privacidade</Link>
-    </div>
-  </div>
-</footer>
-    </div>
+      <footer className="border-t border-gray-800 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-gray-500">📦 EstoqueSystem</p>
+          <p className="text-sm text-gray-600">
+            © {new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.
+          </p>
+          <div className="flex gap-4 text-sm text-gray-500">
+            <Link href="/login" className="hover:text-white transition">Entrar</Link>
+            <Link href="/signup" className="hover:text-white transition">Criar conta</Link>
+            <Link href="/termos" className="hover:text-white transition">Termos</Link>
+            <Link href="/privacidade" className="hover:text-white transition">Privacidade</Link>
+          </div>
+        </div>
+      </footer>
+    </main>
   )
 }
 
@@ -929,15 +1001,19 @@ function DashboardContent() {
           setProdutosCriticos(criticos)
         }
 
-        // ── Movimentos de hoje ──
+                // ── Movimentos de hoje ──
         const hoje = new Date()
         hoje.setHours(0, 0, 0, 0)
-        const { data: movimentos } = await supabase
+
+        const { data: movimentos, error: movError } = await supabase
           .from('movimentos_estoque')
-          .select('*, produto(*)')
+          .select('*, produto:produto_id(*)')
           .gte('criado_em', hoje.toISOString())
           .order('criado_em', { ascending: false })
           .limit(100)
+
+        if (movError) console.error('Erro movimentos:', movError)
+
         if (movimentos) {
           setStats((prev) => ({ ...prev, totalMovimentos: movimentos.length }))
           setMovimentosHoje(movimentos)
@@ -1458,9 +1534,7 @@ type FiltroPlano = 'todos' | 'trial' | 'ativo' | 'expirado'
 // ╔══════════════════════════════════════════════════╗
 // ║  COLOQUE AQUI O SEU EMAIL DE ADMIN              ║
 // ╚══════════════════════════════════════════════════╝
-const ADMIN_EMAILS = [
-  'locasbr@gmail.com',
-]
+
 
 export default function AdminPage() {
   const { isLoading: loadingMembro } = useMembro()
@@ -1478,16 +1552,22 @@ export default function AdminPage() {
   const [detalhes, setDetalhes] = useState<Record<string, DetalhesUsuario>>({})
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false)
 
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        const email = data.session.user.email ?? ''
-        setIsAdmin(ADMIN_EMAILS.includes(email))
-      }
+ // ✅ COLOCA NO LUGAR:
+useEffect(() => {
+  const checkAdmin = async () => {
+    const { data } = await supabase.auth.getSession()
+    if (data.session) {
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('is_admin')
+        .eq('id', data.session.user.id)
+        .single()
+
+      setIsAdmin(perfil?.is_admin === true)
     }
-    checkAdmin()
-  }, [])
+  }
+  checkAdmin()
+}, [])
 
   const fetchPerfis = useCallback(async () => {
     setLoading(true)
@@ -2451,7 +2531,7 @@ export default function AlertasPage() {
     try {
       const { data, error } = await supabase
         .from('alertas')
-        .select('*, produtos(*)')
+        .select('*, produto:produto_id(*)')
         .order('criado_em', { ascending: false })
 
       if (!error && data) {
@@ -4424,9 +4504,9 @@ export default function NovoMovimentoPage() {
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\pdv\page.tsx ===
-'use client'
+"use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { getProductImageUrl } from '@/lib/image-utils'
@@ -4437,7 +4517,18 @@ import BarcodeScanner from '@/components/barcode-scanner'
 import { buscarProdutoPorBarcode } from '@/lib/barcode-api'
 import { useCupom } from '@/hooks/useCupom'
 import { useNotification } from '@/contexts/NotificationContext'
-import { X, Plus, Minus, ShoppingCart, Check, CreditCard, Banknote, QrCode, Camera } from 'lucide-react'
+import {
+  X,
+  Plus,
+  Minus,
+  ShoppingCart,
+  Check,
+  CreditCard,
+  Banknote,
+  QrCode,
+  Camera,
+  Usb,
+} from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 interface ItemCarrinho {
@@ -4449,8 +4540,8 @@ interface ItemCarrinho {
 const FORMAS_PAGAMENTO = [
   { label: 'Dinheiro', icon: Banknote, value: 'Dinheiro' },
   { label: 'Pix', icon: QrCode, value: 'Pix' },
-  { label: 'Débito', icon: CreditCard, value: 'Cartão Débito' },
-  { label: 'Crédito', icon: CreditCard, value: 'Cartão Crédito' },
+  { label: 'D\u00e9bito', icon: CreditCard, value: 'Cart\u00e3o D\u00e9bito' },
+  { label: 'Cr\u00e9dito', icon: CreditCard, value: 'Cart\u00e3o Cr\u00e9dito' },
 ]
 
 export default function PDVPage() {
@@ -4467,15 +4558,23 @@ export default function PDVPage() {
   const [valorRecebido, setValorRecebido] = useState('')
   const [desconto, setDesconto] = useState('')
 
-  // Scanner e cadastro rápido
+  // Scanner e cadastro r\u00e1pido
   const [scannerAberto, setScannerAberto] = useState(false)
   const [modalCadastroRapido, setModalCadastroRapido] = useState(false)
   const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
   const [skuParaCadastro, setSkuParaCadastro] = useState('')
 
+  // USB Scanner (leitor pistola)
+  const [usbDetectado, setUsbDetectado] = useState(false)
+  const usbBufferRef = useRef('')
+  const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  FETCH PRODUTOS
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   useEffect(() => {
     fetchProdutos()
   }, [])
@@ -4497,66 +4596,192 @@ export default function PDVPage() {
     }
   }
 
-  const adicionarAoCarrinho = (produto: Produto) => {
-    const itemExistente = carrinho.find((i) => i.produto_id === produto.id)
-    if (itemExistente) {
-      const qtdAtual = carrinho.find((i) => i.produto_id === produto.id)?.quantidade || 0
-      if (qtdAtual < produto.quantidade_atual) {
-        setCarrinho(carrinho.map((i) =>
-          i.produto_id === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i
-        ))
-        addNotification(`➕ ${produto.nome}`, 'info', 800)
-      } else {
-        addNotification(`❌ Estoque insuficiente`, 'warning')
-      }
-    } else {
-      setCarrinho([...carrinho, { produto_id: produto.id, quantidade: 1, preco_unitario: produto.preco_venda }])
-      addNotification(`✅ ${produto.nome}`, 'success', 800)
-    }
-  }
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  CARRINHO
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  const adicionarAoCarrinho = useCallback(
+    (produto: Produto) => {
+      setCarrinho((prev) => {
+        const itemExistente = prev.find((i) => i.produto_id === produto.id)
+        if (itemExistente) {
+          if (itemExistente.quantidade < produto.quantidade_atual) {
+            addNotification(`\u27a1\ufe0f ${produto.nome}`, 'info', 800)
+            return prev.map((i) =>
+              i.produto_id === produto.id
+                ? { ...i, quantidade: i.quantidade + 1 }
+                : i
+            )
+          } else {
+            addNotification(`\u274c Estoque insuficiente`, 'warning')
+            return prev
+          }
+        } else {
+          addNotification(`\u2705 ${produto.nome}`, 'success', 800)
+          return [
+            ...prev,
+            {
+              produto_id: produto.id,
+              quantidade: 1,
+              preco_unitario: produto.preco_venda,
+            },
+          ]
+        }
+      })
+    },
+    [addNotification]
+  )
 
   const removerDoCarrinho = (produto_id: string) => {
     setCarrinho(carrinho.filter((i) => i.produto_id !== produto_id))
   }
 
   const atualizarQuantidade = (produto_id: string, nova: number) => {
-    if (nova <= 0) { removerDoCarrinho(produto_id); return }
-    const produto = produtos.find((p) => p.id === produto_id)
-    if (produto && nova <= produto.quantidade_atual) {
-      setCarrinho(carrinho.map((i) => i.produto_id === produto_id ? { ...i, quantidade: nova } : i))
-    }
-  }
-
-  const handleCodigoBarrasLido = async (codigoBarras: string) => {
-    // 1. Busca no banco local
-    const produtoLocal = produtos.find(p => p.sku === codigoBarras)
-    if (produtoLocal) {
-      adicionarAoCarrinho(produtoLocal)
-      addNotification(`✅ ${produtoLocal.nome} adicionado`, 'success', 2000)
+    if (nova <= 0) {
+      removerDoCarrinho(produto_id)
       return
     }
-
-    // 2. Não achou local: consulta APIs externas
-    addNotification(`🔍 Buscando ${codigoBarras}...`, 'info', 2000)
-    const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
-
-    if (resultadoAPI.encontrado) {
-      setSkuParaCadastro(codigoBarras)
-      setDadosProdutoAPI(resultadoAPI)
-      setModalCadastroRapido(true)
-    } else {
-      addNotification(`❌ Produto ${codigoBarras} não encontrado. Cadastre manualmente.`, 'warning', 5000)
+    const produto = produtos.find((p) => p.id === produto_id)
+    if (produto && nova <= produto.quantidade_atual) {
+      setCarrinho(
+        carrinho.map((i) =>
+          i.produto_id === produto_id ? { ...i, quantidade: nova } : i
+        )
+      )
     }
   }
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  C\u00d3DIGO DE BARRAS (c\u00e2mera + USB)
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  const handleCodigoBarrasLido = useCallback(
+    async (codigoBarras: string) => {
+      // 1. Busca no banco local
+      const produtoLocal = produtos.find((p) => p.sku === codigoBarras)
+      if (produtoLocal) {
+        adicionarAoCarrinho(produtoLocal)
+        addNotification(
+          `\u2705 ${produtoLocal.nome} adicionado`,
+          'success',
+          2000
+        )
+        return
+      }
+
+      // 2. N\u00e3o achou local: consulta APIs externas
+      addNotification(`\ud83d\udd0d Buscando ${codigoBarras}...`, 'info', 2000)
+      const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
+
+      if (resultadoAPI.encontrado) {
+        setSkuParaCadastro(codigoBarras)
+        setDadosProdutoAPI(resultadoAPI)
+        setModalCadastroRapido(true)
+      } else {
+        addNotification(
+          `\u274c Produto ${codigoBarras} n\u00e3o encontrado. Cadastre manualmente.`,
+          'warning',
+          5000
+        )
+      }
+    },
+    [produtos, adicionarAoCarrinho, addNotification]
+  )
+
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  LEITOR USB DE C\u00d3DIGO DE BARRAS (pistola)
+  //
+  //  Leitores USB funcionam como teclado:
+  //  - Digitam caracteres muito r\u00e1pido (<50ms entre teclas)
+  //  - Pressionam Enter no final
+  //
+  //  Estrat\u00e9gia:
+  //  - Acumula caracteres digitados em <100ms
+  //  - Se Enter + buffer >= 8 chars \u2192 \u00e9 barcode
+  //  - Ignora quando INPUT/TEXTAREA est\u00e1 focado
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignora se algum input/textarea est\u00e1 focado (usu\u00e1rio digitando)
+      const activeTag = document.activeElement?.tagName?.toUpperCase()
+      if (
+        activeTag === 'INPUT' ||
+        activeTag === 'TEXTAREA' ||
+        activeTag === 'SELECT'
+      ) {
+        return
+      }
+
+      // Ignora teclas modificadoras
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      // Enter com buffer suficiente = c\u00f3digo de barras!
+      if (e.key === 'Enter') {
+        const code = usbBufferRef.current.trim()
+        if (code.length >= 8) {
+          e.preventDefault()
+          e.stopPropagation()
+
+          // Feedback visual
+          setUsbDetectado(true)
+          setTimeout(() => setUsbDetectado(false), 2000)
+
+          // Vibra\u00e7\u00e3o (se dispon\u00edvel)
+          if (navigator.vibrate) navigator.vibrate(200)
+
+          // Processa o c\u00f3digo
+          handleCodigoBarrasLido(code)
+        }
+        usbBufferRef.current = ''
+        return
+      }
+
+      // S\u00f3 aceita caracteres imprim\u00edveis de 1 char
+      if (e.key.length !== 1) {
+        usbBufferRef.current = ''
+        return
+      }
+
+      // Acumula no buffer
+      usbBufferRef.current += e.key
+
+      // Limpa buffer se demorar (digita\u00e7\u00e3o humana \u00e9 lenta)
+      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
+      usbTimeoutRef.current = setTimeout(() => {
+        usbBufferRef.current = ''
+      }, 100) // Leitores USB digitam em <50ms entre teclas
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
+    }
+  }, [handleCodigoBarrasLido])
+
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  CADASTRO R\u00c1PIDO
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   const salvarProdutoRapido = async () => {
-    const nomeInput = document.getElementById('cadastroNome') as HTMLInputElement
-    const marcaInput = document.getElementById('cadastroMarca') as HTMLInputElement
-    const descricaoInput = document.getElementById('cadastroDescricao') as HTMLTextAreaElement
-    const categoriaInput = document.getElementById('cadastroCategoria') as HTMLInputElement
-    const precoInput = document.getElementById('cadastroPreco') as HTMLInputElement
-    const quantidadeInput = document.getElementById('cadastroQuantidade') as HTMLInputElement
-    const imagemInput = document.getElementById('cadastroImagem') as HTMLInputElement
+    const nomeInput = document.getElementById(
+      'cadastroNome'
+    ) as HTMLInputElement
+    const marcaInput = document.getElementById(
+      'cadastroMarca'
+    ) as HTMLInputElement
+    const descricaoInput = document.getElementById(
+      'cadastroDescricao'
+    ) as HTMLTextAreaElement
+    const categoriaInput = document.getElementById(
+      'cadastroCategoria'
+    ) as HTMLInputElement
+    const precoInput = document.getElementById(
+      'cadastroPreco'
+    ) as HTMLInputElement
+    const quantidadeInput = document.getElementById(
+      'cadastroQuantidade'
+    ) as HTMLInputElement
+    const imagemInput = document.getElementById(
+      'cadastroImagem'
+    ) as HTMLInputElement
 
     const nome = nomeInput?.value.trim()
     const marca = marcaInput?.value.trim()
@@ -4567,13 +4792,13 @@ export default function PDVPage() {
     const imagem = imagemInput?.value || dadosProdutoAPI?.imagem_url || ''
 
     if (!nome || isNaN(preco) || preco <= 0) {
-      addNotification('Nome e preço são obrigatórios', 'error')
+      addNotification('Nome e pre\u00e7o s\u00e3o obrigat\u00f3rios', 'error')
       return
     }
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Usuário não autenticado')
+      if (!userData.user) throw new Error('Usu\u00e1rio n\u00e3o autenticado')
 
       const { error: insertError } = await supabase.from('produtos').insert({
         sku: skuParaCadastro,
@@ -4592,26 +4817,49 @@ export default function PDVPage() {
 
       if (insertError) throw insertError
 
-      addNotification(`✅ Produto "${nome}" cadastrado com sucesso!`, 'success')
+      addNotification(
+        `\u2705 Produto "${nome}" cadastrado com sucesso!`,
+        'success'
+      )
       setModalCadastroRapido(false)
       await fetchProdutos()
-      // Tenta adicionar ao carrinho após cadastro
-      const novoProduto = { id: 'temp', sku: skuParaCadastro, nome, preco_venda: preco, quantidade_atual: quantidade } as Produto
+
+      const novoProduto = {
+        id: 'temp',
+        sku: skuParaCadastro,
+        nome,
+        preco_venda: preco,
+        quantidade_atual: quantidade,
+      } as Produto
       adicionarAoCarrinho(novoProduto)
     } catch (err: any) {
       addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
     }
   }
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  C\u00c1LCULOS
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0)
-  const subtotal   = carrinho.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0)
+  const subtotal = carrinho.reduce(
+    (acc, i) => acc + i.quantidade * i.preco_unitario,
+    0
+  )
   const descontoVal = parseFloat(desconto) || 0
-  const totalPagar  = Math.max(0, subtotal - descontoVal)
-  const trocoVal    = formaPagamento === 'Dinheiro' && parseFloat(valorRecebido) > totalPagar
-    ? parseFloat(valorRecebido) - totalPagar : 0
+  const totalPagar = Math.max(0, subtotal - descontoVal)
+  const trocoVal =
+    formaPagamento === 'Dinheiro' && parseFloat(valorRecebido) > totalPagar
+      ? parseFloat(valorRecebido) - totalPagar
+      : 0
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  PAGAMENTO
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   const abrirPagamento = () => {
-    if (carrinho.length === 0) { addNotification('Carrinho vazio', 'warning'); return }
+    if (carrinho.length === 0) {
+      addNotification('Carrinho vazio', 'warning')
+      return
+    }
     setValorRecebido(totalPagar.toFixed(2))
     setModalPagamento(true)
   }
@@ -4622,31 +4870,49 @@ export default function PDVPage() {
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) { setError('Usuário não autenticado'); return }
+      if (!userData.user) {
+        setError('Usu\u00e1rio n\u00e3o autenticado')
+        return
+      }
 
       for (const item of carrinho) {
         const produto = produtos.find((p) => p.id === item.produto_id)
         if (!produto) continue
 
-        const { error: movErr } = await supabase.from('movimentos_estoque').insert([{
-          produto_id: item.produto_id,
-          tipo_movimento: 'saida',
-          quantidade: item.quantidade,
-          motivo: `PDV - ${formaPagamento} - ${formatarMoeda(item.quantidade * item.preco_unitario)}`,
-          usuario_id: userData.user.id,
-        }])
-        if (movErr) { setError(`Erro ao registrar ${produto.nome}`); return }
+        const { error: movErr } = await supabase
+          .from('movimentos_estoque')
+          .insert([
+            {
+              produto_id: item.produto_id,
+              tipo_movimento: 'saida',
+              quantidade: item.quantidade,
+              motivo: `PDV - ${formaPagamento} - ${formatarMoeda(
+                item.quantidade * item.preco_unitario
+              )}`,
+              usuario_id: userData.user.id,
+            },
+          ])
+        if (movErr) {
+          setError(`Erro ao registrar ${produto.nome}`)
+          return
+        }
 
         const novaQtd = produto.quantidade_atual - item.quantidade
-        await supabase.from('produtos').update({ quantidade_atual: novaQtd }).eq('id', item.produto_id)
+        await supabase
+          .from('produtos')
+          .update({ quantidade_atual: novaQtd })
+          .eq('id', item.produto_id)
 
         if (novaQtd < produto.quantidade_minima) {
-          await supabase.from('alertas').insert([{
-            produto_id: item.produto_id,
-            usuario_id: userData.user.id,
-            tipo_alerta: novaQtd <= 0 ? 'estoque_critico' : 'estoque_baixo',
-            visualizado: false,
-          }])
+          await supabase.from('alertas').insert([
+            {
+              produto_id: item.produto_id,
+              usuario_id: userData.user.id,
+              tipo_alerta:
+                novaQtd <= 0 ? 'estoque_critico' : 'estoque_baixo',
+              visualizado: false,
+            },
+          ])
         }
       }
 
@@ -4666,7 +4932,11 @@ export default function PDVPage() {
         valor_recebido: parseFloat(valorRecebido) || undefined,
       })
 
-      addNotification(`💰 Venda: ${formatarMoeda(totalPagar)}`, 'success', 4000)
+      addNotification(
+        `\ud83d\udcb0 Venda: ${formatarMoeda(totalPagar)}`,
+        'success',
+        4000
+      )
       setCarrinho([])
       setDesconto('')
       setValorRecebido('')
@@ -4680,33 +4950,63 @@ export default function PDVPage() {
     }
   }
 
-  const produtosFiltrados = produtos.filter((p) =>
-    p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
-    p.sku.toLowerCase().includes(filtro.toLowerCase()) ||
-    p.categoria?.toLowerCase().includes(filtro.toLowerCase())
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  FILTRO
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  const produtosFiltrados = produtos.filter(
+    (p) =>
+      p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
+      p.sku.toLowerCase().includes(filtro.toLowerCase()) ||
+      p.categoria?.toLowerCase().includes(filtro.toLowerCase())
   )
 
-  if (loading) return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Carregando...</div>
+  if (loading)
+    return (
+      <div className="text-center py-8 text-gray-600 dark:text-gray-400">
+        Carregando...
+      </div>
+    )
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  COMPONENTES INTERNOS
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   const ProdutoCard = ({ produto }: { produto: Produto }) => {
     const item = carrinho.find((i) => i.produto_id === produto.id)
     return (
       <button
         onClick={() => adicionarAoCarrinho(produto)}
         className={`p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
-          item ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+          item
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
         }`}
       >
         <div className="w-full h-20 mb-2 rounded overflow-hidden bg-gray-100 dark:bg-gray-700">
-          <Image src={getProductImageUrl(produto.imagem_url)} alt={produto.nome}
-            width={200} height={80} className="w-full h-full object-cover" unoptimized />
+          <Image
+            src={getProductImageUrl(produto.imagem_url)}
+            alt={produto.nome}
+            width={200}
+            height={80}
+            className="w-full h-full object-cover"
+            unoptimized
+          />
         </div>
-        <p className="font-semibold text-xs line-clamp-2 flex-1">{produto.nome}</p>
+        <p className="font-semibold text-xs line-clamp-2 flex-1">
+          {produto.nome}
+        </p>
         <div className="flex justify-between items-center mt-2">
-          <p className="text-sm font-bold text-green-600 dark:text-green-400">{formatarMoeda(produto.preco_venda)}</p>
-          {item && <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">{item.quantidade}</span>}
+          <p className="text-sm font-bold text-green-600 dark:text-green-400">
+            {formatarMoeda(produto.preco_venda)}
+          </p>
+          {item && (
+            <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+              {item.quantidade}
+            </span>
+          )}
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">{produto.quantidade_atual} em estoque</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {produto.quantidade_atual} em estoque
+        </p>
       </button>
     )
   }
@@ -4716,215 +5016,474 @@ export default function PDVPage() {
     return (
       <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
         <div className="flex justify-between items-start mb-2">
-          <p className="font-medium text-sm flex-1 truncate pr-2">{produto?.nome}</p>
-          <button onClick={() => removerDoCarrinho(item.produto_id)}
-            className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded p-0.5">
+          <p className="font-medium text-sm flex-1 truncate pr-2">
+            {produto?.nome}
+          </p>
+          <button
+            onClick={() => removerDoCarrinho(item.produto_id)}
+            className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded p-0.5"
+          >
             <X size={15} />
           </button>
         </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade - 1)}
-              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600">
+            <button
+              onClick={() =>
+                atualizarQuantidade(item.produto_id, item.quantidade - 1)
+              }
+              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+            >
               <Minus size={12} />
             </button>
-            <span className="w-8 text-center text-sm font-bold">{item.quantidade}</span>
-            <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade + 1)}
-              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600">
+            <span className="w-8 text-center text-sm font-bold">
+              {item.quantidade}
+            </span>
+            <button
+              onClick={() =>
+                atualizarQuantidade(item.produto_id, item.quantidade + 1)
+              }
+              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+            >
               <Plus size={12} />
             </button>
           </div>
-          <p className="font-bold text-sm">{formatarMoeda(item.quantidade * item.preco_unitario)}</p>
+          <p className="font-bold text-sm">
+            {formatarMoeda(item.quantidade * item.preco_unitario)}
+          </p>
         </div>
       </div>
     )
   }
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  RENDER
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-40 md:pb-0">
+      {/* \u2500\u2500 INDICADOR USB SCANNER \u2500\u2500 */}
+      {usbDetectado && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-green-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold">
+            <Usb size={16} />
+            C\u00f3digo lido via leitor USB!
+          </div>
+        </div>
+      )}
 
-      {/* DESKTOP */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 DESKTOP \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       <div className="hidden md:grid lg:grid-cols-3 gap-6 p-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">PDV</h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ponto de Venda</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">
+                PDV
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+                Ponto de Venda
+                <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                  • Leitor USB ativo
+                </span>
+              </p>
             </div>
             <button
               onClick={() => setScannerAberto(true)}
               className="btn-primary flex items-center gap-2 px-4"
             >
-              <Camera size={18} /> <span>Ler código</span>
+              <Camera size={18} /> <span>Ler codigo</span>
             </button>
           </div>
+
           {error && <Alert message={error} type="error" />}
-          <input type="text" placeholder="Buscar produto, SKU ou categoria..."
-            value={filtro} onChange={(e) => setFiltro(e.target.value)}
-            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" autoFocus />
+
+          <input
+            type="text"
+            placeholder="Buscar produto, SKU ou categoria..."
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+            autoFocus
+          />
+
           <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
-            {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
+            {produtosFiltrados.map((p) => (
+              <ProdutoCard key={p.id} produto={p} />
+            ))}
           </div>
         </div>
 
+        {/* \u2500\u2500 CARRINHO DESKTOP \u2500\u2500 */}
         <div className="card dark:bg-gray-900 dark:border-gray-800 flex flex-col h-fit sticky top-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b dark:border-gray-700">
-            <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart size={20} />Carrinho</h2>
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <ShoppingCart size={20} />
+              Carrinho
+            </h2>
             {carrinho.length > 0 && (
-              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-0.5">{totalItens} un</span>
+              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                {totalItens} un
+              </span>
             )}
           </div>
+
           <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
-            {carrinho.length === 0
-              ? <p className="text-gray-400 text-sm text-center py-8">Carrinho vazio</p>
-              : carrinho.map((i) => <ItemCarrinhoCard key={i.produto_id} item={i} />)}
+            {carrinho.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-8">
+                Carrinho vazio
+              </p>
+            ) : (
+              carrinho.map((i) => (
+                <ItemCarrinhoCard key={i.produto_id} item={i} />
+              ))
+            )}
           </div>
+
           {carrinho.length > 0 && (
             <>
               <div className="mb-3">
-                <label className="text-xs text-gray-500 mb-1 block">Desconto (R$)</label>
-                <input type="number" min="0" step="0.01" placeholder="0,00"
-                  value={desconto} onChange={(e) => setDesconto(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm" />
+                <label className="text-xs text-gray-500 mb-1 block">
+                  Desconto (R$)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={desconto}
+                  onChange={(e) => setDesconto(e.target.value)}
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
+                />
               </div>
+
               <div className="border-t dark:border-gray-700 pt-3 space-y-1 mb-4 text-sm">
-                <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatarMoeda(subtotal)}</span></div>
-                {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{formatarMoeda(subtotal)}</span>
+                </div>
+                {descontoVal > 0 && (
+                  <div className="flex justify-between text-red-500">
+                    <span>Desconto</span>
+                    <span>-{formatarMoeda(descontoVal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 pt-1">
-                  <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
+                  <span>Total</span>
+                  <span>{formatarMoeda(totalPagar)}</span>
                 </div>
               </div>
-              <button onClick={abrirPagamento} className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2">
-                <Check size={18} />Finalizar Venda
+
+              <button
+                onClick={abrirPagamento}
+                className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2"
+              >
+                <Check size={18} />
+                Finalizar Venda
               </button>
-              <button onClick={() => setCarrinho([])} className="btn-secondary w-full py-2 text-sm">Limpar carrinho</button>
+              <button
+                onClick={() => setCarrinho([])}
+                className="btn-secondary w-full py-2 text-sm"
+              >
+                Limpar carrinho
+              </button>
             </>
           )}
         </div>
       </div>
 
-      {/* MOBILE */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MOBILE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       <div className="md:hidden space-y-3 p-3">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
-          <button onClick={() => setScannerAberto(true)} className="btn-primary px-3 py-2">
+          <div>
+            <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+              Ponto de Venda
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                • Leitor USB ativo
+              </span>
+            </p>
+          </div>
+          <button
+            onClick={() => setScannerAberto(true)}
+            className="btn-primary px-3 py-2"
+          >
             <Camera size={18} />
           </button>
         </div>
+
         {error && <Alert message={error} type="error" />}
-        <input type="text" placeholder="Buscar..." value={filtro}
+
+        <input
+          type="text"
+          placeholder="Buscar..."
+          value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full" />
+          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+        />
+
         <div className="grid grid-cols-2 gap-2">
-          {produtosFiltrados.map((p) => <ProdutoCard key={p.id} produto={p} />)}
+          {produtosFiltrados.map((p) => (
+            <ProdutoCard key={p.id} produto={p} />
+          ))}
         </div>
       </div>
 
+      {/* \u2500\u2500 BARRA MOBILE INFERIOR \u2500\u2500 */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl p-4 z-40">
           <div className="flex justify-between items-center mb-3">
             <div>
-              <p className="text-xs text-gray-400">{carrinho.length} produto(s) · {totalItens} un</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatarMoeda(totalPagar)}</p>
+              <p className="text-xs text-gray-400">
+                {carrinho.length} produto(s) \u00b7 {totalItens} un
+              </p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {formatarMoeda(totalPagar)}
+              </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setCarrinho([])} className="btn-secondary py-2.5 px-4 text-sm">Limpar</button>
-              <button onClick={abrirPagamento} className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1">
-                <Check size={16} />Vender
+              <button
+                onClick={() => setCarrinho([])}
+                className="btn-secondary py-2.5 px-4 text-sm"
+              >
+                Limpar
+              </button>
+              <button
+                onClick={abrirPagamento}
+                className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1"
+              >
+                <Check size={16} />
+                Vender
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE PAGAMENTO */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MODAL DE PAGAMENTO \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       {modalPagamento && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex justify-between items-center mb-5">
-              <h2 className="text-xl font-bold dark:text-white">Finalizar Venda</h2>
-              <button onClick={() => setModalPagamento(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-xl font-bold dark:text-white">
+                Finalizar Venda
+              </h2>
+              <button
+                onClick={() => setModalPagamento(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X size={22} />
               </button>
             </div>
+
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-5 space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500"><span>{totalItens} item(ns)</span><span>{formatarMoeda(subtotal)}</span></div>
-              {descontoVal > 0 && <div className="flex justify-between text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}
+              <div className="flex justify-between text-gray-500">
+                <span>{totalItens} item(ns)</span>
+                <span>{formatarMoeda(subtotal)}</span>
+              </div>
+              {descontoVal > 0 && (
+                <div className="flex justify-between text-red-500">
+                  <span>Desconto</span>
+                  <span>-{formatarMoeda(descontoVal)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 border-t dark:border-gray-700 pt-2 mt-2">
-                <span>Total</span><span>{formatarMoeda(totalPagar)}</span>
+                <span>Total</span>
+                <span>{formatarMoeda(totalPagar)}</span>
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de pagamento</p>
+
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Forma de pagamento
+            </p>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
-                <button key={value} onClick={() => setFormaPagamento(value)}
+                <button
+                  key={value}
+                  onClick={() => setFormaPagamento(value)}
                   className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
                     formaPagamento === value
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                       : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}>
+                  }`}
+                >
                   <Icon size={20} />
                   {label}
                 </button>
               ))}
             </div>
+
             {formaPagamento === 'Dinheiro' && (
               <div className="mb-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Valor recebido (R$)</label>
-                <input type="number" min={totalPagar} step="0.01"
-                  value={valorRecebido} onChange={(e) => setValorRecebido(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold" />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                  Valor recebido (R$)
+                </label>
+                <input
+                  type="number"
+                  min={totalPagar}
+                  step="0.01"
+                  value={valorRecebido}
+                  onChange={(e) => setValorRecebido(e.target.value)}
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
+                />
                 {trocoVal > 0 && (
                   <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg flex justify-between">
-                    <span className="text-green-700 dark:text-green-400 font-medium">Troco</span>
-                    <span className="text-green-700 dark:text-green-400 font-bold text-lg">{formatarMoeda(trocoVal)}</span>
+                    <span className="text-green-700 dark:text-green-400 font-medium">
+                      Troco
+                    </span>
+                    <span className="text-green-700 dark:text-green-400 font-bold text-lg">
+                      {formatarMoeda(trocoVal)}
+                    </span>
                   </div>
                 )}
               </div>
             )}
-            <button onClick={processarVenda} disabled={processando}
-              className="btn-primary w-full py-3.5 text-base font-bold flex items-center justify-center gap-2">
+
+            <button
+              onClick={processarVenda}
+              disabled={processando}
+              className="btn-primary w-full py-3.5 text-base font-bold flex items-center justify-center gap-2"
+            >
               <Check size={20} />
-              {processando ? 'Processando...' : `Confirmar • ${formatarMoeda(totalPagar)}`}
+              {processando
+                ? 'Processando...'
+                : `Confirmar \u2022 ${formatarMoeda(totalPagar)}`}
             </button>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CADASTRO RÁPIDO */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MODAL DE CADASTRO R\u00c1PIDO \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       {modalCadastroRapido && dadosProdutoAPI && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold dark:text-white">Cadastrar novo produto</h2>
-              <button onClick={() => setModalCadastroRapido(false)} className="text-gray-400">
+              <h2 className="text-xl font-bold dark:text-white">
+                Cadastrar novo produto
+              </h2>
+              <button
+                onClick={() => setModalCadastroRapido(false)}
+                className="text-gray-400"
+              >
                 <X size={22} />
               </button>
             </div>
+
             <p className="text-sm text-gray-500 mb-4">
-              Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
+              Produto encontrado na base externa. Confirme os dados e ajuste o
+              necess\u00e1rio.
             </p>
+
             <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">SKU (código)</label><input type="text" value={skuParaCadastro} disabled className="input-field bg-gray-100 dark:bg-gray-800" /></div>
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input id="cadastroNome" defaultValue={dadosProdutoAPI.nome} className="input-field" /></div>
-              <div><label className="block text-sm font-medium mb-1">Marca</label><input id="cadastroMarca" defaultValue={dadosProdutoAPI.marca} className="input-field" /></div>
-              <div><label className="block text-sm font-medium mb-1">Descrição</label><textarea id="cadastroDescricao" defaultValue={dadosProdutoAPI.descricao} rows={2} className="input-field" /></div>
-              <div><label className="block text-sm font-medium mb-1">Categoria</label><input id="cadastroCategoria" defaultValue={dadosProdutoAPI.categoria} className="input-field" /></div>
-              <div><label className="block text-sm font-medium mb-1">Preço de venda *</label><input id="cadastroPreco" type="number" step="0.01" className="input-field" placeholder="0,00" /></div>
-              <div><label className="block text-sm font-medium mb-1">Quantidade inicial</label><input id="cadastroQuantidade" type="number" defaultValue="0" className="input-field" /></div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  SKU (c\u00f3digo)
+                </label>
+                <input
+                  type="text"
+                  value={skuParaCadastro}
+                  disabled
+                  className="input-field bg-gray-100 dark:bg-gray-800"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Nome *
+                </label>
+                <input
+                  id="cadastroNome"
+                  defaultValue={dadosProdutoAPI.nome}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Marca</label>
+                <input
+                  id="cadastroMarca"
+                  defaultValue={dadosProdutoAPI.marca}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Descri\u00e7\u00e3o
+                </label>
+                <textarea
+                  id="cadastroDescricao"
+                  defaultValue={dadosProdutoAPI.descricao}
+                  rows={2}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Categoria
+                </label>
+                <input
+                  id="cadastroCategoria"
+                  defaultValue={dadosProdutoAPI.categoria}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Pre\u00e7o de venda *
+                </label>
+                <input
+                  id="cadastroPreco"
+                  type="number"
+                  step="0.01"
+                  className="input-field"
+                  placeholder="0,00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Quantidade inicial
+                </label>
+                <input
+                  id="cadastroQuantidade"
+                  type="number"
+                  defaultValue="0"
+                  className="input-field"
+                />
+              </div>
               {dadosProdutoAPI.imagem_url && (
-                <div><label className="block text-sm font-medium mb-1">Imagem</label><img src={dadosProdutoAPI.imagem_url} alt="prévia" className="w-24 h-24 object-cover rounded border" /><input id="cadastroImagem" type="hidden" value={dadosProdutoAPI.imagem_url} /></div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Imagem
+                  </label>
+                  <img
+                    src={dadosProdutoAPI.imagem_url}
+                    alt="pr\u00e9via"
+                    className="w-24 h-24 object-cover rounded border"
+                  />
+                  <input
+                    id="cadastroImagem"
+                    type="hidden"
+                    value={dadosProdutoAPI.imagem_url}
+                  />
+                </div>
               )}
             </div>
+
             <div className="flex gap-3 mt-6">
-              <button onClick={salvarProdutoRapido} className="btn-primary flex-1">Salvar e usar</button>
-              <button onClick={() => setModalCadastroRapido(false)} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={salvarProdutoRapido}
+                className="btn-primary flex-1"
+              >
+                Salvar e usar
+              </button>
+              <button
+                onClick={() => setModalCadastroRapido(false)}
+                className="btn-secondary"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* SCANNER */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 SCANNER \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -4932,13 +5491,14 @@ export default function PDVPage() {
         />
       )}
 
-      {/* CUPOM */}
+      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 CUPOM \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       {cupomAberto && dadosCupom && (
         <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
       )}
     </div>
   )
 }
+
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\perfil\page.tsx ===
@@ -6438,7 +6998,14 @@ export default function EditarProdutoPage() {
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Produto } from '@/lib/types'
-import { TrendingUp, TrendingDown, DollarSign, Download, Wallet } from 'lucide-react'
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Download,
+  Wallet,
+  AlertTriangle,
+} from 'lucide-react'
 import { formatarMoeda, formatarData } from '@/lib/utils'
 import { useNotification } from '@/contexts/NotificationContext'
 import { exportVendasCSV, exportMovimentosDiariosCSV } from '@/lib/export-utils'
@@ -6450,6 +7017,7 @@ interface RelatorioVenda {
   valor_total: number
   custo_total: number
   lucro: number
+  tem_custo: boolean
 }
 
 interface RelatorioMovimento {
@@ -6459,10 +7027,10 @@ interface RelatorioMovimento {
 }
 
 const PERIODOS = [
-  { label: 'Hoje',     value: '1d' },
-  { label: '7 dias',   value: '7d' },
-  { label: '30 dias',  value: '30d' },
-  { label: '90 dias',  value: '90d' },
+  { label: 'Hoje', value: '1d' },
+  { label: '7 dias', value: '7d' },
+  { label: '30 dias', value: '30d' },
+  { label: '90 dias', value: '90d' },
 ]
 
 export default function RelatoriosPage() {
@@ -6478,13 +7046,19 @@ export default function RelatoriosPage() {
     try {
       const hoje = new Date()
       let dataInicio = new Date()
+
       if (filtroData === '1d') dataInicio.setHours(0, 0, 0, 0)
       else if (filtroData === '7d') dataInicio.setDate(hoje.getDate() - 7)
       else if (filtroData === '30d') dataInicio.setDate(hoje.getDate() - 30)
       else if (filtroData === '90d') dataInicio.setDate(hoje.getDate() - 90)
 
       const [movimentosRes, produtosRes] = await Promise.all([
-        supabase.from('movimentos_estoque').select('*').gte('criado_em', dataInicio.toISOString()),
+        supabase
+          .from('movimentos_estoque')
+          .select('*')
+          .gte('criado_em', dataInicio.toISOString())
+          .order('criado_em', { ascending: false })
+          .limit(5000),
         supabase.from('produtos').select('*'),
       ])
 
@@ -6494,12 +7068,15 @@ export default function RelatoriosPage() {
       setProdutos(produtosData)
       setMovimentos(movimentosData)
 
-      // Agrupa vendas por produto — usa produtosData (não o estado)
-      const vendas = movimentosData.filter((m: any) => m.tipo_movimento === 'saida')
+      // Agrupa vendas por produto
+      const vendas = movimentosData.filter(
+        (m: any) => m.tipo_movimento === 'saida'
+      )
       const agrupado: { [key: string]: RelatorioVenda } = {}
 
       for (const venda of vendas) {
         const produto = produtosData.find((p) => p.id === venda.produto_id)
+
         if (!agrupado[venda.produto_id]) {
           agrupado[venda.produto_id] = {
             produto_id: venda.produto_id,
@@ -6508,14 +7085,20 @@ export default function RelatoriosPage() {
             valor_total: 0,
             custo_total: 0,
             lucro: 0,
+            tem_custo: (produto?.preco_custo || 0) > 0,
           }
         }
+
         const precoVenda = produto?.preco_venda || 0
         const precoCusto = produto?.preco_custo || 0
+
         agrupado[venda.produto_id].quantidade_vendida += venda.quantidade
-        agrupado[venda.produto_id].valor_total += venda.quantidade * precoVenda
-        agrupado[venda.produto_id].custo_total += venda.quantidade * precoCusto
-        agrupado[venda.produto_id].lucro += venda.quantidade * (precoVenda - precoCusto)
+        agrupado[venda.produto_id].valor_total +=
+          venda.quantidade * precoVenda
+        agrupado[venda.produto_id].custo_total +=
+          venda.quantidade * precoCusto
+        agrupado[venda.produto_id].lucro +=
+          venda.quantidade * (precoVenda - precoCusto)
       }
 
       setVendasPorProduto(
@@ -6527,7 +7110,7 @@ export default function RelatoriosPage() {
     } finally {
       setLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroData])
 
   useEffect(() => {
@@ -6537,23 +7120,44 @@ export default function RelatoriosPage() {
   // Estatísticas
   const vendas = movimentos.filter((m) => m.tipo_movimento === 'saida')
   const entradas = movimentos.filter((m) => m.tipo_movimento === 'entrada')
+
   const totalVendas = vendas.reduce((acc, v) => acc + v.quantidade, 0)
   const totalEntradas = entradas.reduce((acc, v) => acc + v.quantidade, 0)
-  const valorTotalVendas = vendasPorProduto.reduce((acc, v) => acc + v.valor_total, 0)
+
+  const valorTotalVendas = vendasPorProduto.reduce(
+    (acc, v) => acc + v.valor_total,
+    0
+  )
   const lucroTotal = vendasPorProduto.reduce((acc, v) => acc + v.lucro, 0)
-  const margemMedia = valorTotalVendas > 0 ? (lucroTotal / valorTotalVendas) * 100 : 0
+  const margemMedia =
+    valorTotalVendas > 0 ? (lucroTotal / valorTotalVendas) * 100 : 0
+
+  // Produtos sem preço de custo
+  const produtosSemCusto = vendasPorProduto.filter(
+    (v) => !v.tem_custo && v.quantidade_vendida > 0
+  )
+  const temProdutosSemCusto = produtosSemCusto.length > 0
+
+  // Lucro só dos produtos COM custo cadastrado (pra mostrar valor confiável)
+  const lucroConfiavel = vendasPorProduto
+    .filter((v) => v.tem_custo)
+    .reduce((acc, v) => acc + v.lucro, 0)
 
   // Movimentos por dia
   const movimentosPorDia: { [key: string]: RelatorioMovimento } = {}
   movimentos.forEach((mov: any) => {
     const data = new Date(mov.criado_em).toLocaleDateString('pt-BR')
-    if (!movimentosPorDia[data]) movimentosPorDia[data] = { data, entradas: 0, saidas: 0 }
-    if (mov.tipo_movimento === 'entrada') movimentosPorDia[data].entradas += mov.quantidade
+    if (!movimentosPorDia[data])
+      movimentosPorDia[data] = { data, entradas: 0, saidas: 0 }
+    if (mov.tipo_movimento === 'entrada')
+      movimentosPorDia[data].entradas += mov.quantidade
     else movimentosPorDia[data].saidas += mov.quantidade
   })
-  const movimentosPorDiaArray = Object.values(movimentosPorDia).sort((a, b) =>
-    new Date(a.data.split('/').reverse().join('-')).getTime() -
-    new Date(b.data.split('/').reverse().join('-')).getTime()
+
+  const movimentosPorDiaArray = Object.values(movimentosPorDia).sort(
+    (a, b) =>
+      new Date(a.data.split('/').reverse().join('-')).getTime() -
+      new Date(b.data.split('/').reverse().join('-')).getTime()
   )
 
   // Gráfico de barras simples
@@ -6569,79 +7173,171 @@ export default function RelatoriosPage() {
     addNotification('Movimentos exportados!', 'success', 2000)
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-    </div>
-  )
+  if (loading)
+    return (
+      <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+        Carregando relatórios...
+      </div>
+    )
 
   return (
-    <div className="space-y-6 p-4 md:p-0">
-
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">Relatórios</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Análise de vendas e movimentação</p>
-        </div>
-        {/* Filtro de período */}
-        <div className="flex gap-2 flex-wrap">
-          {PERIODOS.map(({ label, value }) => (
-            <button key={value} onClick={() => setFiltroData(value)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                filtroData === value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">
+          Relatórios
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+          Análise de vendas e movimentação
+        </p>
       </div>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'Itens vendidos',    value: totalVendas,                icon: TrendingDown, color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Itens recebidos',   value: totalEntradas,              icon: TrendingUp,   color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
-          { label: 'Receita total',     value: formatarMoeda(valorTotalVendas), icon: DollarSign,   color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-          { label: `Lucro estimado (${margemMedia.toFixed(0)}%)`, value: formatarMoeda(lucroTotal), icon: Wallet, color: lucroTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className={`${bg} border border-gray-200 dark:border-gray-800 rounded-xl p-4`}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-gray-500 dark:text-gray-400 text-xs mb-1 truncate">{label}</p>
-                <p className={`text-xl md:text-2xl font-bold truncate ${color}`}>{value}</p>
-              </div>
-              <Icon size={20} className={`${color} opacity-40 flex-shrink-0 mt-1`} />
+      {/* Filtro de período */}
+      <div className="flex gap-2 flex-wrap">
+        {PERIODOS.map(({ label, value }) => (
+          <button
+            key={value}
+            onClick={() => setFiltroData(value)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              filtroData === value
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Alerta: produtos sem preço de custo */}
+      {temProdutosSemCusto && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-yellow-800 dark:text-yellow-300 font-medium text-sm">
+              {produtosSemCusto.length} produto(s) sem preço de custo cadastrado
+            </p>
+            <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-1">
+              O lucro desses produtos pode estar incorreto. Cadastre o preço de
+              custo em cada produto para ter relatórios mais precisos.
+            </p>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {produtosSemCusto.slice(0, 5).map((v) => (
+                <span
+                  key={v.produto_id}
+                  className="text-xs bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 px-2 py-0.5 rounded-full"
+                >
+                  {v.produto_nome}
+                </span>
+              ))}
+              {produtosSemCusto.length > 5 && (
+                <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                  +{produtosSemCusto.length - 5} mais
+                </span>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Métricas */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: 'Itens vendidos',
+            value: totalVendas,
+            icon: TrendingDown,
+            color: 'text-blue-600 dark:text-blue-400',
+            bg: 'bg-blue-50 dark:bg-blue-900/20',
+          },
+          {
+            label: 'Itens recebidos',
+            value: totalEntradas,
+            icon: TrendingUp,
+            color: 'text-green-600 dark:text-green-400',
+            bg: 'bg-green-50 dark:bg-green-900/20',
+          },
+          {
+            label: 'Receita total',
+            value: formatarMoeda(valorTotalVendas),
+            icon: DollarSign,
+            color: 'text-purple-600 dark:text-purple-400',
+            bg: 'bg-purple-50 dark:bg-purple-900/20',
+          },
+          {
+            label: temProdutosSemCusto
+              ? 'Lucro estimado* (' + margemMedia.toFixed(0) + '%)'
+              : 'Lucro estimado (' + margemMedia.toFixed(0) + '%)',
+            value: formatarMoeda(lucroTotal),
+            icon: Wallet,
+            color:
+              lucroTotal >= 0
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-red-600',
+            bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+          },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
+          <div
+            key={label}
+            className={bg + ' rounded-xl p-4 border border-transparent'}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Icon className={'w-4 h-4 ' + color} />
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {label}
+              </span>
+            </div>
+            <p className={'text-xl md:text-2xl font-bold ' + color}>{value}</p>
           </div>
         ))}
       </div>
 
+      {/* Nota sobre lucro estimado */}
+      {temProdutosSemCusto && (
+        <p className="text-xs text-gray-400 -mt-3">
+          * O lucro pode estar impreciso porque {produtosSemCusto.length} produto(s) não têm preço de custo cadastrado.
+          Lucro dos produtos com custo: <span className="font-semibold text-emerald-500">{formatarMoeda(lucroConfiavel)}</span>
+        </p>
+      )}
+
       {/* Gráfico top produtos */}
       {vendasPorProduto.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-bold text-gray-900 dark:text-gray-50">Top Produtos</h2>
-            <button onClick={handleExportarVendas} className="btn-secondary text-xs flex items-center gap-1.5">
-              <Download size={14} />Exportar
+        <div className="card dark:bg-gray-900 dark:border-gray-800">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold dark:text-white">
+              Top Produtos
+            </h2>
+            <button
+              onClick={handleExportarVendas}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            >
+              <Download size={14} />
+              Exportar
             </button>
           </div>
+
           <div className="space-y-3">
             {vendasPorProduto.slice(0, 7).map((v) => (
               <div key={v.produto_id}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[60%]">{v.produto_nome}</span>
-                  <div className="text-right flex-shrink-0">
-                    <span className="text-sm font-bold text-green-600 dark:text-green-400">{formatarMoeda(v.valor_total)}</span>
-                    <span className="text-xs text-gray-400 ml-2">({v.quantidade_vendida} un)</span>
-                  </div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                    {v.produto_nome}
+                    {!v.tem_custo && (
+                      <span title="Sem preço de custo">
+                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-medium dark:text-gray-200">
+                    {formatarMoeda(v.valor_total)} ({v.quantidade_vendida} un)
+                  </span>
                 </div>
-                <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-4">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
-                    style={{ width: `${(v.valor_total / maxVenda) * 100}%` }}
+                    className="h-4 bg-green-500 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(v.valor_total / maxVenda) * 100}%`,
+                    }}
                   />
                 </div>
               </div>
@@ -6650,42 +7346,87 @@ export default function RelatoriosPage() {
         </div>
       )}
 
-      {/* Tabela produtos mais vendidos */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-bold text-gray-900 dark:text-gray-50">Detalhamento por produto</h2>
-        </div>
+      {/* Tabela detalhamento */}
+      <div className="card dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-lg font-bold mb-4 dark:text-white">
+          Detalhamento por produto
+        </h2>
+
         {vendasPorProduto.length === 0 ? (
-          <p className="text-gray-400 text-center py-10 text-sm">Nenhuma venda no período</p>
+          <p className="text-gray-400 text-center py-8">
+            Nenhuma venda no período
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  {['Produto', 'Qtd', 'Receita', 'Custo', 'Lucro', 'Margem'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">{h}</th>
+                <tr className="border-b dark:border-gray-700">
+                  {['Produto', 'Qtd', 'Receita', 'Custo', 'Lucro', 'Margem'].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left py-3 px-2 text-gray-500 dark:text-gray-400 font-medium"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody>
                 {vendasPorProduto.map((v) => {
-                  const margem = v.valor_total > 0 ? (v.lucro / v.valor_total) * 100 : 0
+                  const margem =
+                    v.valor_total > 0 ? (v.lucro / v.valor_total) * 100 : 0
                   return (
-                    <tr key={v.produto_id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{v.produto_nome}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{v.quantidade_vendida}</td>
-                      <td className="px-4 py-3 font-semibold text-green-600 dark:text-green-400">{formatarMoeda(v.valor_total)}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{formatarMoeda(v.custo_total)}</td>
-                      <td className={`px-4 py-3 font-semibold ${v.lucro >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600'}`}>
-                        {formatarMoeda(v.lucro)}
+                    <tr
+                      key={v.produto_id}
+                      className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    >
+                      <td className="py-3 px-2 font-medium dark:text-gray-200">
+                        <div className="flex items-center gap-1">
+                          {v.produto_nome}
+                          {!v.tem_custo && (
+                            <span title="Sem preço de custo">
+                              <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          margem >= 30 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                          margem >= 15 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        }`}>
-                          {margem.toFixed(1)}%
+                      <td className="py-3 px-2 dark:text-gray-300">
+                        {v.quantidade_vendida}
+                      </td>
+                      <td className="py-3 px-2 dark:text-gray-300">
+                        {formatarMoeda(v.valor_total)}
+                      </td>
+                      <td className="py-3 px-2 dark:text-gray-300">
+                        {v.tem_custo ? (
+                          formatarMoeda(v.custo_total)
+                        ) : (
+                          <span className="text-yellow-500 text-xs">Não informado</span>
+                        )}
+                      </td>
+                      <td className={'py-3 px-2 font-medium ' + (
+                        v.tem_custo
+                          ? v.lucro >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-red-600'
+                          : 'text-yellow-500'
+                      )}>
+                        {v.tem_custo ? (
+                          formatarMoeda(v.lucro)
+                        ) : (
+                          <span className="text-xs">~{formatarMoeda(v.lucro)}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2">
+                        <span className={'px-2 py-0.5 rounded-full text-xs font-medium ' + (
+                          !v.tem_custo
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                            : margem >= 30
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : margem >= 15
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        )}>
+                          {v.tem_custo ? margem.toFixed(1) + '%' : '~'}
                         </span>
                       </td>
                     </tr>
@@ -6698,35 +7439,61 @@ export default function RelatoriosPage() {
       </div>
 
       {/* Movimentação diária */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-bold text-gray-900 dark:text-gray-50">Movimentação diária</h2>
-          <button onClick={handleExportarMovimentos} className="btn-secondary text-xs flex items-center gap-1.5"
-            disabled={movimentosPorDiaArray.length === 0}>
-            <Download size={14} />Exportar
+      <div className="card dark:bg-gray-900 dark:border-gray-800">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold dark:text-white">
+            Movimentação diária
+          </h2>
+          <button
+            onClick={handleExportarMovimentos}
+            className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+          >
+            <Download size={14} />
+            Exportar
           </button>
         </div>
+
         {movimentosPorDiaArray.length === 0 ? (
-          <p className="text-gray-400 text-center py-10 text-sm">Sem movimentos no período</p>
+          <p className="text-gray-400 text-center py-8">
+            Sem movimentos no período
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  {['Data', 'Entradas', 'Saídas', 'Saldo'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">{h}</th>
+                <tr className="border-b dark:border-gray-700">
+                  {['Data', 'Entradas', 'Saídas', 'Saldo'].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left py-3 px-2 text-gray-500 dark:text-gray-400 font-medium"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody>
                 {movimentosPorDiaArray.map((mov) => {
                   const saldo = mov.entradas - mov.saidas
                   return (
-                    <tr key={mov.data} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{mov.data}</td>
-                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">+{mov.entradas}</td>
-                      <td className="px-4 py-3 text-red-600 dark:text-red-400 font-semibold">-{mov.saidas}</td>
-                      <td className={`px-4 py-3 font-bold ${saldo >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <tr
+                      key={mov.data}
+                      className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    >
+                      <td className="py-3 px-2 font-medium dark:text-gray-200">
+                        {mov.data}
+                      </td>
+                      <td className="py-3 px-2 text-green-600 dark:text-green-400">
+                        +{mov.entradas}
+                      </td>
+                      <td className="py-3 px-2 text-red-600 dark:text-red-400">
+                        -{mov.saidas}
+                      </td>
+                      <td className={'py-3 px-2 font-medium ' + (
+                        saldo >= 0
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-600 dark:text-red-400'
+                      )}>
                         {saldo >= 0 ? '+' : ''}{saldo}
                       </td>
                     </tr>
@@ -6739,42 +7506,63 @@ export default function RelatoriosPage() {
       </div>
 
       {/* Todos os movimentos */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-bold text-gray-900 dark:text-gray-50">Todos os movimentos</h2>
-        </div>
+      <div className="card dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-lg font-bold mb-4 dark:text-white">
+          Todos os movimentos
+        </h2>
+
         {movimentos.length === 0 ? (
-          <p className="text-gray-400 text-center py-10 text-sm">Sem movimentos no período</p>
+          <p className="text-gray-400 text-center py-8">
+            Sem movimentos no período
+          </p>
         ) : (
-          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0">
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  {['Tipo', 'Produto', 'Qtd', 'Motivo', 'Data'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">{h}</th>
+              <thead>
+                <tr className="border-b dark:border-gray-700">
+                  {['Tipo', 'Produto', 'Qtd', 'Motivo', 'Data'].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left py-3 px-2 text-gray-500 dark:text-gray-400 font-medium"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody>
                 {movimentos.map((mov) => {
                   const produto = produtos.find((p) => p.id === mov.produto_id)
                   return (
-                    <tr key={mov.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    <tr
+                      key={mov.id}
+                      className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    >
+                      <td className="py-3 px-2">
+                        <span className={'px-2 py-0.5 rounded-full text-xs font-medium ' + (
                           mov.tipo_movimento === 'entrada'
                             ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                             : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        }`}>
+                        )}>
                           {mov.tipo_movimento === 'entrada' ? 'Entrada' : 'Saída'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{produto?.nome || '—'}</td>
-                      <td className={`px-4 py-3 font-semibold ${mov.tipo_movimento === 'entrada' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <td className="py-3 px-2 font-medium dark:text-gray-200">
+                        {produto?.nome || '—'}
+                      </td>
+                      <td className={'py-3 px-2 font-medium ' + (
+                        mov.tipo_movimento === 'entrada'
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-600 dark:text-red-400'
+                      )}>
                         {mov.tipo_movimento === 'entrada' ? '+' : '-'}{mov.quantidade}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 truncate max-w-[150px]">{mov.motivo || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{formatarData(mov.criado_em)}</td>
+                      <td className="py-3 px-2 text-gray-500 dark:text-gray-400">
+                        {mov.motivo || '—'}
+                      </td>
+                      <td className="py-3 px-2 text-gray-500 dark:text-gray-400">
+                        {formatarData(mov.criado_em)}
+                      </td>
                     </tr>
                   )
                 })}
@@ -7352,10 +8140,17 @@ export default function Signup() {
                   Feito para pequenos comércios
                 </span>
               </div>
-              <p className="text-green-100 text-sm italic leading-relaxed">
-                &ldquo;Sistema simples, direto ao ponto. Exatamente o que meu
-                mercadinho precisava.&rdquo;
-              </p>
+              
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+                <p className="text-green-400 font-semibold text-sm mb-2">
+                  💡 Por que o EstoqueSystem?
+                </p>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  Criado por um desenvolvedor que entende a realidade do pequeno comerciante
+                  — simples, direto e sem complicação.
+                </p>
+              </div>
+
             </div>
           </div>
 
@@ -7820,9 +8615,10 @@ export default function BarcodeProductModal({ codigo, produto, loading, onConfir
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\barcode-scanner.tsx ===
-'use client'
-import { useEffect, useRef, useState } from 'react'
-import { X, RotateCw } from 'lucide-react'
+"use client"
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { X, RotateCw, Keyboard } from 'lucide-react'
 
 interface Props {
   onDetected: (code: string) => void
@@ -7832,57 +8628,104 @@ interface Props {
 export default function BarcodeScanner({ onDetected, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const quaggaRef = useRef<any>(null)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
   const [erro, setErro] = useState('')
   const [manualInput, setManualInput] = useState('')
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const [cameraAtual, setCameraAtual] = useState<string | null>(null)
   const [mostrarSeletor, setMostrarSeletor] = useState(false)
+  const [modoManual, setModoManual] = useState(false)
+  const [usandoQuagga, setUsandoQuagga] = useState(false)
+  const [scannerAtivo, setScannerAtivo] = useState(false)
 
-  // Lista câmeras e escolhe a melhor (maior resolução, evita wide)
-  useEffect(() => {
-    const iniciar = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ video: true })
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const videoDevices = devices.filter(d => d.kind === 'videoinput')
-        setCameras(videoDevices)
-
-        if (videoDevices.length === 0) {
-          setErro('Nenhuma câmera encontrada')
-          return
-        }
-
-        const melhorCamera = await escolherMelhorCamera(videoDevices)
-        setCameraAtual(melhorCamera?.deviceId || videoDevices[0].deviceId)
-      } catch {
-        setErro('Permissão de câmera negada')
-      }
+  // ══════════════════════════════════════════════════
+  //  CLEANUP GERAL — para streams, intervalos e Quagga
+  // ══════════════════════════════════════════════════
+  const cleanup = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
     }
-    iniciar()
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+
+    if (quaggaRef.current) {
+      try {
+        quaggaRef.current.stop()
+        quaggaRef.current.offDetected()
+      } catch {}
+      quaggaRef.current = null
+    }
+
+    setScannerAtivo(false)
   }, [])
 
-  async function escolherMelhorCamera(cameras: MediaDeviceInfo[]): Promise<MediaDeviceInfo | null> {
-    const backCameras: MediaDeviceInfo[] = []
-    const wideKeywords = ['wide', 'ultra', '0.6', '0.5', 'angle', 'grande angular']
+  // ══════════════════════════════════════════════════
+  //  CALLBACK AO DETECTAR CÓDIGO
+  // ══════════════════════════════════════════════════
+  const handleDetected = useCallback(
+    (code: string) => {
+      cleanup()
 
-    for (const cam of cameras) {
+      // Vibração de feedback (mobile)
+      if (navigator.vibrate) {
+        navigator.vibrate(200)
+      }
+
+      onDetected(code)
+    },
+    [cleanup, onDetected]
+  )
+
+  // ══════════════════════════════════════════════════
+  //  SELEÇÃO INTELIGENTE DE CÂMERA TRASEIRA
+  //  → Evita wide-angle, prefere maior resolução
+  // ══════════════════════════════════════════════════
+  async function escolherMelhorCamera(
+    videoDevices: MediaDeviceInfo[]
+  ): Promise<MediaDeviceInfo | null> {
+    const wideKeywords = [
+      'wide',
+      'ultra',
+      '0.6',
+      '0.5',
+      'angle',
+      'grande angular',
+    ]
+
+    const backCameras: MediaDeviceInfo[] = []
+    for (const cam of videoDevices) {
       const label = cam.label.toLowerCase()
-      if (label.includes('back') || label.includes('traseira') || label.includes('environment') || !label.includes('front')) {
+      if (
+        label.includes('back') ||
+        label.includes('traseira') ||
+        label.includes('environment') ||
+        !label.includes('front')
+      ) {
         backCameras.push(cam)
       }
     }
+
     if (backCameras.length === 0) return null
 
     const camerasComResolucao = await Promise.all(
       backCameras.map(async (cam) => {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: cam.deviceId } }
+            video: { deviceId: { exact: cam.deviceId } },
           })
           const track = stream.getVideoTracks()[0]
-          const capabilities = track.getCapabilities ? track.getCapabilities() : null
-          const maxWidth = capabilities?.width?.max || 0
-          const maxHeight = capabilities?.height?.max || 0
+          const capabilities = track.getCapabilities
+            ? track.getCapabilities()
+            : null
+          const maxWidth = (capabilities as any)?.width?.max || 0
+          const maxHeight = (capabilities as any)?.height?.max || 0
           const resolucao = maxWidth * maxHeight
           stream.getTracks().forEach(t => t.stop())
           return { cam, resolucao, label: cam.label.toLowerCase() }
@@ -7892,117 +8735,297 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       })
     )
 
-    const ordenadas = camerasComResolucao.sort((a, b) => b.resolucao - a.resolucao)
-    const normal = ordenadas.find(c => !wideKeywords.some(kw => c.label.includes(kw)))
+    const ordenadas = camerasComResolucao.sort(
+      (a, b) => b.resolucao - a.resolucao
+    )
+
+    // Prefere câmera que NÃO seja wide-angle
+    const normal = ordenadas.find(
+      c => !wideKeywords.some(kw => c.label.includes(kw))
+    )
+
     return normal?.cam || ordenadas[0]?.cam || null
   }
 
-  // Inicia a câmera escolhida
+  // ══════════════════════════════════════════════════
+  //  LISTAR CÂMERAS AO MONTAR
+  // ══════════════════════════════════════════════════
   useEffect(() => {
-    if (!cameraAtual) return
-
-    let stream: MediaStream | null = null
-    let intervalo: NodeJS.Timeout
-
-    const iniciarStream = async () => {
+    const iniciar = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: cameraAtual } }
+        // Pede permissão primeiro
+        const permStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
         })
+        permStream.getTracks().forEach(t => t.stop())
+
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(d => d.kind === 'videoinput')
+        setCameras(videoDevices)
+
+        if (videoDevices.length === 0) {
+          setErro(
+            'Nenhuma câmera encontrada. Use o campo abaixo para digitar o código.'
+          )
+          setModoManual(true)
+          return
+        }
+
+        const melhorCamera = await escolherMelhorCamera(videoDevices)
+        setCameraAtual(melhorCamera?.deviceId || videoDevices[0].deviceId)
+      } catch {
+        setErro(
+          'Permissão de câmera negada. Use o campo abaixo para digitar o código.'
+        )
+        setModoManual(true)
+      }
+    }
+
+    iniciar()
+    return () => cleanup()
+  }, [cleanup])
+
+  // ══════════════════════════════════════════════════
+  //  INICIAR SCANNER QUANDO CÂMERA É SELECIONADA
+  //
+  //  Estratégia:
+  //  1. Se BarcodeDetector existe → usa (Chrome Android, rápido)
+  //  2. Se não existe → importa Quagga2 dinamicamente (iPhone, Firefox)
+  //  3. Se Quagga falha → modo manual
+  // ══════════════════════════════════════════════════
+  useEffect(() => {
+    if (!cameraAtual || modoManual) return
+
+    let cancelled = false
+
+    const iniciarScanner = async () => {
+      cleanup()
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: cameraAtual },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        })
+
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop())
+          return
+        }
+
+        streamRef.current = stream
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           videoRef.current.onloadedmetadata = () => videoRef.current?.play()
         }
 
-        if (!('BarcodeDetector' in window)) {
-          setErro('Navegador não suporta leitura automática')
+        // ── MÉTODO 1: BarcodeDetector nativo ──
+        if ('BarcodeDetector' in window) {
+          setUsandoQuagga(false)
+          setScannerAtivo(true)
+
+          const detector = new (window as any).BarcodeDetector({
+            formats: [
+              'ean_13',
+              'ean_8',
+              'code_128',
+              'code_39',
+              'upc_a',
+              'upc_e',
+            ],
+          })
+
+          intervalRef.current = setInterval(async () => {
+            if (!videoRef.current || videoRef.current.readyState !== 4) return
+            try {
+              const codes = await detector.detect(videoRef.current)
+              if (codes.length > 0 && codes[0].rawValue) {
+                handleDetected(codes[0].rawValue)
+              }
+            } catch {
+              // Silencia erros de detecção entre frames
+            }
+          }, 250)
+
           return
         }
 
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e']
-        })
+        // ── MÉTODO 2: Fallback com Quagga2 ──
+        try {
+          const Quagga = (await import('@ericblade/quagga2')).default
 
-        intervalo = setInterval(async () => {
-          if (!videoRef.current || videoRef.current.readyState !== 4) return
-          try {
-            const codes = await detector.detect(videoRef.current)
-            if (codes.length > 0) {
-              clearInterval(intervalo)
-              stream?.getTracks().forEach(t => t.stop())
-              onDetected(codes[0].rawValue)
-            }
-          } catch {
-            // silencia erros de detecção
+          // Quagga gerencia o próprio stream, então para o nosso
+          stream.getTracks().forEach(t => t.stop())
+          streamRef.current = null
+
+          if (cancelled) return
+
+          quaggaRef.current = Quagga
+          setUsandoQuagga(true)
+
+          await new Promise<void>((resolve, reject) => {
+            Quagga.init(
+              {
+                inputStream: {
+                  type: 'LiveStream',
+                  target: videoRef.current || undefined,
+                  constraints: {
+                    deviceId: cameraAtual,
+                    facingMode: 'environment',
+                    width: { min: 640, ideal: 1280 },
+                    height: { min: 480, ideal: 720 },
+                  },
+                },
+                decoder: {
+                  readers: [
+                    'ean_reader',
+                    'ean_8_reader',
+                    'code_128_reader',
+                    'code_39_reader',
+                    'upc_reader',
+                    'upc_e_reader',
+                  ],
+                },
+                locate: true,
+                frequency: 5,
+              },
+              (err: any) => {
+                if (err) {
+                  reject(err)
+                  return
+                }
+                resolve()
+              }
+            )
+          })
+
+          if (cancelled) {
+            Quagga.stop()
+            quaggaRef.current = null
+            return
           }
-        }, 300)
+
+          Quagga.start()
+          setScannerAtivo(true)
+
+          // Validação: confirma o código 2x para evitar falsos positivos
+          let lastCode = ''
+          let confirmCount = 0
+
+          Quagga.onDetected((result: any) => {
+            const code = result?.codeResult?.code
+            if (!code) return
+
+            if (code === lastCode) {
+              confirmCount++
+              if (confirmCount >= 2) {
+                try {
+                  Quagga.offDetected()
+                  Quagga.stop()
+                } catch {}
+                quaggaRef.current = null
+                handleDetected(code)
+              }
+            } else {
+              lastCode = code
+              confirmCount = 1
+            }
+          })
+        } catch (quaggaError) {
+          console.error('Quagga2 não disponível:', quaggaError)
+          setErro(
+            'Seu navegador não suporta leitura automática. Use o campo abaixo para digitar o código de barras.'
+          )
+          // Não entra em modo manual automaticamente — deixa o usuário decidir
+        }
       } catch {
-        setErro('Erro ao iniciar a câmera. Tente outra.')
-        setMostrarSeletor(true)
+        if (!cancelled) {
+          setErro(
+            'Erro ao iniciar câmera. Tente trocar a câmera ou use o campo manual.'
+          )
+          setMostrarSeletor(true)
+        }
       }
     }
 
-    iniciarStream()
+    iniciarScanner()
 
     return () => {
-      clearInterval(intervalo)
-      stream?.getTracks().forEach(t => t.stop())
+      cancelled = true
+      cleanup()
     }
-  }, [cameraAtual, onDetected])
+  }, [cameraAtual, modoManual, cleanup, handleDetected])
 
+  // ══════════════════════════════════════════════════
+  //  TROCAR CÂMERA
+  // ══════════════════════════════════════════════════
   const trocarCamera = (deviceId: string) => {
     setCameraAtual(deviceId)
     setMostrarSeletor(false)
     setErro('')
   }
 
+  // ══════════════════════════════════════════════════
+  //  INPUT MANUAL
+  // ══════════════════════════════════════════════════
   const handleSubmitManual = () => {
-    if (manualInput.trim()) {
-      onDetected(manualInput.trim())
+    const code = manualInput.trim()
+    if (code.length >= 4) {
+      handleDetected(code)
       setManualInput('')
     }
   }
 
+  // ══════════════════════════════════════════════════
+  //  FECHAR SCANNER
+  // ══════════════════════════════════════════════════
+  const handleClose = () => {
+    cleanup()
+    onClose()
+  }
+
+  // ══════════════════════════════════════════════════
+  //  RENDER
+  // ══════════════════════════════════════════════════
   return (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
-      <div className="flex items-center justify-between p-4 bg-black border-b border-gray-700">
-        <p className="text-white font-medium text-sm">Leitor de código de barras</p>
-        <button onClick={onClose} className="text-white p-2 hover:bg-gray-800 rounded">
-          <X size={24} />
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm z-10">
+        <h3 className="text-white font-semibold text-lg">
+          📷 Leitor de Código de Barras
+        </h3>
+        <button
+          onClick={handleClose}
+          className="p-2 bg-gray-800 hover:bg-gray-700 rounded-full transition"
+        >
+          <X className="w-5 h-5 text-white" />
         </button>
       </div>
 
-      <div className="relative flex-1">
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          playsInline
-          muted
-          autoPlay
-        />
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="border-2 border-dashed border-yellow-400 w-40 h-32 rounded-lg opacity-70" />
-        </div>
-      </div>
-
-      {(mostrarSeletor || cameras.length > 1) && (
-        <div className="p-3 bg-gray-900 border-t border-gray-700">
+      {/* ── Seletor de câmera ── */}
+      {cameras.length > 1 && (
+        <div className="px-4 py-2 bg-black/60 z-10">
           <button
             onClick={() => setMostrarSeletor(!mostrarSeletor)}
-            className="text-gray-300 text-xs flex items-center gap-1 mb-2 hover:text-white"
+            className="text-gray-300 text-xs flex items-center gap-1 hover:text-white transition"
           >
-            <RotateCw size={12} /> {mostrarSeletor ? 'Ocultar' : 'Trocar câmera'}
+            <RotateCw className="w-3 h-3" />
+            {mostrarSeletor ? 'Ocultar câmeras' : 'Trocar câmera'}
           </button>
+
           {mostrarSeletor && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex flex-wrap gap-2 mt-2">
               {cameras.map((cam, idx) => (
                 <button
                   key={cam.deviceId}
                   onClick={() => trocarCamera(cam.deviceId)}
-                  className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap transition ${
                     cameraAtual === cam.deviceId
                       ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 text-gray-300'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
                   {cam.label || `Câmera ${idx + 1}`}
@@ -8013,36 +9036,154 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
-      {erro && (
-        <div className="p-4 bg-black border-t border-gray-700">
-          <p className="text-red-400 text-sm mb-2">{erro}</p>
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={manualInput}
-              onChange={(e) => setManualInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmitManual()}
-              placeholder="Digite o código de barras"
-              className="flex-1 px-3 py-2 bg-gray-800 text-white rounded"
-              autoFocus
-            />
-            <button
-              onClick={handleSubmitManual}
-              className="px-4 py-2 bg-green-600 rounded text-white"
-            >
-              OK
-            </button>
+      {/* ── Área do vídeo ── */}
+      {!modoManual && (
+        <div className="flex-1 relative overflow-hidden">
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            autoPlay
+            playsInline
+            muted
+          />
+
+          {/* Crosshair / Guia visual */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-72 h-40 border-2 border-green-400/60 rounded-2xl relative">
+              {/* Cantos destacados */}
+              <div className="absolute -top-0.5 -left-0.5 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-xl" />
+              <div className="absolute -top-0.5 -right-0.5 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-xl" />
+              <div className="absolute -bottom-0.5 -left-0.5 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-xl" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-xl" />
+
+              {/* Linha de scan animada */}
+              {scannerAtivo && (
+                <div
+                  className="absolute left-2 right-2 h-0.5 bg-green-400 rounded-full"
+                  style={{
+                    animation: 'scanLine 2s ease-in-out infinite',
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Status do scanner */}
+          <div className="absolute bottom-4 left-0 right-0 text-center">
+            <p className="text-white text-sm bg-black/60 inline-block px-4 py-2 rounded-full">
+              {scannerAtivo
+                ? '📱 Aponte para o código de barras'
+                : '⏳ Iniciando câmera...'}
+            </p>
+            {usandoQuagga && scannerAtivo && (
+              <p className="text-gray-400 text-xs mt-1">
+                Modo compatibilidade ativo (funciona em todos os navegadores)
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      <div className="p-2 bg-black text-center text-gray-500 text-xs">
-        📱 Aponte para o código | Se não focar, troque a câmera
+      {/* ── Modo manual em tela cheia ── */}
+      {modoManual && (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center max-w-sm">
+            <div className="text-6xl mb-4">⌨️</div>
+            <h3 className="text-white text-xl font-bold mb-2">
+              Modo Manual
+            </h3>
+            <p className="text-gray-400 mb-6">
+              Digite ou escaneie o código de barras usando o campo abaixo.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Erro ── */}
+      {erro && (
+        <div className="px-4 py-3 bg-red-900/50 border-t border-red-800">
+          <p className="text-red-300 text-sm">{erro}</p>
+        </div>
+      )}
+
+      {/* ── Input manual (SEMPRE visível na parte inferior) ── */}
+      <div className="p-4 bg-gray-900 border-t border-gray-800 safe-area-bottom">
+        <div className="flex items-center gap-2 mb-2">
+          <Keyboard className="w-4 h-4 text-gray-400" />
+          <p className="text-gray-400 text-xs">
+            {modoManual
+              ? 'Digite o código de barras:'
+              : 'Ou digite o código manualmente:'}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="numeric"
+            value={manualInput}
+            onChange={(e) => setManualInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmitManual()}
+            placeholder="Ex: 7891234567890"
+            className="flex-1 px-4 py-3 bg-gray-800 text-white rounded-xl border border-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition text-lg"
+            autoFocus={modoManual}
+          />
+          <button
+            onClick={handleSubmitManual}
+            disabled={manualInput.trim().length < 4}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-xl transition"
+          >
+            OK
+          </button>
+        </div>
+
+        {/* Alternar câmera ↔ manual */}
+        <div className="mt-3 text-center">
+          {!modoManual && (
+            <button
+              onClick={() => {
+                setModoManual(true)
+                cleanup()
+              }}
+              className="text-gray-400 text-sm hover:text-white transition"
+            >
+              ⌨️ Prefiro digitar o código
+            </button>
+          )}
+          {modoManual && cameras.length > 0 && (
+            <button
+              onClick={() => {
+                setModoManual(false)
+                setErro('')
+              }}
+              className="text-gray-400 text-sm hover:text-white transition"
+            >
+              📷 Voltar para câmera
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ── CSS animação da linha de scan ── */}
+      <style jsx>{`
+        @keyframes scanLine {
+          0%,
+          100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(140px);
+          }
+        }
+        .safe-area-bottom {
+          padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+      `}</style>
     </div>
   )
 }
+
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\cupom-impressao.tsx ===
