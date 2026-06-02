@@ -68,6 +68,15 @@ export default function Signup() {
       }),
     }).catch(console.error)
 
+    // Rastreia conversão no Google Analytics
+    if (typeof window !== 'undefined' && (window as any).gtag) {
+      (window as any).gtag('event', 'sign_up', {
+        method: 'email',
+        value: 0,
+        currency: 'BRL',
+      })
+    }
+
     // Se o email precisa ser confirmado
     if (data.user.identities?.length === 0 || !data.session) {
       setSuccess('📧 Enviamos um email de confirmação! Verifique sua caixa de entrada.')

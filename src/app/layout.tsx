@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { NotificationProvider } from '@/contexts/NotificationContext'
@@ -55,6 +56,26 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        {/* Google Analytics (GA4) */}
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=GT-PHPDXM6V"
+          strategy="afterInteractive"
+        />
+        <Script
+          id="google-analytics"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'GT-PHPDXM6V');
+            `,
+          }}
+        />
+      </head>
       <body>
         <ThemeProvider>
           <NotificationProvider>
