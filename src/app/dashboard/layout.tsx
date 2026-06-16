@@ -30,26 +30,37 @@ export default function DashboardLayout({
   const [mostrarBanner, setMostrarBanner] = useState(false)
   const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
 
-  // Cache: evita re-fetch em toda navegação
   const initialCheckDone = useRef(false)
   const userLevelRef = useRef<string>('dono')
 
   useEffect(() => {
+    // Listener de auth — mantém sessão atualizada
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_OUT' || !session) {
+          router.push('/login')
+        }
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('Sessão renovada automaticamente')
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [router])
+
+  useEffect(() => {
     const checkAuth = async () => {
-      // ── JÁ CHECOU? Só valida rota restrita ──
       if (initialCheckDone.current) {
         if (userLevelRef.current === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
             new RegExp(`^${route}`).test(pathname)
           )
-          if (isRestricted) {
-            router.push('/dashboard/pdv')
-          }
+          if (isRestricted) router.push('/dashboard/pdv')
         }
         return
       }
 
-      // ── PRIMEIRA VEZ: check completo ──
       try {
         const { data } = await supabase.auth.getSession()
         if (!data.session) {
@@ -57,7 +68,6 @@ export default function DashboardLayout({
           return
         }
 
-        // Busca nível do membro
         const { data: membroData } = await supabase
           .from('membros')
           .select('nivel')
@@ -67,7 +77,6 @@ export default function DashboardLayout({
         const userLevel = membroData?.nivel ?? 'dono'
         userLevelRef.current = userLevel
 
-        // Check rota restrita (primeira vez)
         if (userLevel === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
             new RegExp(`^${route}`).test(pathname)
@@ -78,7 +87,6 @@ export default function DashboardLayout({
           }
         }
 
-        // Verifica trial/plano
         const { data: perfil } = await supabase
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento')
@@ -121,7 +129,11 @@ export default function DashboardLayout({
             const diasPlano = Math.ceil(
               (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
             )
-            if (diasPlano >= 0 && diasPlano <= 5 && perfil.tipo_pagamento === 'pix') {
+            if (
+              diasPlano >= 0 &&
+              diasPlano <= 5 &&
+              perfil.tipo_pagamento === 'pix'
+            ) {
               setDiasRestantes(diasPlano)
               setMostrarBanner(true)
               setTipoBanner('renovacao')
@@ -150,6 +162,9 @@ export default function DashboardLayout({
       <Navbar />
       <Sidebar />
       <SearchCommand />
-<main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">{children}</main>    </div>
+      <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
+        {children}
+      </main>
+    </div>
   )
 }

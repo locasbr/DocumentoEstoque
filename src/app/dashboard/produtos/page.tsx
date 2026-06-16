@@ -2,54 +2,70 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import { useNotification } from '@/contexts/NotificationContext'
 import { SkeletonGrid } from '@/components/skeleton-loaders'
-import { Plus, Trash2, Edit2 } from 'lucide-react'
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
+
+const POR_PAGINA = 20
 
 export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [success, setSuccess] = useState('')
+  const [pagina, setPagina] = useState(0)
+  const [totalProdutos, setTotalProdutos] = useState(0)
   const { addNotification } = useNotification()
 
-  const fetchProdutos = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('produtos')
-        .select('*')
-        .order('nome')
+  const fetchProdutos = useCallback(
+    async (pag: number) => {
+      setLoading(true)
+      try {
+        // Conta total (pra saber quantas páginas)
+        const { count } = await supabase
+          .from('produtos')
+          .select('*', { count: 'exact', head: true })
 
-      if (!error && data) {
-        setProdutos(data)
+        if (count !== null) setTotalProdutos(count)
+
+        // Busca página atual
+        let query = supabase
+          .from('produtos')
+          .select('*')
+          .order('nome')
+          .range(pag * POR_PAGINA, (pag + 1) * POR_PAGINA - 1)
+
+        const { data, error } = await query
+
+        if (!error && data) {
+          setProdutos(data)
+        }
+      } catch (error) {
+        console.error('Error fetching produtos:', error)
+        addNotification('Erro ao carregar produtos', 'error')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Error fetching produtos:', error)
-      addNotification('Erro ao carregar produtos', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+    },
+    [addNotification]
+  )
 
   useEffect(() => {
-    fetchProdutos()
-  }, [fetchProdutos])
+    fetchProdutos(pagina)
+  }, [fetchProdutos, pagina])
 
   const handleDelete = async (id: string, nome: string) => {
     if (confirm(`Tem certeza que deseja deletar "${nome}"?`)) {
       try {
         const { error } = await supabase.from('produtos').delete().eq('id', id)
-
         if (!error) {
           setSuccess('Produto deletado com sucesso!')
-          addNotification(`✅ ${nome} removido do estoque!`, 'success', 2000)
-          fetchProdutos()
+          addNotification(`✅ ${nome} removido!`, 'success', 2000)
+          fetchProdutos(pagina)
         }
       } catch (error) {
         console.error('Error deleting produto:', error)
@@ -58,23 +74,25 @@ export default function ProdutosPage() {
     }
   }
 
+  const totalPaginas = Math.ceil(totalProdutos / POR_PAGINA)
+
+  // Filtro local (na página atual)
   const produtosFiltrados = produtos.filter(
     (p) =>
       p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
       p.sku.toLowerCase().includes(filtro.toLowerCase())
   )
 
-  if (loading) {
+  if (loading && pagina === 0) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div>
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Produtos</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Gerenciar catálogo de produtos</p>
+            <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
+            <p className="text-sm text-gray-500">Gerenciar catálogo</p>
           </div>
           <Link href="/dashboard/produtos/novo" className="btn-primary">
-            <Plus size={20} className="inline mr-2" />
-            <span className="hidden sm:inline">Novo Produto</span>
+            <Plus size={18} className="inline mr-1" /> Novo Produto
           </Link>
         </div>
         <SkeletonGrid />
@@ -83,172 +101,131 @@ export default function ProdutosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Produtos</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Gerenciar catálogo de produtos</p>
+          <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
+          <p className="text-sm text-gray-500">
+            {totalProdutos} produto(s) cadastrado(s)
+          </p>
         </div>
         <Link href="/dashboard/produtos/novo" className="btn-primary">
-          <Plus size={20} className="inline mr-2" />
-          <span className="hidden sm:inline">Novo Produto</span>
+          <Plus size={18} className="inline mr-1" /> Novo Produto
         </Link>
       </div>
 
       {success && <Alert message={success} type="success" />}
 
-      <div className="card dark:bg-gray-900 dark:border-gray-800">
-        <input
-          type="text"
-          placeholder="Buscar por nome ou SKU..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 mb-6"
-        />
+      <input
+        type="text"
+        placeholder="Buscar por nome ou SKU..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+        className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 mb-6 w-full"
+      />
 
-        {produtosFiltrados.length === 0 ? (
-          <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-            Nenhum produto encontrado
-          </p>
-        ) : (
-          <>
-            {/* Vista Desktop - Tabela */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Imagem</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Nome</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">SKU</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Categoria</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-gray-50">Quantidade</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-gray-50">Preço</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-gray-50">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {produtosFiltrados.map((produto) => (
-                    <tr key={produto.id} className="border-t dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-4 py-4">
-                        <Image
-                          src={getProductImageUrl(produto.imagem_url)}
-                          alt={produto.nome}
-                          width={40}
-                          height={40}
-                          className="rounded object-cover"
-                          unoptimized
-                        />
-                      </td>
-                      <td className="px-4 py-4 font-medium text-gray-900 dark:text-gray-50">{produto.nome}</td>
-                      <td className="px-4 py-4 text-gray-700 dark:text-gray-300">{produto.sku}</td>
-                      <td className="px-4 py-4 text-gray-700 dark:text-gray-300">{produto.categoria}</td>
-                      <td className="px-4 py-4 text-right">
-                        <span
-                          className={
-                            produto.quantidade_atual < produto.quantidade_minima
-                              ? 'badge-danger'
-                              : 'badge-success'
-                          }
-                        >
-                          {produto.quantidade_atual}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right font-semibold text-gray-900 dark:text-gray-50">
-                        {formatarMoeda(produto.preco_venda)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2 justify-center">
-                          <Link
-                            href={`/dashboard/produtos/${produto.id}`}
-                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded"
-                            title="Editar"
-                          >
-                            <Edit2 size={18} />
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(produto.id, produto.nome)}
-                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                            title="Deletar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Vista Mobile - Cards */}
-            <div className="md:hidden grid grid-cols-1 gap-4">
-              {produtosFiltrados.map((produto) => (
-                <div
-                  key={produto.id}
-                  className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md dark:hover:shadow-lg transition"
-                >
-                  <div className="flex gap-4">
-                    {/* Imagem */}
-                    <div className="flex-shrink-0">
-                      <Image
-                        src={getProductImageUrl(produto.imagem_url)}
-                        alt={produto.nome}
-                        width={64}
-                        height={64}
-                        className="rounded object-cover"
-                        unoptimized
-                      />
-                    </div>
-
-                    {/* Conteúdo */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-50 truncate">
-                        {produto.nome}
-                      </h3>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">SKU: {produto.sku}</p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">{produto.categoria}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={
-                              produto.quantidade_atual < produto.quantidade_minima
-                                ? 'badge-danger text-xs'
-                                : 'badge-success text-xs'
-                            }
-                          >
-                            {produto.quantidade_atual} unid.
-                          </span>
-                        </div>
-                        <span className="font-bold text-blue-600 dark:text-blue-400">
-                          {formatarMoeda(produto.preco_venda)}
-                        </span>
+      {produtosFiltrados.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="font-medium">Nenhum produto encontrado</p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop: Tabela */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Imagem</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">SKU</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Categoria</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Quantidade</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Preço</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {produtosFiltrados.map((produto) => (
+                  <tr key={produto.id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <td className="py-3 px-4">
+                      <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded" />
+                    </td>
+                    <td className="py-3 px-4 font-medium dark:text-white">{produto.nome}</td>
+                    <td className="py-3 px-4 text-gray-500 text-sm">{produto.sku}</td>
+                    <td className="py-3 px-4 text-gray-500 text-sm">{produto.categoria}</td>
+                    <td className="py-3 px-4">
+                      <span className={`badge ${produto.quantidade_atual < produto.quantidade_minima ? 'badge-danger' : 'badge-success'}`}>
+                        {produto.quantidade_atual}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-semibold">{formatarMoeda(produto.preco_venda)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/dashboard/produtos/${produto.id}`} className="p-2 text-blue-600 hover:bg-blue-100 rounded" title="Editar">
+                          <Edit2 size={16} />
+                        </Link>
+                        <button onClick={() => handleDelete(produto.id, produto.nome)} className="p-2 text-red-600 hover:bg-red-100 rounded" title="Deletar">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-                  {/* Ações */}
-                  <div className="mt-4 flex gap-2">
-                    <Link
-                      href={`/dashboard/produtos/${produto.id}`}
-                      className="flex-1 btn-secondary text-xs flex items-center justify-center gap-2"
-                    >
-                      <Edit2 size={16} />
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(produto.id, produto.nome)}
-                      className="flex-1 btn-danger text-xs flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} />
-                      Deletar
-                    </button>
-                  </div>
+          {/* Mobile: Cards */}
+          <div className="md:hidden space-y-3">
+            {produtosFiltrados.map((produto) => (
+              <div key={produto.id} className="card p-4 border dark:border-gray-700 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-sm dark:text-white truncate flex-1">{produto.nome}</h4>
+                  <span className={`badge text-xs ml-2 ${produto.quantidade_atual < produto.quantidade_minima ? 'badge-danger' : 'badge-success'}`}>
+                    {produto.quantidade_atual} un.
+                  </span>
                 </div>
-              ))}
+                <p className="text-xs text-gray-500 mb-1">SKU: {produto.sku}</p>
+                <p className="text-xs text-gray-500 mb-2">{produto.categoria}</p>
+                <p className="font-bold text-green-600 dark:text-green-400 mb-3">{formatarMoeda(produto.preco_venda)}</p>
+                <div className="flex gap-2">
+                  <Link href={`/dashboard/produtos/${produto.id}`} className="flex-1 btn-primary text-xs text-center py-2">
+                    <Edit2 size={14} className="inline mr-1" /> Editar
+                  </Link>
+                  <button onClick={() => handleDelete(produto.id, produto.nome)} className="flex-1 btn-danger text-xs py-2">
+                    <Trash2 size={14} className="inline mr-1" /> Deletar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Paginação */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t dark:border-gray-800">
+              <p className="text-sm text-gray-500">
+                Página {pagina + 1} de {totalPaginas} · {totalProdutos} produtos
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagina((p) => Math.max(0, p - 1))}
+                  disabled={pagina === 0}
+                  className="px-3 py-2 rounded-lg border dark:border-gray-700 text-sm font-medium disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+                >
+                  <ChevronLeft size={16} /> Anterior
+                </button>
+                <button
+                  onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
+                  disabled={pagina >= totalPaginas - 1}
+                  className="px-3 py-2 rounded-lg border dark:border-gray-700 text-sm font-medium disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+                >
+                  Próxima <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

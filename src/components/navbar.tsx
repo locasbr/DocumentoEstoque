@@ -18,6 +18,7 @@ const navItems = [
   { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
+  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
   { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },

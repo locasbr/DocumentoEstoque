@@ -7,7 +7,7 @@ import { useNotification } from '@/contexts/NotificationContext'
 import { formatarMoeda } from '@/lib/utils'
 import {
   Users, Plus, Search, Phone, DollarSign,
-  AlertTriangle, Trash2, Eye
+  AlertTriangle, Trash2, Eye, Download
 } from 'lucide-react'
 
 interface Cliente {
@@ -29,42 +29,38 @@ export default function ClientesPage() {
   const { addNotification } = useNotification()
 
   const fetchClientes = useCallback(async () => {
-  try {
-    // 1 query: todos os clientes
-    const { data: clientesData, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .order('nome')
+    try {
+      const { data: clientesData, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .order('nome')
 
-    if (error) throw error
+      if (error) throw error
 
-    // 1 query: TODOS os fiados de uma vez (em vez de N queries)
-    const { data: todosOsFiados } = await supabase
-      .from('fiado')
-      .select('cliente_id, tipo, valor')
+      const { data: todosOsFiados } = await supabase
+        .from('fiado')
+        .select('cliente_id, tipo, valor')
 
-    // Agrupa saldos no JavaScript (instantâneo)
-    const saldoPorCliente: Record<string, number> = {}
-    ;(todosOsFiados || []).forEach((f: any) => {
-      const id = f.cliente_id
-      if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
-      saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
-    })
+      const saldoPorCliente: Record<string, number> = {}
+      ;(todosOsFiados || []).forEach((f: any) => {
+        const id = f.cliente_id
+        if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+        saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+      })
 
-    // Combina clientes + saldos
-    const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
-      ...cliente,
-      saldo_fiado: saldoPorCliente[cliente.id] || 0,
-    }))
+      const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
+        ...cliente,
+        saldo_fiado: saldoPorCliente[cliente.id] || 0,
+      }))
 
-    setClientes(clientesComSaldo)
-  } catch (error) {
-    console.error('Erro ao buscar clientes:', error)
-    addNotification('Erro ao carregar clientes', 'error')
-  } finally {
-    setLoading(false)
-  }
-}, [addNotification]) 
+      setClientes(clientesComSaldo)
+    } catch (error) {
+      console.error('Erro ao buscar clientes:', error)
+      addNotification('Erro ao carregar clientes', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [addNotification])
 
   useEffect(() => {
     fetchClientes()
@@ -80,6 +76,34 @@ export default function ClientesPage() {
     } catch (error) {
       addNotification('Erro ao remover cliente', 'error')
     }
+  }
+
+  const exportarClientesCSV = () => {
+    const headers = ['Nome', 'Telefone', 'CPF', 'Email', 'Saldo Fiado']
+    const linhas = clientes.map((c) => [
+      c.nome,
+      c.telefone || '',
+      c.cpf || '',
+      c.email || '',
+      (c.saldo_fiado || 0).toFixed(2).replace('.', ','),
+    ])
+
+    const csv = [
+      headers.join(';'),
+      ...linhas.map((l) => l.map((v) => `"${v}"`).join(';')),
+    ].join('\n')
+
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+
+    addNotification('Clientes exportados!', 'success', 2000)
   }
 
   const clientesFiltrados = clientes.filter(c =>
@@ -107,13 +131,23 @@ export default function ClientesPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clientes</h2>
           <p className="text-gray-500 dark:text-gray-400">Gerencie seus clientes e controle o fiado</p>
         </div>
-        <Link
-          href="/dashboard/clientes/novo"
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Cliente
-        </Link>
+        <div className="flex items-center gap-2">
+          {clientes.length > 0 && (
+            <button
+              onClick={exportarClientesCSV}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Download size={16} /> Exportar CSV
+            </button>
+          )}
+          <Link
+            href="/dashboard/clientes/novo"
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Cliente
+          </Link>
+        </div>
       </div>
 
       {/* Métricas */}
