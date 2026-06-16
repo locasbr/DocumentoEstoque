@@ -773,34 +773,59 @@ export default function DashboardLayout({
   const [mostrarBanner, setMostrarBanner] = useState(false)
   const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
 
-  // Cache: evita re-fetch em toda navegação
   const initialCheckDone = useRef(false)
   const userLevelRef = useRef<string>('dono')
 
+  // ══════════ AUTH LISTENER ══════════
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      // Só redireciona no logout EXPLÍCITO
+      if (event === 'SIGNED_OUT') {
+        initialCheckDone.current = false
+        router.push('/login')
+      }
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('Sessão renovada automaticamente')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [router])
+
+  // ══════════ AUTH CHECK ══════════
   useEffect(() => {
     const checkAuth = async () => {
-      // ── JÁ CHECOU? Só valida rota restrita ──
+      // Já checou? Só valida rota restrita
       if (initialCheckDone.current) {
         if (userLevelRef.current === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
             new RegExp(`^${route}`).test(pathname)
           )
-          if (isRestricted) {
-            router.push('/dashboard/pdv')
-          }
+          if (isRestricted) router.push('/dashboard/pdv')
         }
         return
       }
 
-      // ── PRIMEIRA VEZ: check completo ──
       try {
-        const { data } = await supabase.auth.getSession()
+        // Tenta recuperar a sessão
+        let { data } = await supabase.auth.getSession()
+
+        // Se não achou, espera a restauração do localStorage
+        if (!data.session) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          const retry = await supabase.auth.getSession()
+          data = retry.data
+        }
+
+        // Ainda sem sessão? Vai pro login
         if (!data.session) {
           router.push('/login')
           return
         }
 
-        // Busca nível do membro
+        // ── Verifica nível do membro ──
         const { data: membroData } = await supabase
           .from('membros')
           .select('nivel')
@@ -810,7 +835,6 @@ export default function DashboardLayout({
         const userLevel = membroData?.nivel ?? 'dono'
         userLevelRef.current = userLevel
 
-        // Check rota restrita (primeira vez)
         if (userLevel === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
             new RegExp(`^${route}`).test(pathname)
@@ -821,7 +845,7 @@ export default function DashboardLayout({
           }
         }
 
-        // Verifica trial/plano
+        // ── Verifica plano/trial ──
         const { data: perfil } = await supabase
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento')
@@ -830,7 +854,9 @@ export default function DashboardLayout({
 
         if (perfil) {
           const agora = new Date()
-          const trialFim = perfil.trial_fim ? new Date(perfil.trial_fim) : null
+          const trialFim = perfil.trial_fim
+            ? new Date(perfil.trial_fim)
+            : null
 
           if (perfil.plano === 'expirado') {
             router.push('/assinar')
@@ -864,7 +890,11 @@ export default function DashboardLayout({
             const diasPlano = Math.ceil(
               (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
             )
-            if (diasPlano >= 0 && diasPlano <= 5 && perfil.tipo_pagamento === 'pix') {
+            if (
+              diasPlano >= 0 &&
+              diasPlano <= 5 &&
+              perfil.tipo_pagamento === 'pix'
+            ) {
               setDiasRestantes(diasPlano)
               setMostrarBanner(true)
               setTipoBanner('renovacao')
@@ -893,7 +923,9 @@ export default function DashboardLayout({
       <Navbar />
       <Sidebar />
       <SearchCommand />
-      <main className="md:ml-56 mt-14 p-4 md:p-6 pb-24 md:pb-6">{children}</main>
+      <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
+        {children}
+      </main>
     </div>
   )
 }
@@ -2887,7 +2919,7 @@ import { useNotification } from '@/contexts/NotificationContext'
 import { formatarMoeda } from '@/lib/utils'
 import {
   Users, Plus, Search, Phone, DollarSign,
-  AlertTriangle, Trash2, Eye
+  AlertTriangle, Trash2, Eye, Download
 } from 'lucide-react'
 
 interface Cliente {
@@ -2909,42 +2941,38 @@ export default function ClientesPage() {
   const { addNotification } = useNotification()
 
   const fetchClientes = useCallback(async () => {
-  try {
-    // 1 query: todos os clientes
-    const { data: clientesData, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .order('nome')
+    try {
+      const { data: clientesData, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .order('nome')
 
-    if (error) throw error
+      if (error) throw error
 
-    // 1 query: TODOS os fiados de uma vez (em vez de N queries)
-    const { data: todosOsFiados } = await supabase
-      .from('fiado')
-      .select('cliente_id, tipo, valor')
+      const { data: todosOsFiados } = await supabase
+        .from('fiado')
+        .select('cliente_id, tipo, valor')
 
-    // Agrupa saldos no JavaScript (instantâneo)
-    const saldoPorCliente: Record<string, number> = {}
-    ;(todosOsFiados || []).forEach((f: any) => {
-      const id = f.cliente_id
-      if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
-      saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
-    })
+      const saldoPorCliente: Record<string, number> = {}
+      ;(todosOsFiados || []).forEach((f: any) => {
+        const id = f.cliente_id
+        if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+        saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+      })
 
-    // Combina clientes + saldos
-    const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
-      ...cliente,
-      saldo_fiado: saldoPorCliente[cliente.id] || 0,
-    }))
+      const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
+        ...cliente,
+        saldo_fiado: saldoPorCliente[cliente.id] || 0,
+      }))
 
-    setClientes(clientesComSaldo)
-  } catch (error) {
-    console.error('Erro ao buscar clientes:', error)
-    addNotification('Erro ao carregar clientes', 'error')
-  } finally {
-    setLoading(false)
-  }
-}, [addNotification]) 
+      setClientes(clientesComSaldo)
+    } catch (error) {
+      console.error('Erro ao buscar clientes:', error)
+      addNotification('Erro ao carregar clientes', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [addNotification])
 
   useEffect(() => {
     fetchClientes()
@@ -2960,6 +2988,34 @@ export default function ClientesPage() {
     } catch (error) {
       addNotification('Erro ao remover cliente', 'error')
     }
+  }
+
+  const exportarClientesCSV = () => {
+    const headers = ['Nome', 'Telefone', 'CPF', 'Email', 'Saldo Fiado']
+    const linhas = clientes.map((c) => [
+      c.nome,
+      c.telefone || '',
+      c.cpf || '',
+      c.email || '',
+      (c.saldo_fiado || 0).toFixed(2).replace('.', ','),
+    ])
+
+    const csv = [
+      headers.join(';'),
+      ...linhas.map((l) => l.map((v) => `"${v}"`).join(';')),
+    ].join('\n')
+
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+
+    addNotification('Clientes exportados!', 'success', 2000)
   }
 
   const clientesFiltrados = clientes.filter(c =>
@@ -2987,13 +3043,23 @@ export default function ClientesPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clientes</h2>
           <p className="text-gray-500 dark:text-gray-400">Gerencie seus clientes e controle o fiado</p>
         </div>
-        <Link
-          href="/dashboard/clientes/novo"
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Cliente
-        </Link>
+        <div className="flex items-center gap-2">
+          {clientes.length > 0 && (
+            <button
+              onClick={exportarClientesCSV}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Download size={16} /> Exportar CSV
+            </button>
+          )}
+          <Link
+            href="/dashboard/clientes/novo"
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Cliente
+          </Link>
+        </div>
       </div>
 
       {/* Métricas */}
@@ -3121,7 +3187,6 @@ export default function ClientesPage() {
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\clientes\novo\page.tsx ===
@@ -6042,54 +6107,70 @@ export default function PerfilPage() {
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import { useNotification } from '@/contexts/NotificationContext'
 import { SkeletonGrid } from '@/components/skeleton-loaders'
-import { Plus, Trash2, Edit2 } from 'lucide-react'
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
+
+const POR_PAGINA = 20
 
 export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [success, setSuccess] = useState('')
+  const [pagina, setPagina] = useState(0)
+  const [totalProdutos, setTotalProdutos] = useState(0)
   const { addNotification } = useNotification()
 
-  const fetchProdutos = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('produtos')
-        .select('*')
-        .order('nome')
+  const fetchProdutos = useCallback(
+    async (pag: number) => {
+      setLoading(true)
+      try {
+        // Conta total (pra saber quantas páginas)
+        const { count } = await supabase
+          .from('produtos')
+          .select('*', { count: 'exact', head: true })
 
-      if (!error && data) {
-        setProdutos(data)
+        if (count !== null) setTotalProdutos(count)
+
+        // Busca página atual
+        let query = supabase
+          .from('produtos')
+          .select('*')
+          .order('nome')
+          .range(pag * POR_PAGINA, (pag + 1) * POR_PAGINA - 1)
+
+        const { data, error } = await query
+
+        if (!error && data) {
+          setProdutos(data)
+        }
+      } catch (error) {
+        console.error('Error fetching produtos:', error)
+        addNotification('Erro ao carregar produtos', 'error')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Error fetching produtos:', error)
-      addNotification('Erro ao carregar produtos', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+    },
+    [addNotification]
+  )
 
   useEffect(() => {
-    fetchProdutos()
-  }, [fetchProdutos])
+    fetchProdutos(pagina)
+  }, [fetchProdutos, pagina])
 
   const handleDelete = async (id: string, nome: string) => {
     if (confirm(`Tem certeza que deseja deletar "${nome}"?`)) {
       try {
         const { error } = await supabase.from('produtos').delete().eq('id', id)
-
         if (!error) {
           setSuccess('Produto deletado com sucesso!')
-          addNotification(`✅ ${nome} removido do estoque!`, 'success', 2000)
-          fetchProdutos()
+          addNotification(`✅ ${nome} removido!`, 'success', 2000)
+          fetchProdutos(pagina)
         }
       } catch (error) {
         console.error('Error deleting produto:', error)
@@ -6098,23 +6179,25 @@ export default function ProdutosPage() {
     }
   }
 
+  const totalPaginas = Math.ceil(totalProdutos / POR_PAGINA)
+
+  // Filtro local (na página atual)
   const produtosFiltrados = produtos.filter(
     (p) =>
       p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
       p.sku.toLowerCase().includes(filtro.toLowerCase())
   )
 
-  if (loading) {
+  if (loading && pagina === 0) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div>
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Produtos</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Gerenciar catálogo de produtos</p>
+            <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
+            <p className="text-sm text-gray-500">Gerenciar catálogo</p>
           </div>
           <Link href="/dashboard/produtos/novo" className="btn-primary">
-            <Plus size={20} className="inline mr-2" />
-            <span className="hidden sm:inline">Novo Produto</span>
+            <Plus size={18} className="inline mr-1" /> Novo Produto
           </Link>
         </div>
         <SkeletonGrid />
@@ -6123,176 +6206,134 @@ export default function ProdutosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Produtos</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Gerenciar catálogo de produtos</p>
+          <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
+          <p className="text-sm text-gray-500">
+            {totalProdutos} produto(s) cadastrado(s)
+          </p>
         </div>
         <Link href="/dashboard/produtos/novo" className="btn-primary">
-          <Plus size={20} className="inline mr-2" />
-          <span className="hidden sm:inline">Novo Produto</span>
+          <Plus size={18} className="inline mr-1" /> Novo Produto
         </Link>
       </div>
 
       {success && <Alert message={success} type="success" />}
 
-      <div className="card dark:bg-gray-900 dark:border-gray-800">
-        <input
-          type="text"
-          placeholder="Buscar por nome ou SKU..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 mb-6"
-        />
+      <input
+        type="text"
+        placeholder="Buscar por nome ou SKU..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+        className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 mb-6 w-full"
+      />
 
-        {produtosFiltrados.length === 0 ? (
-          <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-            Nenhum produto encontrado
-          </p>
-        ) : (
-          <>
-            {/* Vista Desktop - Tabela */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Imagem</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Nome</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">SKU</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-50">Categoria</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-gray-50">Quantidade</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-gray-50">Preço</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-gray-50">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {produtosFiltrados.map((produto) => (
-                    <tr key={produto.id} className="border-t dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-4 py-4">
-                        <Image
-                          src={getProductImageUrl(produto.imagem_url)}
-                          alt={produto.nome}
-                          width={40}
-                          height={40}
-                          className="rounded object-cover"
-                          unoptimized
-                        />
-                      </td>
-                      <td className="px-4 py-4 font-medium text-gray-900 dark:text-gray-50">{produto.nome}</td>
-                      <td className="px-4 py-4 text-gray-700 dark:text-gray-300">{produto.sku}</td>
-                      <td className="px-4 py-4 text-gray-700 dark:text-gray-300">{produto.categoria}</td>
-                      <td className="px-4 py-4 text-right">
-                        <span
-                          className={
-                            produto.quantidade_atual < produto.quantidade_minima
-                              ? 'badge-danger'
-                              : 'badge-success'
-                          }
-                        >
-                          {produto.quantidade_atual}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right font-semibold text-gray-900 dark:text-gray-50">
-                        {formatarMoeda(produto.preco_venda)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2 justify-center">
-                          <Link
-                            href={`/dashboard/produtos/${produto.id}`}
-                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded"
-                            title="Editar"
-                          >
-                            <Edit2 size={18} />
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(produto.id, produto.nome)}
-                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                            title="Deletar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Vista Mobile - Cards */}
-            <div className="md:hidden grid grid-cols-1 gap-4">
-              {produtosFiltrados.map((produto) => (
-                <div
-                  key={produto.id}
-                  className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md dark:hover:shadow-lg transition"
-                >
-                  <div className="flex gap-4">
-                    {/* Imagem */}
-                    <div className="flex-shrink-0">
-                      <Image
-                        src={getProductImageUrl(produto.imagem_url)}
-                        alt={produto.nome}
-                        width={64}
-                        height={64}
-                        className="rounded object-cover"
-                        unoptimized
-                      />
-                    </div>
-
-                    {/* Conteúdo */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-50 truncate">
-                        {produto.nome}
-                      </h3>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">SKU: {produto.sku}</p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">{produto.categoria}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={
-                              produto.quantidade_atual < produto.quantidade_minima
-                                ? 'badge-danger text-xs'
-                                : 'badge-success text-xs'
-                            }
-                          >
-                            {produto.quantidade_atual} unid.
-                          </span>
-                        </div>
-                        <span className="font-bold text-blue-600 dark:text-blue-400">
-                          {formatarMoeda(produto.preco_venda)}
-                        </span>
+      {produtosFiltrados.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="font-medium">Nenhum produto encontrado</p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop: Tabela */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Imagem</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nome</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">SKU</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Categoria</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Quantidade</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Preço</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {produtosFiltrados.map((produto) => (
+                  <tr key={produto.id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <td className="py-3 px-4">
+                      <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded" />
+                    </td>
+                    <td className="py-3 px-4 font-medium dark:text-white">{produto.nome}</td>
+                    <td className="py-3 px-4 text-gray-500 text-sm">{produto.sku}</td>
+                    <td className="py-3 px-4 text-gray-500 text-sm">{produto.categoria}</td>
+                    <td className="py-3 px-4">
+                      <span className={`badge ${produto.quantidade_atual < produto.quantidade_minima ? 'badge-danger' : 'badge-success'}`}>
+                        {produto.quantidade_atual}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-semibold">{formatarMoeda(produto.preco_venda)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/dashboard/produtos/${produto.id}`} className="p-2 text-blue-600 hover:bg-blue-100 rounded" title="Editar">
+                          <Edit2 size={16} />
+                        </Link>
+                        <button onClick={() => handleDelete(produto.id, produto.nome)} className="p-2 text-red-600 hover:bg-red-100 rounded" title="Deletar">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-                  {/* Ações */}
-                  <div className="mt-4 flex gap-2">
-                    <Link
-                      href={`/dashboard/produtos/${produto.id}`}
-                      className="flex-1 btn-secondary text-xs flex items-center justify-center gap-2"
-                    >
-                      <Edit2 size={16} />
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(produto.id, produto.nome)}
-                      className="flex-1 btn-danger text-xs flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} />
-                      Deletar
-                    </button>
-                  </div>
+          {/* Mobile: Cards */}
+          <div className="md:hidden space-y-3">
+            {produtosFiltrados.map((produto) => (
+              <div key={produto.id} className="card p-4 border dark:border-gray-700 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-sm dark:text-white truncate flex-1">{produto.nome}</h4>
+                  <span className={`badge text-xs ml-2 ${produto.quantidade_atual < produto.quantidade_minima ? 'badge-danger' : 'badge-success'}`}>
+                    {produto.quantidade_atual} un.
+                  </span>
                 </div>
-              ))}
+                <p className="text-xs text-gray-500 mb-1">SKU: {produto.sku}</p>
+                <p className="text-xs text-gray-500 mb-2">{produto.categoria}</p>
+                <p className="font-bold text-green-600 dark:text-green-400 mb-3">{formatarMoeda(produto.preco_venda)}</p>
+                <div className="flex gap-2">
+                  <Link href={`/dashboard/produtos/${produto.id}`} className="flex-1 btn-primary text-xs text-center py-2">
+                    <Edit2 size={14} className="inline mr-1" /> Editar
+                  </Link>
+                  <button onClick={() => handleDelete(produto.id, produto.nome)} className="flex-1 btn-danger text-xs py-2">
+                    <Trash2 size={14} className="inline mr-1" /> Deletar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Paginação */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t dark:border-gray-800">
+              <p className="text-sm text-gray-500">
+                Página {pagina + 1} de {totalPaginas} · {totalProdutos} produtos
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagina((p) => Math.max(0, p - 1))}
+                  disabled={pagina === 0}
+                  className="px-3 py-2 rounded-lg border dark:border-gray-700 text-sm font-medium disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+                >
+                  <ChevronLeft size={16} /> Anterior
+                </button>
+                <button
+                  onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
+                  disabled={pagina >= totalPaginas - 1}
+                  className="px-3 py-2 rounded-lg border dark:border-gray-700 text-sm font-medium disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1"
+                >
+                  Próxima <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\produtos\novo\page.tsx ===
@@ -7787,6 +7828,324 @@ export default function RelatoriosPage() {
 
 
 
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\vendas\page.tsx ===
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { formatarMoeda, formatarData } from '@/lib/utils'
+import {
+  ShoppingCart,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Banknote,
+  QrCode,
+  Search,
+} from 'lucide-react'
+
+interface Venda {
+  id: string
+  numero_venda: string
+  subtotal: number
+  desconto: number
+  total: number
+  forma_pagamento: string
+  valor_recebido: number | null
+  troco: number | null
+  criado_em: string
+  itens?: ItemVenda[]
+}
+
+interface ItemVenda {
+  id: string
+  nome_produto: string
+  sku: string
+  quantidade: number
+  preco_unitario: number
+  subtotal: number
+}
+
+const ICON_PAGAMENTO: Record<string, any> = {
+  Dinheiro: Banknote,
+  Pix: QrCode,
+  'Cartão Débito': CreditCard,
+  'Cartão Crédito': CreditCard,
+}
+
+export default function VendasPage() {
+  const [vendas, setVendas] = useState<Venda[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandido, setExpandido] = useState<string | null>(null)
+  const [filtro, setFiltro] = useState('')
+  const [pagina, setPagina] = useState(0)
+  const [temMais, setTemMais] = useState(true)
+  const POR_PAGINA = 20
+
+  const fetchVendas = useCallback(async (pag: number, reset = false) => {
+    try {
+      const { data, error } = await supabase
+        .from('vendas')
+        .select('*')
+        .order('criado_em', { ascending: false })
+        .range(pag * POR_PAGINA, (pag + 1) * POR_PAGINA - 1)
+
+      if (error) throw error
+
+      if (data) {
+        setVendas((prev) => (reset ? data : [...prev, ...data]))
+        setTemMais(data.length === POR_PAGINA)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar vendas:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchVendas(0, true)
+  }, [fetchVendas])
+
+  const toggleExpandir = async (vendaId: string) => {
+    if (expandido === vendaId) {
+      setExpandido(null)
+      return
+    }
+
+    // Busca itens da venda
+    const venda = vendas.find((v) => v.id === vendaId)
+    if (venda && !venda.itens) {
+      const { data } = await supabase
+        .from('itens_venda')
+        .select('*')
+        .eq('venda_id', vendaId)
+
+      if (data) {
+        setVendas((prev) =>
+          prev.map((v) => (v.id === vendaId ? { ...v, itens: data } : v))
+        )
+      }
+    }
+
+    setExpandido(vendaId)
+  }
+
+  const carregarMais = () => {
+    const novaPagina = pagina + 1
+    setPagina(novaPagina)
+    fetchVendas(novaPagina)
+  }
+
+  const vendasFiltradas = vendas.filter(
+    (v) =>
+      v.numero_venda.toLowerCase().includes(filtro.toLowerCase()) ||
+      v.forma_pagamento.toLowerCase().includes(filtro.toLowerCase())
+  )
+
+  // Totais
+  const totalVendas = vendas.reduce((acc, v) => acc + Number(v.total), 0)
+  const totalHoje = vendas
+    .filter(
+      (v) =>
+        new Date(v.criado_em).toDateString() === new Date().toDateString()
+    )
+    .reduce((acc, v) => acc + Number(v.total), 0)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Histórico de Vendas
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Todas as vendas realizadas no PDV
+        </p>
+      </div>
+
+      {/* Métricas */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+          <p className="text-xs text-gray-500">Vendas Hoje</p>
+          <p className="text-xl font-bold text-green-600 dark:text-green-400">
+            {formatarMoeda(totalHoje)}
+          </p>
+        </div>
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+          <p className="text-xs text-gray-500">Total Geral</p>
+          <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            {formatarMoeda(totalVendas)}
+          </p>
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4">
+          <p className="text-xs text-gray-500">Qtd. Vendas</p>
+          <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
+            {vendas.length}
+          </p>
+        </div>
+      </div>
+
+      {/* Busca */}
+      <div className="relative">
+        <Search
+          size={18}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+        />
+        <input
+          type="text"
+          placeholder="Buscar por número da venda ou forma de pagamento..."
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          className="input-field pl-10 w-full"
+        />
+      </div>
+
+      {/* Lista */}
+      {vendasFiltradas.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
+          <p className="font-medium">Nenhuma venda encontrada</p>
+          <Link
+            href="/dashboard/pdv"
+            className="inline-block mt-4 btn-primary text-sm px-4 py-2"
+          >
+            Ir para o PDV
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {vendasFiltradas.map((venda) => {
+            const isExpandido = expandido === venda.id
+            const IconPag =
+              ICON_PAGAMENTO[venda.forma_pagamento] || CreditCard
+
+            return (
+              <div
+                key={venda.id}
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden"
+              >
+                {/* Linha principal */}
+                <button
+                  onClick={() => toggleExpandir(venda.id)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-left"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                      <IconPag
+                        size={18}
+                        className="text-green-600 dark:text-green-400"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                        {venda.numero_venda}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatarData(venda.criado_em)} ·{' '}
+                        {venda.forma_pagamento}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-green-600 dark:text-green-400">
+                      {formatarMoeda(Number(venda.total))}
+                    </span>
+                    {isExpandido ? (
+                      <ChevronUp size={18} className="text-gray-400" />
+                    ) : (
+                      <ChevronDown size={18} className="text-gray-400" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Detalhes expandidos */}
+                {isExpandido && (
+                  <div className="border-t dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/30 space-y-3">
+                    {/* Itens */}
+                    {venda.itens ? (
+                      <div className="space-y-2">
+                        {venda.itens.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <div>
+                              <span className="font-medium text-gray-900 dark:text-white">
+                                {item.nome_produto}
+                              </span>
+                              <span className="text-gray-400 ml-2">
+                                x{item.quantidade}
+                              </span>
+                            </div>
+                            <span className="font-semibold">
+                              {formatarMoeda(Number(item.subtotal))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-2 text-gray-400 text-sm">
+                        Carregando itens...
+                      </div>
+                    )}
+
+                    {/* Totais */}
+                    <div className="border-t dark:border-gray-700 pt-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span>{formatarMoeda(Number(venda.subtotal))}</span>
+                      </div>
+                      {Number(venda.desconto) > 0 && (
+                        <div className="flex justify-between text-red-500">
+                          <span>Desconto</span>
+                          <span>
+                            -{formatarMoeda(Number(venda.desconto))}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-base">
+                        <span>Total</span>
+                        <span>{formatarMoeda(Number(venda.total))}</span>
+                      </div>
+                      {venda.troco && Number(venda.troco) > 0 && (
+                        <div className="flex justify-between text-gray-400">
+                          <span>Troco</span>
+                          <span>{formatarMoeda(Number(venda.troco))}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Carregar mais */}
+          {temMais && (
+            <button
+              onClick={carregarMais}
+              className="w-full py-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition font-medium"
+            >
+              Carregar mais vendas...
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\login\page.tsx ===
 'use client'
 
@@ -7795,7 +8154,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
-import { Mail, Lock, Package, BarChart3, ShoppingCart, Zap } from 'lucide-react'
+import {
+  Mail,
+  Lock,
+  Package,
+  BarChart3,
+  ShoppingCart,
+  ArrowLeft,
+} from 'lucide-react'
 
 export default function Login() {
   const router = useRouter()
@@ -7803,6 +8169,13 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Reset password
+  const [modoReset, setModoReset] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetSucesso, setResetSucesso] = useState(false)
+  const [resetError, setResetError] = useState('')
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -7833,104 +8206,213 @@ export default function Login() {
     }
   }
 
-  return (
-    <div className="min-h-screen flex">
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetError('')
+    setResetLoading(true)
 
-      {/* ══════════ LADO ESQUERDO — Branding ══════════ */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-600 via-green-700 to-emerald-800 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
-        </div>
+    if (!resetEmail.trim() || !resetEmail.includes('@')) {
+      setResetError('Digite um email válido')
+      setResetLoading(false)
+      return
+    }
 
-        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="text-3xl">📦</span>
-            <span className="text-2xl font-bold text-white">EstoqueSystem</span>
-          </Link>
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
 
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <h1 className="text-4xl font-bold text-white leading-tight">
-                Gerencie seu estoque de forma simples e inteligente
-              </h1>
-              <p className="text-green-100 text-lg leading-relaxed">
-                Tudo que seu comércio precisa em um só lugar — do controle de
-                estoque ao ponto de venda.
-              </p>
-            </div>
+      if (error) {
+        setResetError(error.message)
+      } else {
+        setResetSucesso(true)
+      }
+    } catch {
+      setResetError('Erro ao enviar email. Tente novamente.')
+    } finally {
+      setResetLoading(false)
+    }
+  }
 
-            <div className="space-y-4">
-              {[
-                {
-                  icon: Package,
-                  titulo: 'Controle total',
-                  desc: 'Cadastre produtos e acompanhe quantidades em tempo real',
-                },
-                {
-                  icon: ShoppingCart,
-                  titulo: 'PDV integrado',
-                  desc: 'Venda direto pelo celular com leitor de código de barras',
-                },
-                {
-                  icon: BarChart3,
-                  titulo: 'Relatórios claros',
-                  desc: 'Veja vendas, lucro e movimentação em gráficos simples',
-                },
-              ].map(({ icon: Icon, titulo, desc }) => (
-                <div key={titulo} className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                    <Icon className="w-5 h-5 text-green-200" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">{titulo}</p>
-                    <p className="text-green-200 text-sm">{desc}</p>
-                  </div>
+  // ══════════ TELA DE RESET ══════════
+  if (modoReset) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
+            <button
+              onClick={() => {
+                setModoReset(false)
+                setResetSucesso(false)
+                setResetError('')
+              }}
+              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-6 text-sm"
+            >
+              <ArrowLeft size={16} /> Voltar ao login
+            </button>
+
+            {resetSucesso ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Mail size={32} className="text-green-600" />
                 </div>
-              ))}
-            </div>
-          </div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Email enviado! 📧
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400 mb-2">
+                  Enviamos um link de recuperação para:
+                </p>
+                <p className="font-semibold text-gray-900 dark:text-white mb-6">
+                  {resetEmail}
+                </p>
+                <p className="text-sm text-gray-400">
+                  Não recebeu? Verifique a pasta de spam ou{' '}
+                  <button
+                    onClick={() => setResetSucesso(false)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    tente novamente
+                  </button>
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Lock size={32} className="text-blue-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Esqueceu sua senha?
+                  </h2>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
+                    Digite seu email e enviaremos um link para redefinir sua
+                    senha.
+                  </p>
+                </div>
 
-          <p className="text-green-300 text-sm">
-            © {new Date().getFullYear()} EstoqueSystem · Por Lucas Machado
-          </p>
+                {resetError && <Alert message={resetError} type="error" />}
+
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Email da sua conta
+                    </label>
+                    <div className="relative">
+                      <Mail
+                        size={18}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      />
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
+                        placeholder="seu@email.com"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition disabled:opacity-50"
+                  >
+                    {resetLoading ? 'Enviando...' : 'Enviar link de recuperação'}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
         </div>
       </div>
+    )
+  }
 
-      {/* ══════════ LADO DIREITO — Formulário ══════════ */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-white dark:bg-gray-950">
-        <div className="w-full max-w-md space-y-8">
+  // ══════════ TELA DE LOGIN ══════════
+  return (
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Lado esquerdo — Branding */}
+      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-gradient-to-br from-green-600 via-green-700 to-emerald-800 p-12 text-white">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">📦 EstoqueSystem</h1>
+          <h2 className="text-2xl font-bold mt-8 leading-tight">
+            Gerencie seu estoque de forma simples e inteligente
+          </h2>
+          <p className="text-green-100 mt-4 text-lg">
+            Tudo que seu comércio precisa em um só lugar — do controle de
+            estoque ao ponto de venda.
+          </p>
+        </div>
 
+        <div className="space-y-4">
+          {[
+            {
+              icon: Package,
+              titulo: 'Controle total',
+              desc: 'Cadastre produtos e acompanhe quantidades em tempo real',
+            },
+            {
+              icon: ShoppingCart,
+              titulo: 'PDV integrado',
+              desc: 'Venda direto pelo celular com leitor de código de barras',
+            },
+            {
+              icon: BarChart3,
+              titulo: 'Relatórios claros',
+              desc: 'Veja vendas, lucro e movimentação em gráficos simples',
+            },
+          ].map(({ icon: Icon, titulo, desc }) => (
+            <div key={titulo} className="flex items-start gap-3">
+              <div className="p-2 bg-white/10 rounded-lg flex-shrink-0">
+                <Icon size={20} />
+              </div>
+              <div>
+                <p className="font-semibold">{titulo}</p>
+                <p className="text-green-100 text-sm">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-green-200 text-sm">
+          © {new Date().getFullYear()} EstoqueSystem · Por Lucas Machado
+        </p>
+      </div>
+
+      {/* Lado direito — Formulário */}
+      <div className="flex-1 flex items-center justify-center p-6 bg-white dark:bg-gray-950">
+        <div className="w-full max-w-md">
           {/* Logo mobile */}
-          <div className="lg:hidden text-center space-y-2">
-            <Link href="/" className="inline-flex items-center gap-2">
-              <span className="text-3xl">📦</span>
-              <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                EstoqueSystem
-              </span>
-            </Link>
+          <div className="lg:hidden text-center mb-8">
+            <span className="text-4xl">📦</span>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-2">
+              EstoqueSystem
+            </h1>
           </div>
 
-          {/* Header */}
-          <div className="space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               Bem-vindo de volta 👋
             </h2>
-            <p className="text-gray-500 dark:text-gray-400">
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
               Entre na sua conta para acessar o dashboard
             </p>
           </div>
 
           {error && <Alert message={error} type="error" />}
 
-          {/* Formulário */}
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Mail
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
                 <input
                   type="email"
                   value={email}
@@ -7942,12 +8424,27 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Senha
-              </label>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Senha
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModoReset(true)
+                    setResetEmail(email)
+                  }}
+                  className="text-sm text-green-600 hover:text-green-700 dark:text-green-400 hover:underline"
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Lock
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
                 <input
                   type="password"
                   value={password}
@@ -7962,11 +8459,11 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
+              className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
                   Entrando...
                 </>
               ) : (
@@ -7975,32 +8472,21 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Divisor */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-800" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white dark:bg-gray-950 px-4 text-gray-400">
-                ou
-              </span>
-            </div>
+          <div className="flex items-center gap-4 my-6">
+            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+            <span className="text-sm text-gray-400">ou</span>
+            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
           </div>
 
-          {/* Criar conta */}
-          <div className="text-center space-y-4">
-            <Link
-              href="/signup"
-              className="block w-full py-3.5 border-2 border-green-600 text-green-600 dark:text-green-400 font-semibold rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 transition text-center"
-            >
-              Criar conta grátis
-            </Link>
-
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-              <Zap className="w-4 h-4 text-green-500" />
-              <span>15 dias grátis — sem cartão de crédito</span>
-            </div>
-          </div>
+          <Link
+            href="/signup"
+            className="block w-full py-3 border-2 border-green-600 text-green-600 dark:text-green-400 dark:border-green-400 font-semibold rounded-xl text-center hover:bg-green-50 dark:hover:bg-green-900/20 transition"
+          >
+            Criar conta grátis
+          </Link>
+          <p className="text-center text-xs text-gray-400 mt-3">
+            15 dias grátis — sem cartão de crédito
+          </p>
         </div>
       </div>
     </div>
@@ -9814,6 +10300,7 @@ const navItems = [
   { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
   { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
+  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
   { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
   { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },
@@ -9839,7 +10326,7 @@ export default function Navbar() {
   })
 
   return (
-    <nav className="bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 border-b dark:border-gray-800">
+    <nav className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 border-b dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           <Link href="/dashboard" className="font-bold text-xl text-primary">
@@ -10377,11 +10864,13 @@ const allNavItems = [
   { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp,   requiredLevel: 'dono' },
   { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle,  requiredLevel: 'dono' },
+  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
   { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users,        requiredLevel: 'dono' },
   { href: '/dashboard/clientes',   label: 'Clientes',   icon: Users,        requiredLevel: 'dono' },
   { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle,   requiredLevel: null },
   { href: '/dashboard/ajuda',      label: 'Ajuda',      icon: HelpCircle,   requiredLevel: null },
   { href: '/dashboard/admin',      label: 'Admin',      icon: Shield,       requiredLevel: 'dono' },
+
 ]
 
 export default function Sidebar() {
@@ -10405,7 +10894,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen sticky top-0 border-r dark:border-gray-800">
+      <aside className="hidden md:flex flex-col w-56 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen fixed top-14 left-0 border-r dark:border-gray-800 z-30">
         <nav className="flex-1 p-4 space-y-1">
           {filteredNavItems.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href}
