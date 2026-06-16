@@ -1,21 +1,22 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
 import { Produto } from '@/lib/types'
 import { ArrowLeft } from 'lucide-react'
 
-export default function NovoMovimentoPage() {
+function NovoMovimentoContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [loadingProdutos, setLoadingProdutos] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [produtos, setProdutos] = useState<Produto[]>([])
-
   const [formData, setFormData] = useState({
     produto_id: '',
     tipo_movimento: 'entrada' as 'entrada' | 'saida',
@@ -44,7 +45,23 @@ export default function NovoMovimentoPage() {
     fetchProdutos()
   }, [])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  // ══════════ LÊ PARAMS DA URL (vindo do SearchCommand) ══════════
+  useEffect(() => {
+    const tipo = searchParams.get('tipo')
+    const produtoId = searchParams.get('produto')
+
+    if (tipo === 'entrada' || tipo === 'saida') {
+      setFormData((prev) => ({ ...prev, tipo_movimento: tipo }))
+    }
+
+    if (produtoId) {
+      setFormData((prev) => ({ ...prev, produto_id: produtoId }))
+    }
+  }, [searchParams])
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -53,15 +70,19 @@ export default function NovoMovimentoPage() {
   }
 
   const produtoSelecionado = produtos.find((p) => p.id === formData.produto_id)
+
   const maxQuantidade = produtoSelecionado
     ? formData.tipo_movimento === 'saida'
       ? produtoSelecionado.quantidade_atual
       : Infinity
     : Infinity
+
   const ficaraAbaixoDoMinimo =
     produtoSelecionado &&
     formData.tipo_movimento === 'saida' &&
-    produtoSelecionado.quantidade_atual - formData.quantidade < produtoSelecionado.quantidade_minima
+    produtoSelecionado.quantidade_atual - formData.quantidade <
+      produtoSelecionado.quantidade_minima
+
   const quantidadeParaRepor = produtoSelecionado
     ? produtoSelecionado.quantidade_minima - produtoSelecionado.quantidade_atual
     : 0
@@ -77,26 +98,25 @@ export default function NovoMovimentoPage() {
       return
     }
 
-    // Validação: quantidade máxima em saída
     if (
       formData.tipo_movimento === 'saida' &&
       produtoSelecionado &&
       formData.quantidade > produtoSelecionado.quantidade_atual
     ) {
-      setError(`Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`)
+      setError(
+        `Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`
+      )
       setLoading(false)
       return
     }
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-
       if (!userData.user) {
         setError('Usuário não autenticado')
         return
       }
 
-      // Registrar movimento
       const { error: movimentoError } = await supabase
         .from('movimentos_estoque')
         .insert([
@@ -114,7 +134,6 @@ export default function NovoMovimentoPage() {
         return
       }
 
-      // Atualizar quantidade do produto
       const produto = produtos.find((p) => p.id === formData.produto_id)
       if (produto) {
         const novaQuantidade =
@@ -132,10 +151,9 @@ export default function NovoMovimentoPage() {
           return
         }
 
-        // Verificar se precisa criar alerta
         if (novaQuantidade < produto.quantidade_minima) {
-          const tipoAlerta = novaQuantidade === 0 ? 'estoque_critico' : 'estoque_baixo'
-          
+          const tipoAlerta =
+            novaQuantidade === 0 ? 'estoque_critico' : 'estoque_baixo'
           await supabase.from('alertas').insert([
             {
               produto_id: formData.produto_id,
@@ -160,177 +178,179 @@ export default function NovoMovimentoPage() {
   }
 
   if (loadingProdutos) {
-    return <div>Carregando produtos...</div>
+    return <div className="p-8 text-center">Carregando produtos...</div>
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/estoque" className="p-2 hover:bg-gray-100 rounded">
-          <ArrowLeft size={20} />
+    <div>
+      <div className="flex items-center gap-4 mb-6">
+        <Link href="/dashboard/estoque" className="text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={24} />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Novo Movimento</h1>
-          <p className="text-gray-600 mt-2">Registrar entrada ou saída de produto</p>
+          <h2 className="text-2xl font-bold dark:text-white">Novo Movimento</h2>
+          <p className="text-sm text-gray-500">
+            Registrar entrada ou saída de produto
+          </p>
         </div>
       </div>
 
       {error && <Alert message={error} type="error" />}
       {success && <Alert message={success} type="success" />}
 
-      <div className="card max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Produto *
-            </label>
-            <select
-              name="produto_id"
-              value={formData.produto_id}
-              onChange={handleInputChange}
-              required
-              className="input-field"
-            >
-              <option value="">Selecionar produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome} (Estoque: {produto.quantidade_atual})
-                </option>
-              ))}
-            </select>
+      <form onSubmit={handleSubmit} className="card p-6 space-y-4 max-w-xl">
+        <div>
+          <label className="block text-sm font-medium mb-1">Produto *</label>
+          <select
+            name="produto_id"
+            value={formData.produto_id}
+            onChange={handleInputChange}
+            className="input-field w-full"
+          >
+            <option value="">Selecionar produto</option>
+            {produtos.map((produto) => (
+              <option key={produto.id} value={produto.id}>
+                {produto.nome} (Estoque: {produto.quantidade_atual})
+              </option>
+            ))}
+          </select>
 
-            {/* Info do produto selecionado */}
-            {produtoSelecionado && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-600">Estoque Atual</p>
-                    <p className={`text-lg font-bold ${
-                      produtoSelecionado.quantidade_atual < produtoSelecionado.quantidade_minima
-                        ? 'text-red-600'
-                        : 'text-green-600'
-                    }`}>
-                      {produtoSelecionado.quantidade_atual}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Mínimo</p>
-                    <p className="text-lg font-bold text-gray-700">
-                      {produtoSelecionado.quantidade_minima}
-                    </p>
-                  </div>
-                </div>
+          {produtoSelecionado && (
+            <div className="flex gap-4 mt-2 text-sm">
+              <div>
+                <span className="text-gray-500">Estoque Atual</span>
+                <p
+                  className={`font-bold ${
+                    produtoSelecionado.quantidade_atual <
+                    produtoSelecionado.quantidade_minima
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}
+                >
+                  {produtoSelecionado.quantidade_atual}
+                </p>
               </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipo de Movimento *
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipo_movimento"
-                  value="entrada"
-                  checked={formData.tipo_movimento === 'entrada'}
-                  onChange={handleInputChange}
-                  className="mr-2"
-                />
-                <span className="text-green-600 font-medium">Entrada</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipo_movimento"
-                  value="saida"
-                  checked={formData.tipo_movimento === 'saida'}
-                  onChange={handleInputChange}
-                  className="mr-2"
-                />
-                <span className="text-red-600 font-medium">Saída</span>
-              </label>
+              <div>
+                <span className="text-gray-500">Mínimo</span>
+                <p className="font-bold">{produtoSelecionado.quantidade_minima}</p>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Quantidade *
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Tipo de Movimento *
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="tipo_movimento"
+                value="entrada"
+                checked={formData.tipo_movimento === 'entrada'}
+                onChange={handleInputChange}
+              />
+              Entrada
             </label>
-            <input
-              type="number"
-              name="quantidade"
-              value={formData.quantidade}
-              onChange={handleInputChange}
-              required
-              min="1"
-              max={maxQuantidade === Infinity ? undefined : maxQuantidade}
-              className="input-field"
-              placeholder="Quantidade"
-            />
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="tipo_movimento"
+                value="saida"
+                checked={formData.tipo_movimento === 'saida'}
+                onChange={handleInputChange}
+              />
+              Saída
+            </label>
+          </div>
+        </div>
 
-            {/* Avisos e sugestões */}
-            {formData.quantidade > 0 && produtoSelecionado && (
-              <div className="mt-3 space-y-2">
-                {/* Aviso: quantidade insuficiente */}
-                {formData.tipo_movimento === 'saida' && formData.quantidade > produtoSelecionado.quantidade_atual && (
-                  <div className="p-3 bg-red-50 border border-red-300 text-red-700 rounded-lg text-sm">
-                    ❌ Quantidade insuficiente! Disponível: {produtoSelecionado.quantidade_atual}
+        <div>
+          <label className="block text-sm font-medium mb-1">Quantidade *</label>
+          <input
+            type="number"
+            name="quantidade"
+            value={formData.quantidade || ''}
+            onChange={handleInputChange}
+            min="1"
+            max={maxQuantidade}
+            className="input-field w-full"
+          />
+
+          {formData.quantidade > 0 && produtoSelecionado && (
+            <div className="mt-2 space-y-2">
+              {formData.tipo_movimento === 'saida' &&
+                formData.quantidade > produtoSelecionado.quantidade_atual && (
+                  <div className="text-red-600 text-sm font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                    ❌ Quantidade insuficiente! Disponível:{' '}
+                    {produtoSelecionado.quantidade_atual}
                   </div>
                 )}
 
-                {/* Aviso: vai ficar abaixo do mínimo */}
-                {ficaraAbaixoDoMinimo && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-300 text-yellow-700 rounded-lg text-sm">
-                    ⚠️ Atenção: após este movimento, o estoque ficará abaixo do mínimo!
-                    <p className="mt-2 font-medium">
-                      Sobrará: {produtoSelecionado.quantidade_atual - formData.quantidade} (mín: {produtoSelecionado.quantidade_minima})
-                    </p>
-                  </div>
-                )}
+              {ficaraAbaixoDoMinimo && (
+                <div className="text-amber-600 text-sm bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                  ⚠️ Atenção: após este movimento, o estoque ficará abaixo do
+                  mínimo!
+                  <br />
+                  Sobrará:{' '}
+                  {produtoSelecionado.quantidade_atual - formData.quantidade} (mín:{' '}
+                  {produtoSelecionado.quantidade_minima})
+                </div>
+              )}
 
-                {/* Sugestão de repor */}
-                {formData.tipo_movimento === 'entrada' && quantidadeParaRepor > 0 && (
-                  <div className="p-3 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm flex justify-between items-center">
+              {formData.tipo_movimento === 'entrada' &&
+                quantidadeParaRepor > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
                     <span>💡 Sugestão: repor {quantidadeParaRepor} unidades</span>
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, quantidade: quantidadeParaRepor })}
+                      onClick={() =>
+                        setFormData({ ...formData, quantidade: quantidadeParaRepor })
+                      }
                       className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-medium"
                     >
                       Usar
                     </button>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Motivo
-            </label>
-            <textarea
-              name="motivo"
-              value={formData.motivo}
-              onChange={handleInputChange}
-              className="input-field"
-              rows={3}
-              placeholder="Motivo do movimento (compra, venda, devolução, etc)"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Motivo</label>
+          <textarea
+            name="motivo"
+            value={formData.motivo}
+            onChange={handleInputChange}
+            className="input-field w-full"
+            rows={3}
+          />
+        </div>
 
-          <div className="flex gap-4">
-            <button type="submit" disabled={loading} className="btn-primary">
-              {loading ? 'Registrando...' : 'Registrar Movimento'}
-            </button>
-            <Link href="/dashboard/estoque" className="btn-outline">
-              Cancelar
-            </Link>
-          </div>
-        </form>
-      </div>
+        <div className="flex gap-4 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary px-6 py-2"
+          >
+            {loading ? 'Registrando...' : 'Registrar Movimento'}
+          </button>
+          <Link href="/dashboard/estoque" className="btn-secondary px-6 py-2">
+            Cancelar
+          </Link>
+        </div>
+      </form>
     </div>
+  )
+}
+
+// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
+export default function NovoMovimentoPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Carregando...</div>}>
+      <NovoMovimentoContent />
+    </Suspense>
   )
 }

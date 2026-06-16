@@ -29,38 +29,42 @@ export default function ClientesPage() {
   const { addNotification } = useNotification()
 
   const fetchClientes = useCallback(async () => {
-    try {
-      const { data: clientesData, error } = await supabase
-        .from('clientes')
-        .select('*')
-        .order('nome')
+  try {
+    // 1 query: todos os clientes
+    const { data: clientesData, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('nome')
 
-      if (error) throw error
+    if (error) throw error
 
-      // Buscar saldos de fiado para cada cliente
-      const clientesComSaldo = await Promise.all(
-        (clientesData || []).map(async (cliente: Cliente) => {
-          const { data: fiadoData } = await supabase
-            .from('fiado')
-            .select('tipo, valor')
-            .eq('cliente_id', cliente.id)
+    // 1 query: TODOS os fiados de uma vez (em vez de N queries)
+    const { data: todosOsFiados } = await supabase
+      .from('fiado')
+      .select('cliente_id, tipo, valor')
 
-          const saldo = (fiadoData || []).reduce((acc: number, f: any) => {
-            return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
-          }, 0)
+    // Agrupa saldos no JavaScript (instantâneo)
+    const saldoPorCliente: Record<string, number> = {}
+    ;(todosOsFiados || []).forEach((f: any) => {
+      const id = f.cliente_id
+      if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+      saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+    })
 
-          return { ...cliente, saldo_fiado: saldo }
-        })
-      )
+    // Combina clientes + saldos
+    const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
+      ...cliente,
+      saldo_fiado: saldoPorCliente[cliente.id] || 0,
+    }))
 
-      setClientes(clientesComSaldo)
-    } catch (error) {
-      console.error('Erro ao buscar clientes:', error)
-      addNotification('Erro ao carregar clientes', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+    setClientes(clientesComSaldo)
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error)
+    addNotification('Erro ao carregar clientes', 'error')
+  } finally {
+    setLoading(false)
+  }
+}, [addNotification]) 
 
   useEffect(() => {
     fetchClientes()

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
 import { formatarData } from '@/lib/utils'
-import { Mail, Plus, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
+import { Plus, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
 
 interface Membro {
   id: string
@@ -61,89 +61,60 @@ export default function EquipePage() {
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
-  const generatePassword = (): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
-    let password = ''
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return password
+  
+
+ const handleInviteNewMember = async (e: React.FormEvent) => {
+  e.preventDefault()
+
+  if (!newEmail.trim()) {
+    addNotification('Email é obrigatório', 'warning')
+    return
   }
 
-  const handleInviteNewMember = async (e: React.FormEvent) => {
-    e.preventDefault()
+  if (!newEmail.includes('@')) {
+    addNotification('Email inválido', 'warning')
+    return
+  }
 
-    if (!newEmail.trim()) {
-      addNotification('Email é obrigatório', 'warning')
-      return
-    }
+  try {
+    setIsInviting(true)
 
-    if (!newEmail.includes('@')) {
-      addNotification('Email inválido', 'warning')
-      return
-    }
+    // Chama a API Route (servidor) — NÃO afeta a sessão do dono
+    const response = await fetch('/api/equipe/convidar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: newEmail,
+        donoId: donoId,
+      }),
+    })
 
-    try {
-      setIsInviting(true)
+    const data = await response.json()
 
-      // Verifica se o email já existe
-      const { data: existingMember } = await supabase
-        .from('membros')
-        .select('id')
-        .eq('email', newEmail)
-        .eq('dono_id', donoId)
-        .single()
-
-      if (existingMember) {
+    if (!response.ok) {
+      if (response.status === 409) {
         addNotification('Este funcionário já foi convidado', 'warning')
-        return
+      } else {
+        addNotification(data.error || 'Erro ao convidar', 'error')
       }
-
-      // Gera senha temporária
-      const tempPassword = generatePassword()
-      setGeneratedPassword(tempPassword)
-
-      // Cria nova conta de usuário no Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newEmail,
-        password: tempPassword,
-      })
-
-      if (authError) {
-        // Se o email já está registrado, continua mesmo assim
-        if (authError.message.includes('User already registered')) {
-          console.log('Email já registrado, prosseguindo com registro de membro')
-        } else {
-          throw authError
-        }
-      }
-
-      const userId = authData?.user?.id || null
-
-      // Registra membro na tabela
-      const { error: insertError } = await supabase.from('membros').insert({
-        dono_id: donoId,
-        user_id: userId,
-        email: newEmail,
-        nivel: 'funcionario',
-        status: 'pendente',
-      })
-
-      if (insertError) throw insertError
-
-      addNotification(`Funcionário convidado com sucesso! Senha: ${tempPassword}`, 'success')
-      setNewEmail('')
-      setGeneratedPassword(tempPassword)
-
-      // Recarrega a lista
-      fetchMembros()
-    } catch (error) {
-      console.error('Erro ao convidar funcionário:', error)
-      addNotification('Erro ao convidar funcionário', 'error')
-    } finally {
-      setIsInviting(false)
+      return
     }
+
+    // Sucesso!
+    setGeneratedPassword(data.tempPassword)
+    addNotification(
+      `Funcionário convidado com sucesso! Senha: ${data.tempPassword}`,
+      'success'
+    )
+    setNewEmail('')
+    fetchMembros()
+  } catch (error) {
+    console.error('Erro ao convidar funcionário:', error)
+    addNotification('Erro ao convidar funcionário', 'error')
+  } finally {
+    setIsInviting(false)
   }
+}
 
   const toggleStatus = async (memberId: string, currentStatus: string) => {
     try {
@@ -304,80 +275,129 @@ export default function EquipePage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b dark:border-gray-700">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Email
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Nível
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Data
-                  </th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {membros.map((membro) => (
-                  <tr
-                    key={membro.id}
-                    className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Mail size={16} className="text-gray-400" />
-                        <span className="text-gray-900 dark:text-white">{membro.email}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`${getStatusBadge(membro.status)}`}>
-                        {getStatusLabel(membro.status)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-xs">
-                      {formatarData(membro.created_at)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {membro.nivel !== 'dono' && (
-                          <>
-                            <button
-                              onClick={() => toggleStatus(membro.id, membro.status)}
-                              className={`px-3 py-1 rounded text-xs font-medium transition ${
-                                membro.status === 'ativo'
-                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900/50'
-                                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-900/50'
-                              }`}
-                            >
-                              {membro.status === 'ativo' ? 'Desativar' : 'Ativar'}
-                            </button>
-                            <button
-                              onClick={() => deleteMember(membro.id)}
-                              className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                              title="Remover funcionário"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <h3 className="text-lg font-semibold mb-4">
+  Funcionários ({membros.length})
+</h3>
+
+{isLoading ? (
+  <div className="text-center py-8">Carregando...</div>
+) : membros.length === 0 ? (
+  <div className="text-center py-8 text-gray-500">
+    Nenhum funcionário convidado ainda
+  </div>
+) : (
+  <>
+    {/* ══════════ DESKTOP: Tabela ══════════ */}
+    <div className="hidden md:block overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b dark:border-gray-700">
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Email</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nível</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
+            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {membros.map((membro) => (
+            <tr key={membro.id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <td className="py-3 px-4">
+                <span className="font-medium">{membro.email}</span>
+              </td>
+              <td className="py-3 px-4">
+                <span className={`badge ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
+                  {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+                </span>
+              </td>
+              <td className="py-3 px-4">
+                <span className={`badge ${getStatusBadge(membro.status)}`}>
+                  {getStatusLabel(membro.status)}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-500">
+                {formatarData(membro.created_at)}
+              </td>
+              <td className="py-3 px-4 text-right">
+                {membro.nivel !== 'dono' && (
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => toggleStatus(membro.id, membro.status)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition ${
+                        membro.status === 'ativo'
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
+                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
+                      }`}
+                    >
+                      {membro.status === 'ativo' ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button
+                      onClick={() => deleteMember(membro.id)}
+                      className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                      title="Remover funcionário"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    {/* ══════════ MOBILE: Cards ══════════ */}
+    <div className="md:hidden space-y-3">
+      {membros.map((membro) => (
+        <div
+          key={membro.id}
+          className="card p-4 border dark:border-gray-700 rounded-xl"
+        >
+          {/* Header: email + badges */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{membro.email}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formatarData(membro.created_at)}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1 ml-2">
+              <span className={`badge text-xs ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
+                {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+              </span>
+              <span className={`badge text-xs ${getStatusBadge(membro.status)}`}>
+                {getStatusLabel(membro.status)}
+              </span>
+            </div>
+          </div>
+
+          {/* Ações */}
+          {membro.nivel !== 'dono' && (
+            <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700">
+              <button
+                onClick={() => toggleStatus(membro.id, membro.status)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                  membro.status === 'ativo'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                }`}
+              >
+                {membro.status === 'ativo' ? '⏸ Desativar' : '▶ Ativar'}
+              </button>
+              <button
+                onClick={() => deleteMember(membro.id)}
+                className="py-2 px-4 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </>
+)}
           </div>
         )}
       </div>

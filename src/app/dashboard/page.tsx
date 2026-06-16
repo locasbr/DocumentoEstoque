@@ -146,33 +146,34 @@ function DashboardContent() {
           // Tabela pode não ter a coluna ainda — ignora silenciosamente
         }
 
-        // ── Top devedores (fiado) ──
-        try {
-          const { data: clientesData } = await supabase
-            .from('clientes')
-            .select('id, nome, telefone')
+        // ── Top devedores (fiado) — OTIMIZADO ──
+try {
+  const [clientesRes, fiadoRes] = await Promise.all([
+    supabase.from('clientes').select('id, nome, telefone'),
+    supabase.from('fiado').select('cliente_id, tipo, valor'),
+  ])
 
-          if (clientesData && clientesData.length > 0) {
-            const clientesComSaldo = await Promise.all(
-              clientesData.map(async (c: any) => {
-                const { data: fiadoData } = await supabase
-                  .from('fiado')
-                  .select('tipo, valor')
-                  .eq('cliente_id', c.id)
-                const saldo = (fiadoData || []).reduce((acc: number, f: any) =>
-                  f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor), 0)
-                return { ...c, saldo }
-              })
-            )
-            const devedores = clientesComSaldo
-              .filter((c: any) => c.saldo > 0)
-              .sort((a: any, b: any) => b.saldo - a.saldo)
-              .slice(0, 5)
-            setTopDevedores(devedores)
-          }
-        } catch {
-          // Tabelas podem não existir ainda — ignora silenciosamente
-        }
+  const clientesData = clientesRes.data || []
+  const todosOsFiados = fiadoRes.data || []
+
+  // Agrupa saldos
+  const saldoPorCliente: Record<string, number> = {}
+  todosOsFiados.forEach((f: any) => {
+    const id = f.cliente_id
+    if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+    saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+  })
+
+  const devedores = clientesData
+    .map((c: any) => ({ ...c, saldo: saldoPorCliente[c.id] || 0 }))
+    .filter((c: any) => c.saldo > 0)
+    .sort((a: any, b: any) => b.saldo - a.saldo)
+    .slice(0, 5)
+
+  setTopDevedores(devedores)
+} catch {
+  // Tabelas podem não existir ainda
+}
 
       } catch (error) {
         console.error('Error:', error)

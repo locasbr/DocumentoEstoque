@@ -44,7 +44,7 @@ export default function Signup() {
       nome_completo: nomeCompleto,
       nome_negocio: nomeNegocio,
     },
-    emailRedirectTo: `${window.location.origin}/auth/callback`,
+    emailRedirectTo: `${window.location.origin}/auth/confirmado`,
   },
 })
 
