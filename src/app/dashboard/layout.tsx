@@ -33,24 +33,28 @@ export default function DashboardLayout({
   const initialCheckDone = useRef(false)
   const userLevelRef = useRef<string>('dono')
 
+  // ══════════ AUTH LISTENER ══════════
   useEffect(() => {
-    // Listener de auth — mantém sessão atualizada
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_OUT' || !session) {
-          router.push('/login')
-        }
-        if (event === 'TOKEN_REFRESHED') {
-          console.log('Sessão renovada automaticamente')
-        }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      // Só redireciona no logout EXPLÍCITO
+      if (event === 'SIGNED_OUT') {
+        initialCheckDone.current = false
+        router.push('/login')
       }
-    )
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('Sessão renovada automaticamente')
+      }
+    })
 
     return () => subscription.unsubscribe()
   }, [router])
 
+  // ══════════ AUTH CHECK ══════════
   useEffect(() => {
     const checkAuth = async () => {
+      // Já checou? Só valida rota restrita
       if (initialCheckDone.current) {
         if (userLevelRef.current === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
@@ -62,12 +66,23 @@ export default function DashboardLayout({
       }
 
       try {
-        const { data } = await supabase.auth.getSession()
+        // Tenta recuperar a sessão
+        let { data } = await supabase.auth.getSession()
+
+        // Se não achou, espera a restauração do localStorage
+        if (!data.session) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          const retry = await supabase.auth.getSession()
+          data = retry.data
+        }
+
+        // Ainda sem sessão? Vai pro login
         if (!data.session) {
           router.push('/login')
           return
         }
 
+        // ── Verifica nível do membro ──
         const { data: membroData } = await supabase
           .from('membros')
           .select('nivel')
@@ -87,6 +102,7 @@ export default function DashboardLayout({
           }
         }
 
+        // ── Verifica plano/trial ──
         const { data: perfil } = await supabase
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento')
@@ -95,7 +111,9 @@ export default function DashboardLayout({
 
         if (perfil) {
           const agora = new Date()
-          const trialFim = perfil.trial_fim ? new Date(perfil.trial_fim) : null
+          const trialFim = perfil.trial_fim
+            ? new Date(perfil.trial_fim)
+            : null
 
           if (perfil.plano === 'expirado') {
             router.push('/assinar')
