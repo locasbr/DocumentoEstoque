@@ -41,7 +41,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen sticky top-0 border-r dark:border-gray-800">
+      <aside className="hidden md:flex flex-col w-56 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen fixed top-14 left-0 border-r dark:border-gray-800 z-30">
         <nav className="flex-1 p-4 space-y-1">
           {filteredNavItems.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href}

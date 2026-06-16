@@ -743,7 +743,7 @@ export default function EmailConfirmadoPage() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\layout.tsx ===
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/navbar'
@@ -773,17 +773,34 @@ export default function DashboardLayout({
   const [mostrarBanner, setMostrarBanner] = useState(false)
   const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
 
+  // Cache: evita re-fetch em toda navegação
+  const initialCheckDone = useRef(false)
+  const userLevelRef = useRef<string>('dono')
+
   useEffect(() => {
     const checkAuth = async () => {
+      // ── JÁ CHECOU? Só valida rota restrita ──
+      if (initialCheckDone.current) {
+        if (userLevelRef.current === 'funcionario') {
+          const isRestricted = RESTRICTED_ROUTES.some((route) =>
+            new RegExp(`^${route}`).test(pathname)
+          )
+          if (isRestricted) {
+            router.push('/dashboard/pdv')
+          }
+        }
+        return
+      }
+
+      // ── PRIMEIRA VEZ: check completo ──
       try {
         const { data } = await supabase.auth.getSession()
-
         if (!data.session) {
           router.push('/login')
           return
         }
 
-        // ── Busca nível do membro (lógica existente) ──
+        // Busca nível do membro
         const { data: membroData } = await supabase
           .from('membros')
           .select('nivel')
@@ -791,20 +808,20 @@ export default function DashboardLayout({
           .single()
 
         const userLevel = membroData?.nivel ?? 'dono'
+        userLevelRef.current = userLevel
 
+        // Check rota restrita (primeira vez)
         if (userLevel === 'funcionario') {
-          const isRestrictedRoute = RESTRICTED_ROUTES.some((route) => {
-            const regex = new RegExp(`^${route}`)
-            return regex.test(pathname)
-          })
-
-          if (isRestrictedRoute) {
+          const isRestricted = RESTRICTED_ROUTES.some((route) =>
+            new RegExp(`^${route}`).test(pathname)
+          )
+          if (isRestricted) {
             router.push('/dashboard/pdv')
             return
           }
         }
 
-        // ── NOVO: Verifica trial/plano ──
+        // Verifica trial/plano
         const { data: perfil } = await supabase
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento')
@@ -813,43 +830,29 @@ export default function DashboardLayout({
 
         if (perfil) {
           const agora = new Date()
-          const trialFim = perfil.trial_fim
-            ? new Date(perfil.trial_fim)
-            : null
+          const trialFim = perfil.trial_fim ? new Date(perfil.trial_fim) : null
 
-          // Plano expirado → paywall
           if (perfil.plano === 'expirado') {
             router.push('/assinar')
             return
           }
 
-          // Trial expirado → paywall
-          if (
-            perfil.plano === 'trial' &&
-            trialFim &&
-            trialFim < agora
-          ) {
+          if (perfil.plano === 'trial' && trialFim && trialFim < agora) {
             router.push('/assinar')
             return
           }
 
-          // Trial ativo → calcula dias restantes pro banner
           if (perfil.plano === 'trial' && trialFim) {
-            const diffMs = trialFim.getTime() - agora.getTime()
-            const dias = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+            const dias = Math.ceil(
+              (trialFim.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
+            )
             setDiasRestantes(dias)
-
-            // Mostra banner só nos últimos 5 dias
-            if (dias >= 0 && dias <= 5) {
-              setMostrarBanner(true)
-            }
+            if (dias >= 0 && dias <= 5) setMostrarBanner(true)
           }
 
-          // Plano ativo mas vencido (PIX que não renovou)
           if (perfil.plano === 'ativo' && perfil.plano_fim) {
             const fimPlano = new Date(perfil.plano_fim)
             if (fimPlano < agora) {
-              // Expirou! Atualiza pra expirado e redireciona
               await supabase
                 .from('perfis')
                 .update({ plano: 'expirado' })
@@ -858,11 +861,9 @@ export default function DashboardLayout({
               return
             }
 
-            // Calcula dias restantes do plano ativo
-            const diffMs = fimPlano.getTime() - agora.getTime()
-            const diasPlano = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-
-            // Mostra banner nos últimos 5 dias (só pra PIX)
+            const diasPlano = Math.ceil(
+              (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
+            )
             if (diasPlano >= 0 && diasPlano <= 5 && perfil.tipo_pagamento === 'pix') {
               setDiasRestantes(diasPlano)
               setMostrarBanner(true)
@@ -871,6 +872,7 @@ export default function DashboardLayout({
           }
         }
 
+        initialCheckDone.current = true
         setIsLoading(false)
       } catch (error) {
         console.error('Error checking auth:', error)
@@ -881,29 +883,24 @@ export default function DashboardLayout({
     checkAuth()
   }, [router, pathname])
 
-  if (isLoading) {
-    return <Loading />
-  }
+  if (isLoading) return <Loading />
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {mostrarBanner && diasRestantes !== null && (
         <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
       )}
       <Navbar />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-4 md:p-6 md:ml-48 mb-16 md:mb-0 mt-16">
-          <SearchCommand />
-          {children}
-        </main>
-      </div>
+      <Sidebar />
+      <SearchCommand />
+      <main className="md:ml-56 mt-14 p-4 md:p-6 pb-24 md:pb-6">{children}</main>
     </div>
   )
 }
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\page.tsx ===
+// src/app/dashboard/page.tsx
 'use client'
 
 import { Suspense } from 'react'
@@ -914,11 +911,23 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Alerta, Produto, MovimentoEstoque } from '@/lib/types'
 import {
-  Package, BarChart3, AlertCircle, TrendingUp,
-  AlertTriangle, Clock, ArrowDownLeft, ArrowUpRight,
-  Calendar, ArrowRight, Users, ShoppingCart, Plus, DollarSign,
+  Package,
+  BarChart3,
+  AlertCircle,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Calendar,
+  ArrowRight,
+  Users,
+  ShoppingCart,
+  Plus,
+  DollarSign,
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
+
 interface PlanoInfo {
   plano: string
   diasRestantes: number | null
@@ -954,7 +963,8 @@ function DashboardContent() {
   const [produtosVencendo, setProdutosVencendo] = useState<ProdutoVencendo[]>([])
   const [topDevedores, setTopDevedores] = useState<ClienteDevedor[]>([])
   const [loading, setLoading] = useState(true)
-  const [mostrarBannerPagamento, setMostrarBannerPagamento] = useState(pagamentoSucesso)
+  const [mostrarBannerPagamento, setMostrarBannerPagamento] =
+    useState(pagamentoSucesso)
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
   const [mostrarOnboarding, setMostrarOnboarding] = useState(false)
   const [userId, setUserId] = useState('')
@@ -992,17 +1002,28 @@ function DashboardContent() {
         const { data: produtos } = await supabase.from('produtos').select('*')
         if (produtos) {
           const valorTotal = produtos.reduce(
-            (sum: number, p: Produto) => sum + p.preco_venda * p.quantidade_atual, 0
+            (sum: number, p: Produto) =>
+              sum + p.preco_venda * p.quantidade_atual,
+            0
           )
           const criticos = produtos
-            .filter((p: Produto) => p.quantidade_atual < p.quantidade_minima)
-            .sort((a: Produto, b: Produto) => a.quantidade_atual - b.quantidade_atual)
+            .filter(
+              (p: Produto) => p.quantidade_atual < p.quantidade_minima
+            )
+            .sort(
+              (a: Produto, b: Produto) =>
+                a.quantidade_atual - b.quantidade_atual
+            )
             .slice(0, 5)
-          setStats((prev) => ({ ...prev, totalProdutos: produtos.length, valorEstoque: valorTotal }))
+          setStats((prev) => ({
+            ...prev,
+            totalProdutos: produtos.length,
+            valorEstoque: valorTotal,
+          }))
           setProdutosCriticos(criticos)
         }
 
-                // ── Movimentos de hoje ──
+        // ── Movimentos de hoje ──
         const hoje = new Date()
         hoje.setHours(0, 0, 0, 0)
 
@@ -1016,7 +1037,10 @@ function DashboardContent() {
         if (movError) console.error('Erro movimentos:', movError)
 
         if (movimentos) {
-          setStats((prev) => ({ ...prev, totalMovimentos: movimentos.length }))
+          setStats((prev) => ({
+            ...prev,
+            totalMovimentos: movimentos.length,
+          }))
           setMovimentosHoje(movimentos)
         }
 
@@ -1027,6 +1051,7 @@ function DashboardContent() {
           .eq('visualizado', false)
           .order('criado_em', { ascending: false })
           .limit(10)
+
         if (alertas) {
           setStats((prev) => ({ ...prev, alertas: alertas.length }))
           setAlertasRecentes(alertas)
@@ -1049,49 +1074,56 @@ function DashboardContent() {
 
           if (vencendo) setProdutosVencendo(vencendo)
         } catch {
-          // Tabela pode não ter a coluna ainda — ignora silenciosamente
+          // Coluna pode não existir ainda
         }
 
-        // ── Top devedores (fiado) ──
+        // ── Top devedores (fiado) — OTIMIZADO ──
         try {
-          const { data: clientesData } = await supabase
-            .from('clientes')
-            .select('id, nome, telefone')
+          const [clientesRes, fiadoRes] = await Promise.all([
+            supabase.from('clientes').select('id, nome, telefone'),
+            supabase.from('fiado').select('cliente_id, tipo, valor'),
+          ])
 
-          if (clientesData && clientesData.length > 0) {
-            const clientesComSaldo = await Promise.all(
-              clientesData.map(async (c: any) => {
-                const { data: fiadoData } = await supabase
-                  .from('fiado')
-                  .select('tipo, valor')
-                  .eq('cliente_id', c.id)
-                const saldo = (fiadoData || []).reduce((acc: number, f: any) =>
-                  f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor), 0)
-                return { ...c, saldo }
-              })
-            )
-            const devedores = clientesComSaldo
-              .filter((c: any) => c.saldo > 0)
-              .sort((a: any, b: any) => b.saldo - a.saldo)
-              .slice(0, 5)
-            setTopDevedores(devedores)
-          }
+          const clientesData = clientesRes.data || []
+          const todosOsFiados = fiadoRes.data || []
+
+          const saldoPorCliente: Record<string, number> = {}
+          todosOsFiados.forEach((f: any) => {
+            const id = f.cliente_id
+            if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+            saldoPorCliente[id] +=
+              f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+          })
+
+          const devedores = clientesData
+            .map((c: any) => ({
+              ...c,
+              saldo: saldoPorCliente[c.id] || 0,
+            }))
+            .filter((c: any) => c.saldo > 0)
+            .sort((a: any, b: any) => b.saldo - a.saldo)
+            .slice(0, 5)
+
+          setTopDevedores(devedores)
         } catch {
-          // Tabelas podem não existir ainda — ignora silenciosamente
+          // Tabelas podem não existir ainda
         }
-
       } catch (error) {
         console.error('Error:', error)
       } finally {
         setLoading(false)
       }
     }
+
     fetchDashboardData()
   }, [])
 
   useEffect(() => {
     if (mostrarBannerPagamento) {
-      const timer = setTimeout(() => setMostrarBannerPagamento(false), 8000)
+      const timer = setTimeout(
+        () => setMostrarBannerPagamento(false),
+        8000
+      )
       return () => clearTimeout(timer)
     }
   }, [mostrarBannerPagamento])
@@ -1106,11 +1138,11 @@ function DashboardContent() {
 
   // ── Saudação com base no horário ──
   const hora = new Date().getHours()
-  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
+  const saudacao =
+    hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
 
   return (
-    <div className="space-y-6 p-4 md:p-0">
-
+    <div className="space-y-6">
       {/* ══════════ BANNER PAGAMENTO ══════════ */}
       {mostrarBannerPagamento && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center justify-between">
@@ -1126,33 +1158,45 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* ══════════ SAUDAÇÃO ══════════ */}
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">
+          {saudacao} 👋
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+          Aqui está o resumo do seu negócio hoje
+        </p>
+      </div>
+
       {/* ══════════ INFO DO PLANO ══════════ */}
       {planoInfo && (
-        <div className={`rounded-xl p-4 flex items-center justify-between ${
-          planoInfo.plano === 'ativo'
-            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-            : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
-        }`}>
+        <div
+          className={`rounded-xl p-4 flex items-center justify-between ${
+            planoInfo.plano === 'ativo'
+              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+              : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+          }`}
+        >
           <div className="flex items-center gap-3">
             <span className="text-2xl">
               {planoInfo.plano === 'ativo' ? '✅' : '⏳'}
             </span>
             <div>
-              <p className={`font-semibold text-sm ${
-                planoInfo.plano === 'ativo'
-                  ? 'text-green-700 dark:text-green-400'
-                  : 'text-blue-700 dark:text-blue-400'
-              }`}>
+              <p
+                className={`font-semibold text-sm ${
+                  planoInfo.plano === 'ativo'
+                    ? 'text-green-700 dark:text-green-400'
+                    : 'text-blue-700 dark:text-blue-400'
+                }`}
+              >
                 {planoInfo.plano === 'ativo'
                   ? 'Plano Profissional — Ativo'
-                  : `Período de teste — ${planoInfo.diasRestantes} dias restantes`
-                }
+                  : `Período de teste — ${planoInfo.diasRestantes} dias restantes`}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {planoInfo.plano === 'ativo'
                   ? 'Acesso completo a todas as funcionalidades'
-                  : 'Aproveite para conhecer todas as funcionalidades'
-                }
+                  : 'Aproveite para conhecer todas as funcionalidades'}
               </p>
             </div>
           </div>
@@ -1175,17 +1219,7 @@ function DashboardContent() {
         />
       )}
 
-      {/* ══════════ SAUDAÇÃO ══════════ */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50">
-          {saudacao} 👋
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-          Aqui está o resumo do seu negócio hoje
-        </p>
-      </div>
-
-      {/* ══════════ MÉTRICAS COM GRADIENTE ══════════ */}
+      {/* ══════════ MÉTRICAS ══════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
           {
@@ -1206,8 +1240,14 @@ function DashboardContent() {
             icon: AlertCircle,
             label: 'Alertas',
             value: stats.alertas,
-            gradient: stats.alertas > 0 ? 'from-red-500 to-red-600' : 'from-gray-400 to-gray-500',
-            bgLight: stats.alertas > 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800',
+            gradient:
+              stats.alertas > 0
+                ? 'from-red-500 to-red-600'
+                : 'from-gray-400 to-gray-500',
+            bgLight:
+              stats.alertas > 0
+                ? 'bg-red-50 dark:bg-red-900/20'
+                : 'bg-gray-50 dark:bg-gray-800',
           },
           {
             icon: TrendingUp,
@@ -1219,12 +1259,16 @@ function DashboardContent() {
         ].map(({ icon: Icon, label, value, gradient, bgLight }) => (
           <div
             key={label}
-            className={`${bgLight} rounded-2xl p-4 md:p-5 animate-fade-in-up`}
+            className={`${bgLight} rounded-2xl p-4 md:p-5`}
           >
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3`}>
+            <div
+              className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3`}
+            >
               <Icon className="w-5 h-5 text-white" />
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {label}
+            </p>
             <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-50 mt-0.5 truncate">
               {value}
             </p>
@@ -1235,193 +1279,282 @@ function DashboardContent() {
       {/* ══════════ AÇÕES RÁPIDAS ══════════ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Novo Produto', href: '/dashboard/produtos/novo', icon: Plus, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Abrir PDV', href: '/dashboard/pdv', icon: ShoppingCart, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
-          { label: 'Novo Movimento', href: '/dashboard/estoque/movimento', icon: BarChart3, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-          { label: 'Clientes', href: '/dashboard/clientes', icon: Users, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+          {
+            label: 'Novo Produto',
+            href: '/dashboard/produtos/novo',
+            icon: Plus,
+            color: 'text-blue-600 dark:text-blue-400',
+            bg: 'bg-blue-50 dark:bg-blue-900/20',
+          },
+          {
+            label: 'Abrir PDV',
+            href: '/dashboard/pdv',
+            icon: ShoppingCart,
+            color: 'text-green-600 dark:text-green-400',
+            bg: 'bg-green-50 dark:bg-green-900/20',
+          },
+          {
+            label: 'Novo Movimento',
+            href: '/dashboard/estoque/movimento',
+            icon: BarChart3,
+            color: 'text-purple-600 dark:text-purple-400',
+            bg: 'bg-purple-50 dark:bg-purple-900/20',
+          },
+          {
+            label: 'Clientes',
+            href: '/dashboard/clientes',
+            icon: Users,
+            color: 'text-amber-600 dark:text-amber-400',
+            bg: 'bg-amber-50 dark:bg-amber-900/20',
+          },
         ].map(({ label, href, icon: Icon, color, bg }) => (
           <Link
             key={label}
             href={href}
-            className={`${bg} rounded-xl p-4 flex flex-col items-center gap-2 hover:shadow-md transition hover:-translate-y-0.5 text-center border border-transparent`}
+            className={`${bg} rounded-xl p-4 flex flex-col items-center gap-2 hover:shadow-md transition hover:-translate-y-0.5 text-center`}
           >
             <Icon className={`w-6 h-6 ${color}`} />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {label}
+            </span>
           </Link>
         ))}
       </div>
 
-      {/* ══════════ GRID PRINCIPAL ══════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* ── Produtos vencendo ── */}
-        {produtosVencendo.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/40">
-              <div className="flex items-center gap-2">
-                <Calendar size={18} className="text-amber-500 flex-shrink-0" />
-                <h2 className="font-bold text-gray-900 dark:text-gray-50">Produtos Vencendo</h2>
+      {/* ══════════ GRID PRINCIPAL (só renderiza se tem dados) ══════════ */}
+      {(produtosVencendo.length > 0 ||
+        topDevedores.length > 0 ||
+        produtosCriticos.length > 0 ||
+        movimentosHoje.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* ── Produtos vencendo ── */}
+          {produtosVencendo.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/40">
+                <div className="flex items-center gap-2">
+                  <Calendar
+                    size={18}
+                    className="text-amber-500 flex-shrink-0"
+                  />
+                  <h2 className="font-bold text-gray-900 dark:text-gray-50">
+                    Produtos Vencendo
+                  </h2>
+                </div>
+                <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full font-medium">
+                  {produtosVencendo.length} produto(s)
+                </span>
               </div>
-              <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full font-medium">
-                {produtosVencendo.length} produto(s)
-              </span>
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {produtosVencendo.map((p) => {
-                const diasRestantes = Math.ceil(
-                  (new Date(p.data_validade).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                )
-                const vencido = diasRestantes < 0
-                return (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
-                        {p.nome}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {p.quantidade_atual} un. em estoque
-                      </p>
-                    </div>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ml-3 flex-shrink-0 ${
-                      vencido
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        : diasRestantes <= 3
-                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                    }`}>
-                      {vencido
-                        ? `Vencido há ${Math.abs(diasRestantes)}d`
-                        : `${diasRestantes}d restantes`
-                      }
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Top devedores (fiado) ── */}
-        {topDevedores.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
-              <div className="flex items-center gap-2">
-                <DollarSign size={18} className="text-red-500 flex-shrink-0" />
-                <h2 className="font-bold text-gray-900 dark:text-gray-50">Clientes com Fiado</h2>
-              </div>
-              <Link
-                href="/dashboard/clientes"
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-              >
-                Ver todos <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {topDevedores.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/dashboard/clientes/${c.id}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                        {c.nome.charAt(0).toUpperCase()}
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {produtosVencendo.map((p) => {
+                  const diasRestantes = Math.ceil(
+                    (new Date(p.data_validade).getTime() -
+                      new Date().getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  )
+                  const vencido = diasRestantes < 0
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between px-4 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                          {p.nome}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {p.quantidade_atual} un. em estoque
+                        </p>
+                      </div>
+                      <span
+                        className={`text-xs font-bold px-2.5 py-1 rounded-full ml-3 flex-shrink-0 ${
+                          vencido
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                            : diasRestantes <= 3
+                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                              : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                        }`}
+                      >
+                        {vencido
+                          ? `Vencido há ${Math.abs(diasRestantes)}d`
+                          : `${diasRestantes}d restantes`}
                       </span>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{c.nome}</p>
-                      {c.telefone && (
-                        <p className="text-xs text-gray-400 truncate">{c.telefone}</p>
-                      )}
-                    </div>
-                  </div>
-                  <span className="font-bold text-red-600 dark:text-red-400 text-sm ml-3 flex-shrink-0">
-                    {formatarMoeda(c.saldo)}
-                  </span>
-                </Link>
-              ))}
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Produtos críticos ── */}
-        {produtosCriticos.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
-              <AlertTriangle size={18} className="text-red-500 flex-shrink-0" />
-              <h2 className="font-bold text-gray-900 dark:text-gray-50">Produtos Críticos</h2>
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {produtosCriticos.map((produto) => (
-                <Link
-                  key={produto.id}
-                  href={`/dashboard/produtos/${produto.id}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-                >
-                  <div className="min-w-0 flex-1 pl-3">
-                    <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{produto.nome}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">SKU: {produto.sku}</p>
-                  </div>
-                  <div className="text-right ml-4 flex-shrink-0">
-                    <p className="font-bold text-red-600 dark:text-red-400">{produto.quantidade_atual}</p>
-                    <p className="text-xs text-gray-400">Min: {produto.quantidade_minima}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Movimentos de hoje ── */}
-        {movimentosHoje.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/40">
-              <Clock size={18} className="text-blue-500 flex-shrink-0" />
-              <h2 className="font-bold text-gray-900 dark:text-gray-50">Movimentos de Hoje</h2>
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
-              {movimentosHoje.slice(0, 8).map((movimento) => (
-                <div key={movimento.id} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className={`p-1.5 rounded-full flex-shrink-0 ${
-                      movimento.tipo_movimento === 'entrada'
-                        ? 'bg-green-100 dark:bg-green-900/30'
-                        : 'bg-red-100 dark:bg-red-900/30'
-                    }`}>
-                      {movimento.tipo_movimento === 'entrada'
-                        ? <ArrowDownLeft size={14} className="text-green-600 dark:text-green-400" />
-                        : <ArrowUpRight size={14} className="text-red-600 dark:text-red-400" />
-                      }
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{movimento.produto?.nome}</p>
-                      <p className="text-xs text-gray-400 truncate">{movimento.motivo || '\u2014'}</p>
-                    </div>
-                  </div>
-                  <p className={`font-bold text-sm ml-3 flex-shrink-0 ${
-                    movimento.tipo_movimento === 'entrada'
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {movimento.tipo_movimento === 'entrada' ? '+' : '-'}{movimento.quantidade}
-                  </p>
+          {/* ── Top devedores (fiado) ── */}
+          {topDevedores.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
+                <div className="flex items-center gap-2">
+                  <DollarSign
+                    size={18}
+                    className="text-red-500 flex-shrink-0"
+                  />
+                  <h2 className="font-bold text-gray-900 dark:text-gray-50">
+                    Clientes com Fiado
+                  </h2>
                 </div>
-              ))}
+                <Link
+                  href="/dashboard/clientes"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  Ver todos <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {topDevedores.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/dashboard/clientes/${c.id}`}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                          {c.nome.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                          {c.nome}
+                        </p>
+                        {c.telefone && (
+                          <p className="text-xs text-gray-400 truncate">
+                            {c.telefone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="font-bold text-red-600 dark:text-red-400 text-sm ml-3 flex-shrink-0">
+                      {formatarMoeda(c.saldo)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* ── Produtos críticos ── */}
+          {produtosCriticos.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/40">
+                <AlertTriangle
+                  size={18}
+                  className="text-red-500 flex-shrink-0"
+                />
+                <h2 className="font-bold text-gray-900 dark:text-gray-50">
+                  Produtos Críticos
+                </h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {produtosCriticos.map((produto) => (
+                  <Link
+                    key={produto.id}
+                    href={`/dashboard/produtos/${produto.id}`}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
+                    <div className="min-w-0 flex-1 pl-3">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                        {produto.nome}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        SKU: {produto.sku}
+                      </p>
+                    </div>
+                    <div className="text-right ml-4 flex-shrink-0">
+                      <p className="font-bold text-red-600 dark:text-red-400">
+                        {produto.quantidade_atual}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Min: {produto.quantidade_minima}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Movimentos de hoje ── */}
+          {movimentosHoje.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/40">
+                <Clock
+                  size={18}
+                  className="text-blue-500 flex-shrink-0"
+                />
+                <h2 className="font-bold text-gray-900 dark:text-gray-50">
+                  Movimentos de Hoje
+                </h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
+                {movimentosHoje.slice(0, 8).map((movimento) => (
+                  <div
+                    key={movimento.id}
+                    className="flex items-center justify-between px-4 py-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div
+                        className={`p-1.5 rounded-full flex-shrink-0 ${
+                          movimento.tipo_movimento === 'entrada'
+                            ? 'bg-green-100 dark:bg-green-900/30'
+                            : 'bg-red-100 dark:bg-red-900/30'
+                        }`}
+                      >
+                        {movimento.tipo_movimento === 'entrada' ? (
+                          <ArrowDownLeft
+                            size={14}
+                            className="text-green-600 dark:text-green-400"
+                          />
+                        ) : (
+                          <ArrowUpRight
+                            size={14}
+                            className="text-red-600 dark:text-red-400"
+                          />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                          {movimento.produto?.nome}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {movimento.motivo || '\u2014'}
+                        </p>
+                      </div>
+                    </div>
+                    <p
+                      className={`font-bold text-sm ml-3 flex-shrink-0 ${
+                        movimento.tipo_movimento === 'entrada'
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      {movimento.tipo_movimento === 'entrada' ? '+' : '-'}
+                      {movimento.quantidade}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ══════════ ALERTAS PENDENTES ══════════ */}
       {alertasRecentes.length > 0 && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-100 dark:border-yellow-900/40">
-            <AlertTriangle size={18} className="text-yellow-500 flex-shrink-0" />
-            <h2 className="font-bold text-gray-900 dark:text-gray-50">Alertas Pendentes</h2>
+            <AlertTriangle
+              size={18}
+              className="text-yellow-500 flex-shrink-0"
+            />
+            <h2 className="font-bold text-gray-900 dark:text-gray-50">
+              Alertas Pendentes
+            </h2>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {alertasRecentes.slice(0, 5).map((alerta) => (
@@ -1430,14 +1563,23 @@ function DashboardContent() {
                 href="/dashboard/alertas"
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
               >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 min-w-[8px] min-h-[8px] self-center ${
-                  alerta.tipo_alerta === 'estoque_critico' ? 'bg-red-500' : 'bg-yellow-500'
-                }`} />
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    alerta.tipo_alerta === 'estoque_critico'
+                      ? 'bg-red-500'
+                      : 'bg-yellow-500'
+                  }`}
+                />
                 <span className="text-sm text-gray-700 dark:text-gray-300 pl-2">
                   <span className="font-medium">
-                    {alerta.tipo_alerta === 'estoque_baixo' ? 'Estoque Baixo' : 'Estoque Cr\u00edtico'}:
+                    {alerta.tipo_alerta === 'estoque_baixo'
+                      ? 'Estoque Baixo'
+                      : 'Estoque Crítico'}
+                    :
                   </span>{' '}
-                  <span className="text-red-600 dark:text-red-400">{alerta.produto?.nome}</span>
+                  <span className="text-red-600 dark:text-red-400">
+                    {alerta.produto?.nome}
+                  </span>
                 </span>
               </Link>
             ))}
@@ -1446,33 +1588,42 @@ function DashboardContent() {
       )}
 
       {/* ══════════ EMPTY STATE ══════════ */}
-      {produtosCriticos.length === 0 && movimentosHoje.length === 0 && alertasRecentes.length === 0 && produtosVencendo.length === 0 && topDevedores.length === 0 && (
-        <div className="text-center py-16 text-gray-400 dark:text-gray-600">
-          <Package size={48} className="mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Nenhum dado ainda</p>
-          <p className="text-sm mt-1">Adicione produtos para come\u00e7ar</p>
-          <Link href="/dashboard/produtos/novo" className="inline-block mt-4 btn-primary text-sm px-4 py-2">
-            + Adicionar produto
-          </Link>
-        </div>
-      )}
+      {produtosCriticos.length === 0 &&
+        movimentosHoje.length === 0 &&
+        alertasRecentes.length === 0 &&
+        produtosVencendo.length === 0 &&
+        topDevedores.length === 0 && (
+          <div className="text-center py-16 text-gray-400 dark:text-gray-600">
+            <Package size={48} className="mx-auto mb-3 opacity-30" />
+            <p className="font-medium">Nenhum dado ainda</p>
+            <p className="text-sm mt-1">
+              Adicione produtos para começar
+            </p>
+            <Link
+              href="/dashboard/produtos/novo"
+              className="inline-block mt-4 btn-primary text-sm px-4 py-2"
+            >
+              + Adicionar produto
+            </Link>
+          </div>
+        )}
     </div>
   )
 }
 
-// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
 export default function Dashboard() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+        </div>
+      }
+    >
       <DashboardContent />
     </Suspense>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\admin\page.tsx ===
@@ -2758,38 +2909,42 @@ export default function ClientesPage() {
   const { addNotification } = useNotification()
 
   const fetchClientes = useCallback(async () => {
-    try {
-      const { data: clientesData, error } = await supabase
-        .from('clientes')
-        .select('*')
-        .order('nome')
+  try {
+    // 1 query: todos os clientes
+    const { data: clientesData, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('nome')
 
-      if (error) throw error
+    if (error) throw error
 
-      // Buscar saldos de fiado para cada cliente
-      const clientesComSaldo = await Promise.all(
-        (clientesData || []).map(async (cliente: Cliente) => {
-          const { data: fiadoData } = await supabase
-            .from('fiado')
-            .select('tipo, valor')
-            .eq('cliente_id', cliente.id)
+    // 1 query: TODOS os fiados de uma vez (em vez de N queries)
+    const { data: todosOsFiados } = await supabase
+      .from('fiado')
+      .select('cliente_id, tipo, valor')
 
-          const saldo = (fiadoData || []).reduce((acc: number, f: any) => {
-            return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
-          }, 0)
+    // Agrupa saldos no JavaScript (instantâneo)
+    const saldoPorCliente: Record<string, number> = {}
+    ;(todosOsFiados || []).forEach((f: any) => {
+      const id = f.cliente_id
+      if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
+      saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
+    })
 
-          return { ...cliente, saldo_fiado: saldo }
-        })
-      )
+    // Combina clientes + saldos
+    const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
+      ...cliente,
+      saldo_fiado: saldoPorCliente[cliente.id] || 0,
+    }))
 
-      setClientes(clientesComSaldo)
-    } catch (error) {
-      console.error('Erro ao buscar clientes:', error)
-      addNotification('Erro ao carregar clientes', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+    setClientes(clientesComSaldo)
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error)
+    addNotification('Erro ao carregar clientes', 'error')
+  } finally {
+    setLoading(false)
+  }
+}, [addNotification]) 
 
   useEffect(() => {
     fetchClientes()
@@ -3498,7 +3653,7 @@ import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
 import { formatarData } from '@/lib/utils'
-import { Mail, Plus, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
+import { Plus, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
 
 interface Membro {
   id: string
@@ -3554,89 +3709,60 @@ export default function EquipePage() {
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
-  const generatePassword = (): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
-    let password = ''
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return password
+  
+
+ const handleInviteNewMember = async (e: React.FormEvent) => {
+  e.preventDefault()
+
+  if (!newEmail.trim()) {
+    addNotification('Email é obrigatório', 'warning')
+    return
   }
 
-  const handleInviteNewMember = async (e: React.FormEvent) => {
-    e.preventDefault()
+  if (!newEmail.includes('@')) {
+    addNotification('Email inválido', 'warning')
+    return
+  }
 
-    if (!newEmail.trim()) {
-      addNotification('Email é obrigatório', 'warning')
-      return
-    }
+  try {
+    setIsInviting(true)
 
-    if (!newEmail.includes('@')) {
-      addNotification('Email inválido', 'warning')
-      return
-    }
+    // Chama a API Route (servidor) — NÃO afeta a sessão do dono
+    const response = await fetch('/api/equipe/convidar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: newEmail,
+        donoId: donoId,
+      }),
+    })
 
-    try {
-      setIsInviting(true)
+    const data = await response.json()
 
-      // Verifica se o email já existe
-      const { data: existingMember } = await supabase
-        .from('membros')
-        .select('id')
-        .eq('email', newEmail)
-        .eq('dono_id', donoId)
-        .single()
-
-      if (existingMember) {
+    if (!response.ok) {
+      if (response.status === 409) {
         addNotification('Este funcionário já foi convidado', 'warning')
-        return
+      } else {
+        addNotification(data.error || 'Erro ao convidar', 'error')
       }
-
-      // Gera senha temporária
-      const tempPassword = generatePassword()
-      setGeneratedPassword(tempPassword)
-
-      // Cria nova conta de usuário no Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newEmail,
-        password: tempPassword,
-      })
-
-      if (authError) {
-        // Se o email já está registrado, continua mesmo assim
-        if (authError.message.includes('User already registered')) {
-          console.log('Email já registrado, prosseguindo com registro de membro')
-        } else {
-          throw authError
-        }
-      }
-
-      const userId = authData?.user?.id || null
-
-      // Registra membro na tabela
-      const { error: insertError } = await supabase.from('membros').insert({
-        dono_id: donoId,
-        user_id: userId,
-        email: newEmail,
-        nivel: 'funcionario',
-        status: 'pendente',
-      })
-
-      if (insertError) throw insertError
-
-      addNotification(`Funcionário convidado com sucesso! Senha: ${tempPassword}`, 'success')
-      setNewEmail('')
-      setGeneratedPassword(tempPassword)
-
-      // Recarrega a lista
-      fetchMembros()
-    } catch (error) {
-      console.error('Erro ao convidar funcionário:', error)
-      addNotification('Erro ao convidar funcionário', 'error')
-    } finally {
-      setIsInviting(false)
+      return
     }
+
+    // Sucesso!
+    setGeneratedPassword(data.tempPassword)
+    addNotification(
+      `Funcionário convidado com sucesso! Senha: ${data.tempPassword}`,
+      'success'
+    )
+    setNewEmail('')
+    fetchMembros()
+  } catch (error) {
+    console.error('Erro ao convidar funcionário:', error)
+    addNotification('Erro ao convidar funcionário', 'error')
+  } finally {
+    setIsInviting(false)
   }
+}
 
   const toggleStatus = async (memberId: string, currentStatus: string) => {
     try {
@@ -3797,80 +3923,129 @@ export default function EquipePage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b dark:border-gray-700">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Email
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Nível
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Data
-                  </th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {membros.map((membro) => (
-                  <tr
-                    key={membro.id}
-                    className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Mail size={16} className="text-gray-400" />
-                        <span className="text-gray-900 dark:text-white">{membro.email}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`${getStatusBadge(membro.status)}`}>
-                        {getStatusLabel(membro.status)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-xs">
-                      {formatarData(membro.created_at)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {membro.nivel !== 'dono' && (
-                          <>
-                            <button
-                              onClick={() => toggleStatus(membro.id, membro.status)}
-                              className={`px-3 py-1 rounded text-xs font-medium transition ${
-                                membro.status === 'ativo'
-                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900/50'
-                                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-900/50'
-                              }`}
-                            >
-                              {membro.status === 'ativo' ? 'Desativar' : 'Ativar'}
-                            </button>
-                            <button
-                              onClick={() => deleteMember(membro.id)}
-                              className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                              title="Remover funcionário"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <h3 className="text-lg font-semibold mb-4">
+  Funcionários ({membros.length})
+</h3>
+
+{isLoading ? (
+  <div className="text-center py-8">Carregando...</div>
+) : membros.length === 0 ? (
+  <div className="text-center py-8 text-gray-500">
+    Nenhum funcionário convidado ainda
+  </div>
+) : (
+  <>
+    {/* ══════════ DESKTOP: Tabela ══════════ */}
+    <div className="hidden md:block overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b dark:border-gray-700">
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Email</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nível</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
+            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {membros.map((membro) => (
+            <tr key={membro.id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <td className="py-3 px-4">
+                <span className="font-medium">{membro.email}</span>
+              </td>
+              <td className="py-3 px-4">
+                <span className={`badge ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
+                  {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+                </span>
+              </td>
+              <td className="py-3 px-4">
+                <span className={`badge ${getStatusBadge(membro.status)}`}>
+                  {getStatusLabel(membro.status)}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-500">
+                {formatarData(membro.created_at)}
+              </td>
+              <td className="py-3 px-4 text-right">
+                {membro.nivel !== 'dono' && (
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => toggleStatus(membro.id, membro.status)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition ${
+                        membro.status === 'ativo'
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
+                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
+                      }`}
+                    >
+                      {membro.status === 'ativo' ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button
+                      onClick={() => deleteMember(membro.id)}
+                      className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                      title="Remover funcionário"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    {/* ══════════ MOBILE: Cards ══════════ */}
+    <div className="md:hidden space-y-3">
+      {membros.map((membro) => (
+        <div
+          key={membro.id}
+          className="card p-4 border dark:border-gray-700 rounded-xl"
+        >
+          {/* Header: email + badges */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{membro.email}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formatarData(membro.created_at)}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1 ml-2">
+              <span className={`badge text-xs ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
+                {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+              </span>
+              <span className={`badge text-xs ${getStatusBadge(membro.status)}`}>
+                {getStatusLabel(membro.status)}
+              </span>
+            </div>
+          </div>
+
+          {/* Ações */}
+          {membro.nivel !== 'dono' && (
+            <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700">
+              <button
+                onClick={() => toggleStatus(membro.id, membro.status)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                  membro.status === 'ativo'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                }`}
+              >
+                {membro.status === 'ativo' ? '⏸ Desativar' : '▶ Ativar'}
+              </button>
+              <button
+                onClick={() => deleteMember(membro.id)}
+                className="py-2 px-4 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </>
+)}
           </div>
         )}
       </div>
@@ -4195,22 +4370,23 @@ export default function EstoquePage() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\estoque\movimento\page.tsx ===
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/alerts'
 import { Produto } from '@/lib/types'
 import { ArrowLeft } from 'lucide-react'
 
-export default function NovoMovimentoPage() {
+function NovoMovimentoContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [loadingProdutos, setLoadingProdutos] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [produtos, setProdutos] = useState<Produto[]>([])
-
   const [formData, setFormData] = useState({
     produto_id: '',
     tipo_movimento: 'entrada' as 'entrada' | 'saida',
@@ -4239,7 +4415,23 @@ export default function NovoMovimentoPage() {
     fetchProdutos()
   }, [])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  // ══════════ LÊ PARAMS DA URL (vindo do SearchCommand) ══════════
+  useEffect(() => {
+    const tipo = searchParams.get('tipo')
+    const produtoId = searchParams.get('produto')
+
+    if (tipo === 'entrada' || tipo === 'saida') {
+      setFormData((prev) => ({ ...prev, tipo_movimento: tipo }))
+    }
+
+    if (produtoId) {
+      setFormData((prev) => ({ ...prev, produto_id: produtoId }))
+    }
+  }, [searchParams])
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -4248,15 +4440,19 @@ export default function NovoMovimentoPage() {
   }
 
   const produtoSelecionado = produtos.find((p) => p.id === formData.produto_id)
+
   const maxQuantidade = produtoSelecionado
     ? formData.tipo_movimento === 'saida'
       ? produtoSelecionado.quantidade_atual
       : Infinity
     : Infinity
+
   const ficaraAbaixoDoMinimo =
     produtoSelecionado &&
     formData.tipo_movimento === 'saida' &&
-    produtoSelecionado.quantidade_atual - formData.quantidade < produtoSelecionado.quantidade_minima
+    produtoSelecionado.quantidade_atual - formData.quantidade <
+      produtoSelecionado.quantidade_minima
+
   const quantidadeParaRepor = produtoSelecionado
     ? produtoSelecionado.quantidade_minima - produtoSelecionado.quantidade_atual
     : 0
@@ -4272,26 +4468,25 @@ export default function NovoMovimentoPage() {
       return
     }
 
-    // Validação: quantidade máxima em saída
     if (
       formData.tipo_movimento === 'saida' &&
       produtoSelecionado &&
       formData.quantidade > produtoSelecionado.quantidade_atual
     ) {
-      setError(`Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`)
+      setError(
+        `Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`
+      )
       setLoading(false)
       return
     }
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-
       if (!userData.user) {
         setError('Usuário não autenticado')
         return
       }
 
-      // Registrar movimento
       const { error: movimentoError } = await supabase
         .from('movimentos_estoque')
         .insert([
@@ -4309,7 +4504,6 @@ export default function NovoMovimentoPage() {
         return
       }
 
-      // Atualizar quantidade do produto
       const produto = produtos.find((p) => p.id === formData.produto_id)
       if (produto) {
         const novaQuantidade =
@@ -4327,10 +4521,9 @@ export default function NovoMovimentoPage() {
           return
         }
 
-        // Verificar se precisa criar alerta
         if (novaQuantidade < produto.quantidade_minima) {
-          const tipoAlerta = novaQuantidade === 0 ? 'estoque_critico' : 'estoque_baixo'
-          
+          const tipoAlerta =
+            novaQuantidade === 0 ? 'estoque_critico' : 'estoque_baixo'
           await supabase.from('alertas').insert([
             {
               produto_id: formData.produto_id,
@@ -4355,190 +4548,191 @@ export default function NovoMovimentoPage() {
   }
 
   if (loadingProdutos) {
-    return <div>Carregando produtos...</div>
+    return <div className="p-8 text-center">Carregando produtos...</div>
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/estoque" className="p-2 hover:bg-gray-100 rounded">
-          <ArrowLeft size={20} />
+    <div>
+      <div className="flex items-center gap-4 mb-6">
+        <Link href="/dashboard/estoque" className="text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={24} />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Novo Movimento</h1>
-          <p className="text-gray-600 mt-2">Registrar entrada ou saída de produto</p>
+          <h2 className="text-2xl font-bold dark:text-white">Novo Movimento</h2>
+          <p className="text-sm text-gray-500">
+            Registrar entrada ou saída de produto
+          </p>
         </div>
       </div>
 
       {error && <Alert message={error} type="error" />}
       {success && <Alert message={success} type="success" />}
 
-      <div className="card max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Produto *
-            </label>
-            <select
-              name="produto_id"
-              value={formData.produto_id}
-              onChange={handleInputChange}
-              required
-              className="input-field"
-            >
-              <option value="">Selecionar produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome} (Estoque: {produto.quantidade_atual})
-                </option>
-              ))}
-            </select>
+      <form onSubmit={handleSubmit} className="card p-6 space-y-4 max-w-xl">
+        <div>
+          <label className="block text-sm font-medium mb-1">Produto *</label>
+          <select
+            name="produto_id"
+            value={formData.produto_id}
+            onChange={handleInputChange}
+            className="input-field w-full"
+          >
+            <option value="">Selecionar produto</option>
+            {produtos.map((produto) => (
+              <option key={produto.id} value={produto.id}>
+                {produto.nome} (Estoque: {produto.quantidade_atual})
+              </option>
+            ))}
+          </select>
 
-            {/* Info do produto selecionado */}
-            {produtoSelecionado && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-600">Estoque Atual</p>
-                    <p className={`text-lg font-bold ${
-                      produtoSelecionado.quantidade_atual < produtoSelecionado.quantidade_minima
-                        ? 'text-red-600'
-                        : 'text-green-600'
-                    }`}>
-                      {produtoSelecionado.quantidade_atual}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Mínimo</p>
-                    <p className="text-lg font-bold text-gray-700">
-                      {produtoSelecionado.quantidade_minima}
-                    </p>
-                  </div>
-                </div>
+          {produtoSelecionado && (
+            <div className="flex gap-4 mt-2 text-sm">
+              <div>
+                <span className="text-gray-500">Estoque Atual</span>
+                <p
+                  className={`font-bold ${
+                    produtoSelecionado.quantidade_atual <
+                    produtoSelecionado.quantidade_minima
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}
+                >
+                  {produtoSelecionado.quantidade_atual}
+                </p>
               </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipo de Movimento *
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipo_movimento"
-                  value="entrada"
-                  checked={formData.tipo_movimento === 'entrada'}
-                  onChange={handleInputChange}
-                  className="mr-2"
-                />
-                <span className="text-green-600 font-medium">Entrada</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipo_movimento"
-                  value="saida"
-                  checked={formData.tipo_movimento === 'saida'}
-                  onChange={handleInputChange}
-                  className="mr-2"
-                />
-                <span className="text-red-600 font-medium">Saída</span>
-              </label>
+              <div>
+                <span className="text-gray-500">Mínimo</span>
+                <p className="font-bold">{produtoSelecionado.quantidade_minima}</p>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Quantidade *
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Tipo de Movimento *
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="tipo_movimento"
+                value="entrada"
+                checked={formData.tipo_movimento === 'entrada'}
+                onChange={handleInputChange}
+              />
+              Entrada
             </label>
-            <input
-              type="number"
-              name="quantidade"
-              value={formData.quantidade}
-              onChange={handleInputChange}
-              required
-              min="1"
-              max={maxQuantidade === Infinity ? undefined : maxQuantidade}
-              className="input-field"
-              placeholder="Quantidade"
-            />
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="tipo_movimento"
+                value="saida"
+                checked={formData.tipo_movimento === 'saida'}
+                onChange={handleInputChange}
+              />
+              Saída
+            </label>
+          </div>
+        </div>
 
-            {/* Avisos e sugestões */}
-            {formData.quantidade > 0 && produtoSelecionado && (
-              <div className="mt-3 space-y-2">
-                {/* Aviso: quantidade insuficiente */}
-                {formData.tipo_movimento === 'saida' && formData.quantidade > produtoSelecionado.quantidade_atual && (
-                  <div className="p-3 bg-red-50 border border-red-300 text-red-700 rounded-lg text-sm">
-                    ❌ Quantidade insuficiente! Disponível: {produtoSelecionado.quantidade_atual}
+        <div>
+          <label className="block text-sm font-medium mb-1">Quantidade *</label>
+          <input
+            type="number"
+            name="quantidade"
+            value={formData.quantidade || ''}
+            onChange={handleInputChange}
+            min="1"
+            max={maxQuantidade}
+            className="input-field w-full"
+          />
+
+          {formData.quantidade > 0 && produtoSelecionado && (
+            <div className="mt-2 space-y-2">
+              {formData.tipo_movimento === 'saida' &&
+                formData.quantidade > produtoSelecionado.quantidade_atual && (
+                  <div className="text-red-600 text-sm font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                    ❌ Quantidade insuficiente! Disponível:{' '}
+                    {produtoSelecionado.quantidade_atual}
                   </div>
                 )}
 
-                {/* Aviso: vai ficar abaixo do mínimo */}
-                {ficaraAbaixoDoMinimo && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-300 text-yellow-700 rounded-lg text-sm">
-                    ⚠️ Atenção: após este movimento, o estoque ficará abaixo do mínimo!
-                    <p className="mt-2 font-medium">
-                      Sobrará: {produtoSelecionado.quantidade_atual - formData.quantidade} (mín: {produtoSelecionado.quantidade_minima})
-                    </p>
-                  </div>
-                )}
+              {ficaraAbaixoDoMinimo && (
+                <div className="text-amber-600 text-sm bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                  ⚠️ Atenção: após este movimento, o estoque ficará abaixo do
+                  mínimo!
+                  <br />
+                  Sobrará:{' '}
+                  {produtoSelecionado.quantidade_atual - formData.quantidade} (mín:{' '}
+                  {produtoSelecionado.quantidade_minima})
+                </div>
+              )}
 
-                {/* Sugestão de repor */}
-                {formData.tipo_movimento === 'entrada' && quantidadeParaRepor > 0 && (
-                  <div className="p-3 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm flex justify-between items-center">
+              {formData.tipo_movimento === 'entrada' &&
+                quantidadeParaRepor > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
                     <span>💡 Sugestão: repor {quantidadeParaRepor} unidades</span>
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, quantidade: quantidadeParaRepor })}
+                      onClick={() =>
+                        setFormData({ ...formData, quantidade: quantidadeParaRepor })
+                      }
                       className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-medium"
                     >
                       Usar
                     </button>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Motivo
-            </label>
-            <textarea
-              name="motivo"
-              value={formData.motivo}
-              onChange={handleInputChange}
-              className="input-field"
-              rows={3}
-              placeholder="Motivo do movimento (compra, venda, devolução, etc)"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Motivo</label>
+          <textarea
+            name="motivo"
+            value={formData.motivo}
+            onChange={handleInputChange}
+            className="input-field w-full"
+            rows={3}
+          />
+        </div>
 
-          <div className="flex gap-4">
-            <button type="submit" disabled={loading} className="btn-primary">
-              {loading ? 'Registrando...' : 'Registrar Movimento'}
-            </button>
-            <Link href="/dashboard/estoque" className="btn-outline">
-              Cancelar
-            </Link>
-          </div>
-        </form>
-      </div>
+        <div className="flex gap-4 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary px-6 py-2"
+          >
+            {loading ? 'Registrando...' : 'Registrar Movimento'}
+          </button>
+          <Link href="/dashboard/estoque" className="btn-secondary px-6 py-2">
+            Cancelar
+          </Link>
+        </div>
+      </form>
     </div>
   )
 }
 
+// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
+export default function NovoMovimentoPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Carregando...</div>}>
+      <NovoMovimentoContent />
+    </Suspense>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\pdv\page.tsx ===
+// src/app/dashboard/pdv/page.tsx
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import { getProductImageUrl } from '@/lib/image-utils'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import CupomImpressao from '@/components/cupom-impressao'
@@ -4551,7 +4745,6 @@ import {
   Plus,
   Minus,
   ShoppingCart,
-  Check,
   CreditCard,
   Banknote,
   QrCode,
@@ -4569,8 +4762,8 @@ interface ItemCarrinho {
 const FORMAS_PAGAMENTO = [
   { label: 'Dinheiro', icon: Banknote, value: 'Dinheiro' },
   { label: 'Pix', icon: QrCode, value: 'Pix' },
-  { label: 'D\u00e9bito', icon: CreditCard, value: 'Cart\u00e3o D\u00e9bito' },
-  { label: 'Cr\u00e9dito', icon: CreditCard, value: 'Cart\u00e3o Cr\u00e9dito' },
+  { label: 'Débito', icon: CreditCard, value: 'Cartão Débito' },
+  { label: 'Crédito', icon: CreditCard, value: 'Cartão Crédito' },
 ]
 
 export default function PDVPage() {
@@ -4587,13 +4780,13 @@ export default function PDVPage() {
   const [valorRecebido, setValorRecebido] = useState('')
   const [desconto, setDesconto] = useState('')
 
-  // Scanner e cadastro r\u00e1pido
+  // Scanner e cadastro rápido
   const [scannerAberto, setScannerAberto] = useState(false)
   const [modalCadastroRapido, setModalCadastroRapido] = useState(false)
   const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
   const [skuParaCadastro, setSkuParaCadastro] = useState('')
 
-  // USB Scanner (leitor pistola)
+  // USB Scanner
   const [usbDetectado, setUsbDetectado] = useState(false)
 
   // Estado do cadastro rápido
@@ -4603,18 +4796,21 @@ export default function PDVPage() {
   const [cadastroCategoria, setCadastroCategoria] = useState('')
   const [cadastroPreco, setCadastroPreco] = useState('')
   const [cadastroQuantidade, setCadastroQuantidade] = useState('1')
+
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  FETCH PRODUTOS
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  useEffect(() => {
-    fetchProdutos()
-  }, [])
+  // ══════════════════════════════════════════════════
+  // FETCH PRODUTOS
+  // ══════════════════════════════════════════════════
+
+ useEffect(() => {
+  fetchProdutos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [])
 
   const fetchProdutos = async () => {
     try {
@@ -4624,6 +4820,7 @@ export default function PDVPage() {
         .eq('ativo', true)
         .gt('quantidade_atual', 0)
         .order('nome')
+
       if (!error && data) setProdutos(data)
     } catch {
       setError('Erro ao carregar produtos')
@@ -4633,27 +4830,28 @@ export default function PDVPage() {
     }
   }
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  CARRINHO
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // CARRINHO
+  // ══════════════════════════════════════════════════
+
   const adicionarAoCarrinho = useCallback(
     (produto: Produto) => {
       setCarrinho((prev) => {
         const itemExistente = prev.find((i) => i.produto_id === produto.id)
         if (itemExistente) {
           if (itemExistente.quantidade < produto.quantidade_atual) {
-            addNotification(`\u27a1\ufe0f ${produto.nome}`, 'info', 800)
+            addNotification(`➡️ ${produto.nome}`, 'info', 800)
             return prev.map((i) =>
               i.produto_id === produto.id
                 ? { ...i, quantidade: i.quantidade + 1 }
                 : i
             )
           } else {
-            addNotification(`\u274c Estoque insuficiente`, 'warning')
+            addNotification(`❌ Estoque insuficiente`, 'warning')
             return prev
           }
         } else {
-          addNotification(`\u2705 ${produto.nome}`, 'success', 800)
+          addNotification(`✅ ${produto.nome}`, 'success', 800)
           return [
             ...prev,
             {
@@ -4687,25 +4885,20 @@ export default function PDVPage() {
     }
   }
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  C\u00d3DIGO DE BARRAS (c\u00e2mera + USB)
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // CÓDIGO DE BARRAS (câmera + USB)
+  // ══════════════════════════════════════════════════
+
   const handleCodigoBarrasLido = useCallback(
     async (codigoBarras: string) => {
-      // 1. Busca no banco local
       const produtoLocal = produtos.find((p) => p.sku === codigoBarras)
       if (produtoLocal) {
         adicionarAoCarrinho(produtoLocal)
-        addNotification(
-          `\u2705 ${produtoLocal.nome} adicionado`,
-          'success',
-          2000
-        )
+        addNotification(`✅ ${produtoLocal.nome} adicionado`, 'success', 2000)
         return
       }
 
-      // 2. N\u00e3o achou local: consulta APIs externas
-      addNotification(`\ud83d\udd0d Buscando ${codigoBarras}...`, 'info', 2000)
+      addNotification(`🔍 Buscando ${codigoBarras}...`, 'info', 2000)
       const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
 
       if (resultadoAPI.encontrado) {
@@ -4714,7 +4907,7 @@ export default function PDVPage() {
         setModalCadastroRapido(true)
       } else {
         addNotification(
-          `Produto ${codigoBarras} n\u00e3o encontrado na base. Cadastre manualmente para come\u00e7ar a us\u00e1-lo.`,
+          `Produto ${codigoBarras} não encontrado na base. Cadastre manualmente.`,
           'warning',
           6000
         )
@@ -4723,21 +4916,12 @@ export default function PDVPage() {
     [produtos, adicionarAoCarrinho, addNotification]
   )
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  LEITOR USB DE C\u00d3DIGO DE BARRAS (pistola)
-  //
-  //  Leitores USB funcionam como teclado:
-  //  - Digitam caracteres muito r\u00e1pido (<50ms entre teclas)
-  //  - Pressionam Enter no final
-  //
-  //  Estrat\u00e9gia:
-  //  - Acumula caracteres digitados em <100ms
-  //  - Se Enter + buffer >= 8 chars \u2192 \u00e9 barcode
-  //  - Ignora quando INPUT/TEXTAREA est\u00e1 focado
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // LEITOR USB (pistola)
+  // ══════════════════════════════════════════════════
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignora se algum input/textarea est\u00e1 focado (usu\u00e1rio digitando)
       const activeTag = document.activeElement?.tagName?.toUpperCase()
       if (
         activeTag === 'INPUT' ||
@@ -4747,44 +4931,33 @@ export default function PDVPage() {
         return
       }
 
-      // Ignora teclas modificadoras
       if (e.ctrlKey || e.metaKey || e.altKey) return
 
-      // Enter com buffer suficiente = c\u00f3digo de barras!
       if (e.key === 'Enter') {
         const code = usbBufferRef.current.trim()
         if (code.length >= 8) {
           e.preventDefault()
           e.stopPropagation()
-
-          // Feedback visual
           setUsbDetectado(true)
           setTimeout(() => setUsbDetectado(false), 2000)
-
-          // Vibra\u00e7\u00e3o (se dispon\u00edvel)
           if (navigator.vibrate) navigator.vibrate(200)
-
-          // Processa o c\u00f3digo
           handleCodigoBarrasLido(code)
         }
         usbBufferRef.current = ''
         return
       }
 
-      // S\u00f3 aceita caracteres imprim\u00edveis de 1 char
       if (e.key.length !== 1) {
         usbBufferRef.current = ''
         return
       }
 
-      // Acumula no buffer
       usbBufferRef.current += e.key
 
-      // Limpa buffer se demorar (digita\u00e7\u00e3o humana \u00e9 lenta)
       if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
       usbTimeoutRef.current = setTimeout(() => {
         usbBufferRef.current = ''
-      }, 100) // Leitores USB digitam em <50ms entre teclas
+      }, 100)
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
@@ -4794,10 +4967,10 @@ export default function PDVPage() {
     }
   }, [handleCodigoBarrasLido])
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  CADASTRO R\u00c1PIDO
+  // ══════════════════════════════════════════════════
+  // CADASTRO RÁPIDO — preenche campos com dados da API
+  // ══════════════════════════════════════════════════
 
-  // Atualiza estado do cadastro rápido quando dados da API chegam
   useEffect(() => {
     if (dadosProdutoAPI) {
       setCadastroNome(dadosProdutoAPI.nome || '')
@@ -4807,11 +4980,17 @@ export default function PDVPage() {
     }
   }, [dadosProdutoAPI])
 
+  // ══════════════════════════════════════════════════
+  // SALVAR PRODUTO RÁPIDO (FIX: usa ID real do banco)
+  // ══════════════════════════════════════════════════
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-    const salvarProdutoRapido = async () => {
-    if (!cadastroNome.trim() || !cadastroPreco || parseFloat(cadastroPreco) <= 0) {
-      addNotification('Nome e pre\u00e7o s\u00e3o obrigat\u00f3rios', 'error')
+  const salvarProdutoRapido = async () => {
+    if (
+      !cadastroNome.trim() ||
+      !cadastroPreco ||
+      parseFloat(cadastroPreco) <= 0
+    ) {
+      addNotification('Nome e preço são obrigatórios', 'error')
       return
     }
 
@@ -4820,48 +4999,49 @@ export default function PDVPage() {
 
     try {
       const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Usu\u00e1rio n\u00e3o autenticado')
+      if (!userData.user) throw new Error('Usuário não autenticado')
 
-      const { error: insertError } = await supabase.from('produtos').insert({
-        sku: skuParaCadastro,
-        nome: cadastroNome,
-        marca: cadastroMarca,
-        descricao: cadastroDescricao,
-        categoria: cadastroCategoria,
-        preco_venda: preco,
-        quantidade_atual: quantidade,
-        imagem_url: dadosProdutoAPI?.imagem_url || '',
-        ativo: true,
-        usuario_id: userData.user.id,
-        quantidade_minima: 10,
-        preco_custo: 0,
-      })
+      const { data: novoProduto, error: insertError } = await supabase
+        .from('produtos')
+        .insert({
+          sku: skuParaCadastro,
+          nome: cadastroNome,
+          marca: cadastroMarca,
+          descricao: cadastroDescricao,
+          categoria: cadastroCategoria,
+          preco_venda: preco,
+          quantidade_atual: quantidade,
+          imagem_url: dadosProdutoAPI?.imagem_url || '',
+          ativo: true,
+          usuario_id: userData.user.id,
+          quantidade_minima: 10,
+          preco_custo: 0,
+        })
+        .select()
+        .single()
 
       if (insertError) throw insertError
 
       addNotification(
-        `\u2705 Produto "${cadastroNome}" cadastrado com sucesso!`,
+        `✅ Produto "${cadastroNome}" cadastrado com sucesso!`,
         'success'
       )
       setModalCadastroRapido(false)
+
       await fetchProdutos()
 
-      const novoProduto = {
-        id: 'temp',
-        sku: skuParaCadastro,
-        nome: cadastroNome,
-        preco_venda: preco,
-        quantidade_atual: quantidade,
-      } as Produto
-      adicionarAoCarrinho(novoProduto)
+      if (novoProduto) {
+        adicionarAoCarrinho(novoProduto as Produto)
+      }
     } catch (err: any) {
       addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
     }
   }
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  C\u00c1LCULOS
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // CÁLCULOS
+  // ══════════════════════════════════════════════════
+
   const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0)
   const subtotal = carrinho.reduce(
     (acc, i) => acc + i.quantidade * i.preco_unitario,
@@ -4874,9 +5054,10 @@ export default function PDVPage() {
       ? parseFloat(valorRecebido) - totalPagar
       : 0
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  PAGAMENTO
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // PAGAMENTO (FIX: transacional via RPC)
+  // ══════════════════════════════════════════════════
+
   const abrirPagamento = () => {
     if (carrinho.length === 0) {
       addNotification('Carrinho vazio', 'warning')
@@ -4893,88 +5074,72 @@ export default function PDVPage() {
     try {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) {
-        setError('Usu\u00e1rio n\u00e3o autenticado')
+        setError('Usuário não autenticado')
         return
       }
 
-      for (const item of carrinho) {
-        const produto = produtos.find((p) => p.id === item.produto_id)
-        if (!produto) continue
+      const itensParaVenda = carrinho.map((item) => ({
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+      }))
 
-        const { error: movErr } = await supabase
-          .from('movimentos_estoque')
-          .insert([
-            {
-              produto_id: item.produto_id,
-              tipo_movimento: 'saida',
-              quantidade: item.quantidade,
-              motivo: `PDV - ${formaPagamento} - ${formatarMoeda(
-                item.quantidade * item.preco_unitario
-              )}`,
-              usuario_id: userData.user.id,
-            },
-          ])
-        if (movErr) {
-          setError(`Erro ao registrar ${produto.nome}`)
-          return
+      const { data: resultado, error: rpcError } = await supabase.rpc(
+        'processar_venda',
+        {
+          p_usuario_id: userData.user.id,
+          p_itens: itensParaVenda,
+          p_forma_pagamento: formaPagamento,
+          p_desconto: descontoVal,
         }
+      )
 
-        const novaQtd = produto.quantidade_atual - item.quantidade
-        await supabase
-          .from('produtos')
-          .update({ quantidade_atual: novaQtd })
-          .eq('id', item.produto_id)
-
-        if (novaQtd < produto.quantidade_minima) {
-          await supabase.from('alertas').insert([
-            {
-              produto_id: item.produto_id,
-              usuario_id: userData.user.id,
-              tipo_alerta:
-                novaQtd <= 0 ? 'estoque_critico' : 'estoque_baixo',
-              visualizado: false,
-            },
-          ])
+      if (rpcError) {
+        console.error('Erro na venda:', rpcError)
+        if (rpcError.message.includes('Estoque insuficiente')) {
+          setError(rpcError.message)
+        } else if (rpcError.message.includes('não encontrado')) {
+          setError(
+            'Produto não encontrado. Atualize a página e tente novamente.'
+          )
+        } else {
+          setError(
+            'Erro ao processar venda. Nenhum item foi alterado. Tente novamente.'
+          )
         }
+        return
       }
 
       await gerarCupom({
-        itens: carrinho.map((item) => {
-          const produto = produtos.find((p) => p.id === item.produto_id)!
-          return {
-            nome: produto.nome,
-            sku: produto.sku,
-            quantidade: item.quantidade,
-            preco_unitario: item.preco_unitario,
-            subtotal: item.quantidade * item.preco_unitario,
-          }
-        }),
-        desconto: descontoVal,
-        forma_pagamento: formaPagamento,
+        itens: resultado.itens,
+        desconto: resultado.desconto,
+        forma_pagamento: resultado.forma_pagamento,
         valor_recebido: parseFloat(valorRecebido) || undefined,
       })
 
       addNotification(
-        `\ud83d\udcb0 Venda: ${formatarMoeda(totalPagar)}`,
+        `💰 Venda ${resultado.numero_venda}: ${formatarMoeda(resultado.total)}`,
         'success',
         4000
       )
+
       setCarrinho([])
       setDesconto('')
       setValorRecebido('')
       setModalPagamento(false)
       setTimeout(fetchProdutos, 800)
     } catch (err) {
-      setError('Erro ao processar venda')
+      setError('Erro inesperado ao processar venda. Nenhum item foi alterado.')
       console.error(err)
     } finally {
       setProcessando(false)
     }
   }
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  FILTRO
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // FILTRO
+  // ══════════════════════════════════════════════════
+
   const produtosFiltrados = produtos.filter(
     (p) =>
       p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
@@ -4984,14 +5149,15 @@ export default function PDVPage() {
 
   if (loading)
     return (
-      <div className="text-center py-8 text-gray-600 dark:text-gray-400">
+      <div className="p-8 text-center text-gray-500 dark:text-gray-400">
         Carregando...
       </div>
     )
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  COMPONENTES INTERNOS
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // COMPONENTES INTERNOS
+  // ══════════════════════════════════════════════════
+
   const ProdutoCard = ({ produto }: { produto: Produto }) => {
     const item = carrinho.find((i) => i.produto_id === produto.id)
     return (
@@ -5003,30 +5169,22 @@ export default function PDVPage() {
             : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
         }`}
       >
-        <div className="w-full h-20 mb-2 rounded overflow-hidden bg-gray-100 dark:bg-gray-700">
-          <Image
-            src={getProductImageUrl(produto.imagem_url)}
-            alt={produto.nome}
-            width={200}
-            height={80}
-            className="w-full h-full object-cover"
-            unoptimized
-          />
-        </div>
-        <p className="font-semibold text-xs line-clamp-2 flex-1">
-          {produto.nome}
-        </p>
-        <div className="flex justify-between items-center mt-2">
-          <p className="text-sm font-bold text-green-600 dark:text-green-400">
-            {formatarMoeda(produto.preco_venda)}
-          </p>
+        <div className="flex items-start justify-between w-full">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate dark:text-white">
+              {produto.nome}
+            </p>
+            <p className="text-green-600 dark:text-green-400 font-bold text-base mt-1">
+              {formatarMoeda(produto.preco_venda)}
+            </p>
+          </div>
           {item && (
-            <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+            <span className="bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
               {item.quantidade}
             </span>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs text-gray-400 mt-auto pt-1">
           {produto.quantidade_atual} em estoque
         </p>
       </button>
@@ -5036,336 +5194,331 @@ export default function PDVPage() {
   const ItemCarrinhoCard = ({ item }: { item: ItemCarrinho }) => {
     const produto = produtos.find((p) => p.id === item.produto_id)
     return (
-      <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
-        <div className="flex justify-between items-start mb-2">
-          <p className="font-medium text-sm flex-1 truncate pr-2">
+      <div className="flex items-center justify-between py-2 border-b dark:border-gray-700">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate dark:text-white">
             {produto?.nome}
           </p>
           <button
             onClick={() => removerDoCarrinho(item.produto_id)}
             className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded p-0.5"
           >
-            <X size={15} />
+            <X size={14} />
           </button>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() =>
-                atualizarQuantidade(item.produto_id, item.quantidade - 1)
-              }
-              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-            >
-              <Minus size={12} />
-            </button>
-            <span className="w-8 text-center text-sm font-bold">
-              {item.quantidade}
-            </span>
-            <button
-              onClick={() =>
-                atualizarQuantidade(item.produto_id, item.quantidade + 1)
-              }
-              className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-          <p className="font-bold text-sm">
-            {formatarMoeda(item.quantidade * item.preco_unitario)}
-          </p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() =>
+              atualizarQuantidade(item.produto_id, item.quantidade - 1)
+            }
+            className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="w-8 text-center font-bold text-sm">
+            {item.quantidade}
+          </span>
+          <button
+            onClick={() =>
+              atualizarQuantidade(item.produto_id, item.quantidade + 1)
+            }
+            className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+          >
+            <Plus size={14} />
+          </button>
         </div>
+        <p className="w-20 text-right font-semibold text-sm dark:text-white">
+          {formatarMoeda(item.quantidade * item.preco_unitario)}
+        </p>
       </div>
     )
   }
 
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  //  RENDER
-  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  // ══════════════════════════════════════════════════
+  // RENDER (DOM UNIFICADO — sem duplicação)
+  // ══════════════════════════════════════════════════
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-40 md:pb-0">
-      {/* \u2500\u2500 INDICADOR USB SCANNER \u2500\u2500 */}
+    <div
+      className={`p-4 md:p-6 ${carrinho.length > 0 ? 'pb-60 md:pb-6' : ''}`}
+    >
+      {/* ── INDICADOR USB ── */}
       {usbDetectado && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-          <div className="bg-green-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold">
-            <Usb size={16} />
-            C\u00f3digo lido via leitor USB!
-          </div>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
+          <Usb size={18} /> Código lido via leitor USB!
         </div>
       )}
 
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 DESKTOP \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
-      <div className="hidden md:grid lg:grid-cols-3 gap-6 p-6">
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">
-                PDV
-              </h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                Ponto de Venda
-                <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                  • Leitor USB ativo
-                </span>
-              </p>
-            </div>
-            <button
-              onClick={() => setScannerAberto(true)}
-              className="btn-primary flex items-center gap-2 px-4"
-            >
-              <Camera size={18} /> <span>Ler codigo</span>
-            </button>
-            <span className="text-[10px] text-gray-400 dark:text-gray-500 hidden md:inline">Nem todos os códigos são encontrados na base pública</span>
-          </div>
+      {/* ══════════ HEADER RESPONSIVO ══════════ */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            PDV
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Ponto de Venda &bull; Leitor USB ativo
+          </p>
+        </div>
+        {/* Desktop: botão com texto */}
+        <button
+          onClick={() => setScannerAberto(true)}
+          className="hidden sm:flex btn-primary items-center gap-2 px-4"
+        >
+          <Camera size={18} /> Ler código
+        </button>
+        {/* Mobile: botão só ícone */}
+        <button
+          onClick={() => setScannerAberto(true)}
+          className="sm:hidden btn-primary px-3 py-2"
+        >
+          <Camera size={18} />
+        </button>
+      </div>
 
-          {error && <Alert message={error} type="error" />}
+      {error && <Alert message={error} type="error" />}
 
-          <input
-            type="text"
-            placeholder="Buscar produto, SKU ou categoria..."
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
-            className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-            autoFocus
-          />
+      {/* ══════════ BUSCA (única) ══════════ */}
+      <input
+        type="text"
+        placeholder="Buscar produto por nome, SKU ou categoria..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+        className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full mb-4"
+        autoFocus
+      />
 
-          <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
+      {/* ══════════ LAYOUT PRINCIPAL ══════════ */}
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+        {/* ── GRID DE PRODUTOS (único) ── */}
+        <div className="flex-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
             {produtosFiltrados.map((p) => (
               <ProdutoCard key={p.id} produto={p} />
             ))}
           </div>
         </div>
 
-        {/* \u2500\u2500 CARRINHO DESKTOP \u2500\u2500 */}
-        <div className="card dark:bg-gray-900 dark:border-gray-800 flex flex-col h-fit sticky top-6">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b dark:border-gray-700">
-            <h2 className="font-bold text-lg flex items-center gap-2">
-              <ShoppingCart size={20} />
-              Carrinho
-            </h2>
-            {carrinho.length > 0 && (
-              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                {totalItens} un
-              </span>
-            )}
-          </div>
+        {/* ── CARRINHO DESKTOP (sidebar, só md+) ── */}
+        <div className="hidden md:block w-72 lg:w-80 flex-shrink-0">
+          <div className="sticky top-20 card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg dark:text-white">Carrinho</h3>
+              {carrinho.length > 0 && (
+                <span className="badge-info text-xs">{totalItens} un</span>
+              )}
+            </div>
 
-          <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
             {carrinho.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-8">
-                Carrinho vazio
-              </p>
+              <div className="text-center py-8 text-gray-400">
+                <ShoppingCart
+                  size={32}
+                  className="mx-auto mb-2 opacity-50"
+                />
+                <p className="text-sm">Carrinho vazio</p>
+              </div>
             ) : (
               carrinho.map((i) => (
                 <ItemCarrinhoCard key={i.produto_id} item={i} />
               ))
             )}
-          </div>
 
-          {carrinho.length > 0 && (
-            <>
-              <div className="mb-3">
-                <label className="text-xs text-gray-500 mb-1 block">
-                  Desconto (R$)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                  value={desconto}
-                  onChange={(e) => setDesconto(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
-                />
-              </div>
-
-              <div className="border-t dark:border-gray-700 pt-3 space-y-1 mb-4 text-sm">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span>
-                  <span>{formatarMoeda(subtotal)}</span>
-                </div>
-                {descontoVal > 0 && (
-                  <div className="flex justify-between text-red-500">
-                    <span>Desconto</span>
-                    <span>-{formatarMoeda(descontoVal)}</span>
+            {carrinho.length > 0 && (
+              <>
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">
+                      Desconto (R$)
+                    </span>
+                    <input
+                      type="number"
+                      value={desconto}
+                      onChange={(e) => setDesconto(e.target.value)}
+                      className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
+                    />
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 pt-1">
-                  <span>Total</span>
-                  <span>{formatarMoeda(totalPagar)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span>{formatarMoeda(subtotal)}</span>
+                  </div>
+                  {descontoVal > 0 && (
+                    <div className="flex justify-between text-sm text-red-500">
+                      <span>Desconto</span>
+                      <span>-{formatarMoeda(descontoVal)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-lg border-t pt-2 dark:border-gray-700">
+                    <span>Total</span>
+                    <span>{formatarMoeda(totalPagar)}</span>
+                  </div>
                 </div>
-              </div>
-
-              <button
-                onClick={abrirPagamento}
-                className="btn-primary w-full py-3 flex items-center justify-center gap-2 mb-2"
-              >
-                <Check size={18} />
-                Finalizar Venda
-              </button>
-              <button
-                onClick={() => setCarrinho([])}
-                className="btn-secondary w-full py-2 text-sm"
-              >
-                Limpar carrinho
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MOBILE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
-      <div className="md:hidden space-y-3 p-3">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold dark:text-white">PDV</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
-              Ponto de Venda
-              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                • Leitor USB ativo
-              </span>
-            </p>
+                <button
+                  onClick={abrirPagamento}
+                  className="btn-primary w-full py-3 font-bold"
+                >
+                  Finalizar Venda
+                </button>
+                <button
+                  onClick={() => setCarrinho([])}
+                  className="btn-secondary w-full py-2 text-sm"
+                >
+                  Limpar carrinho
+                </button>
+              </>
+            )}
           </div>
-          <button
-            onClick={() => setScannerAberto(true)}
-            className="btn-primary px-3 py-2"
-          >
-            <Camera size={18} />
-          </button>
-        </div>
-
-        {error && <Alert message={error} type="error" />}
-
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-        />
-
-        <div className="grid grid-cols-2 gap-2">
-          {produtosFiltrados.map((p) => (
-            <ProdutoCard key={p.id} produto={p} />
-          ))}
         </div>
       </div>
 
-      {/* ── BARRA MOBILE INFERIOR ── */}
+      {/* ══════════ CARRINHO MOBILE (bottom bar) ══════════ */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
-          {/* Lista de itens do carrinho (scrollável) */}
-          <div className="max-h-40 overflow-y-auto px-4 pt-3 space-y-2">
+          {/* Lista de itens (scrollável) */}
+          <div className="max-h-40 overflow-y-auto px-3 pt-3 space-y-2">
             {carrinho.map((item) => {
               const produto = produtos.find((p) => p.id === item.produto_id)
               return (
-                <div key={item.produto_id} className="flex items-center justify-between text-sm">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-800 dark:text-gray-200 truncate text-xs">{produto?.nome}</p>
-                  </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade - 1)} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                <div
+                  key={item.produto_id}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="font-medium truncate flex-1 mr-2">
+                    {produto?.nome}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() =>
+                        atualizarQuantidade(
+                          item.produto_id,
+                          item.quantidade - 1
+                        )
+                      }
+                      className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
+                    >
                       <Minus size={12} />
                     </button>
-                    <span className="text-xs font-bold w-5 text-center">{item.quantidade}</span>
-                    <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade + 1)} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                    <span className="w-6 text-center font-bold text-xs">
+                      {item.quantidade}
+                    </span>
+                    <button
+                      onClick={() =>
+                        atualizarQuantidade(
+                          item.produto_id,
+                          item.quantidade + 1
+                        )
+                      }
+                      className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
+                    >
                       <Plus size={12} />
                     </button>
-                    <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-16 text-right">
-                      {formatarMoeda(item.quantidade * item.preco_unitario)}
-                    </span>
-                    <button onClick={() => removerDoCarrinho(item.produto_id)} className="text-red-400 ml-1">
-                      <X size={14} />
-                    </button>
                   </div>
+                  <span className="font-semibold ml-2 w-20 text-right">
+                    {formatarMoeda(item.quantidade * item.preco_unitario)}
+                  </span>
+                  <button
+                    onClick={() => removerDoCarrinho(item.produto_id)}
+                    className="text-red-400 ml-1"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               )
             })}
           </div>
 
-          {/* Barra de total + ações */}
-          <div className="flex justify-between items-center p-4 border-t dark:border-gray-800">
-            <div>
-              <p className="text-xs text-gray-400">{carrinho.length} produto(s) · {totalItens} un</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatarMoeda(totalPagar)}</p>
+          {/* Total + ações */}
+          <div className="px-3 py-3 border-t dark:border-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500">
+                {carrinho.length} produto(s) · {totalItens} un
+              </span>
+              <span className="font-bold text-lg">
+                {formatarMoeda(totalPagar)}
+              </span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setCarrinho([])} className="btn-secondary py-2.5 px-4 text-sm">Limpar</button>
-              <button onClick={abrirPagamento} className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1">
-                <Check size={16} /> Vender
+              <button
+                onClick={() => setCarrinho([])}
+                className="btn-secondary py-2.5 px-4 text-sm"
+              >
+                Limpar
+              </button>
+              <button
+                onClick={abrirPagamento}
+                className="btn-primary flex-1 py-2.5 font-bold"
+              >
+                Vender
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MODAL DE PAGAMENTO \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
+      {/* ══════════ MODAL DE PAGAMENTO ══════════ */}
       {modalPagamento && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="text-xl font-bold dark:text-white">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold dark:text-white">
                 Finalizar Venda
-              </h2>
+              </h3>
               <button
                 onClick={() => setModalPagamento(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <X size={22} />
+                <X size={24} />
               </button>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-5 space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500">
-                <span>{totalItens} item(ns)</span>
-                <span>{formatarMoeda(subtotal)}</span>
+            <div className="flex justify-between text-sm">
+              <span>{totalItens} item(ns)</span>
+              <span>{formatarMoeda(subtotal)}</span>
+            </div>
+            {descontoVal > 0 && (
+              <div className="flex justify-between text-sm text-red-500">
+                <span>Desconto</span>
+                <span>-{formatarMoeda(descontoVal)}</span>
               </div>
-              {descontoVal > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Desconto</span>
-                  <span>-{formatarMoeda(descontoVal)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-xl text-green-600 dark:text-green-400 border-t dark:border-gray-700 pt-2 mt-2">
-                <span>Total</span>
-                <span>{formatarMoeda(totalPagar)}</span>
-              </div>
+            )}
+            <div className="flex justify-between font-bold text-xl border-t dark:border-gray-700 pt-2">
+              <span>Total</span>
+              <span>{formatarMoeda(totalPagar)}</span>
             </div>
 
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Forma de pagamento
-            </p>
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
-                <button
-                  key={value}
-                  onClick={() => setFormaPagamento(value)}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
-                    formaPagamento === value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  <Icon size={20} />
-                  {label}
-                </button>
-              ))}
+            <div>
+              <p className="text-sm font-medium mb-2 dark:text-gray-300">
+                Forma de pagamento
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFormaPagamento(value)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
+                      formaPagamento === value
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {formaPagamento === 'Dinheiro' && (
-              <div className="mb-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+              <div className="space-y-2">
+                <label className="text-sm font-medium dark:text-gray-300">
                   Valor recebido (R$)
                 </label>
                 <input
                   type="number"
-                  min={totalPagar}
-                  step="0.01"
                   value={valorRecebido}
                   onChange={(e) => setValorRecebido(e.target.value)}
                   className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
                 />
                 {trocoVal > 0 && (
-                  <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg flex justify-between">
+                  <div className="flex justify-between items-center bg-green-50 dark:bg-green-900/20 p-3 rounded-xl">
                     <span className="text-green-700 dark:text-green-400 font-medium">
                       Troco
                     </span>
@@ -5380,79 +5533,146 @@ export default function PDVPage() {
             <button
               onClick={processarVenda}
               disabled={processando}
-              className="btn-primary w-full py-3.5 text-base font-bold flex items-center justify-center gap-2"
+              className="btn-primary w-full py-4 font-bold text-lg disabled:opacity-50"
             >
-              <Check size={20} />
               {processando
                 ? 'Processando...'
-                : `Confirmar \u2022 ${formatarMoeda(totalPagar)}`}
+                : `Confirmar • ${formatarMoeda(totalPagar)}`}
             </button>
           </div>
         </div>
       )}
 
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MODAL DE CADASTRO R\u00c1PIDO \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
+      {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
       {modalCadastroRapido && dadosProdutoAPI && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Cadastrar novo produto</h3>
-              <button onClick={() => setModalCadastroRapido(false)} className="text-gray-400"><X className="w-5 h-5" /></button>
+              <h4 className="text-lg font-bold dark:text-white">
+                Cadastrar novo produto
+              </h4>
+              <button
+                onClick={() => setModalCadastroRapido(false)}
+                className="text-gray-400"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 mb-4">
-              <p className="text-blue-700 dark:text-blue-300 text-sm">
-                Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
-              </p>
-            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Produto encontrado na base externa. Confirme os dados e ajuste o
+              necessário.
+            </p>
 
             <div className="space-y-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU (código)</label>
-                <input value={skuParaCadastro} disabled className="input-field w-full bg-gray-100 dark:bg-gray-700" />
+                <label className="text-xs font-medium text-gray-500">
+                  SKU (código)
+                </label>
+                <div className="font-mono text-sm bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
+                  {skuParaCadastro}
+                </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nome *</label>
-                <input value={cadastroNome} onChange={(e) => setCadastroNome(e.target.value)} className="input-field w-full" />
+                <label className="text-xs font-medium text-gray-500">
+                  Nome *
+                </label>
+                <input
+                  value={cadastroNome}
+                  onChange={(e) => setCadastroNome(e.target.value)}
+                  className="input-field w-full"
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Marca</label>
-                <input value={cadastroMarca} onChange={(e) => setCadastroMarca(e.target.value)} className="input-field w-full" />
+                <label className="text-xs font-medium text-gray-500">
+                  Marca
+                </label>
+                <input
+                  value={cadastroMarca}
+                  onChange={(e) => setCadastroMarca(e.target.value)}
+                  className="input-field w-full"
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Descrição</label>
-                <textarea value={cadastroDescricao} onChange={(e) => setCadastroDescricao(e.target.value)} className="input-field w-full" rows={2} />
+                <label className="text-xs font-medium text-gray-500">
+                  Descrição
+                </label>
+                <textarea
+                  value={cadastroDescricao}
+                  onChange={(e) => setCadastroDescricao(e.target.value)}
+                  className="input-field w-full"
+                  rows={2}
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Categoria</label>
-                <input value={cadastroCategoria} onChange={(e) => setCadastroCategoria(e.target.value)} className="input-field w-full" />
+                <label className="text-xs font-medium text-gray-500">
+                  Categoria
+                </label>
+                <input
+                  value={cadastroCategoria}
+                  onChange={(e) => setCadastroCategoria(e.target.value)}
+                  className="input-field w-full"
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Preço de venda *</label>
-                <input type="number" step="0.01" value={cadastroPreco} onChange={(e) => setCadastroPreco(e.target.value)} className="input-field w-full" placeholder="0.00" />
+                <label className="text-xs font-medium text-gray-500">
+                  Preço de venda *
+                </label>
+                <input
+                  type="number"
+                  value={cadastroPreco}
+                  onChange={(e) => setCadastroPreco(e.target.value)}
+                  className="input-field w-full"
+                  placeholder="0.00"
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade inicial</label>
-                <input type="number" value={cadastroQuantidade} onChange={(e) => setCadastroQuantidade(e.target.value)} className="input-field w-full" />
+                <label className="text-xs font-medium text-gray-500">
+                  Quantidade inicial
+                </label>
+                <input
+                  type="number"
+                  value={cadastroQuantidade}
+                  onChange={(e) => setCadastroQuantidade(e.target.value)}
+                  className="input-field w-full"
+                />
               </div>
-
               {dadosProdutoAPI.imagem_url && (
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Imagem</label>
-                  <Image src={dadosProdutoAPI.imagem_url} alt="preview" width={80} height={80} className="rounded-lg mt-1" />
+                  <label className="text-xs font-medium text-gray-500">
+                    Imagem
+                  </label>
+                  <Image
+                    src={dadosProdutoAPI.imagem_url}
+                    alt=""
+                    width={96}
+                    height={96}
+                    className="w-24 h-24 object-contain rounded"
+                    unoptimized
+                  />
                 </div>
               )}
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={salvarProdutoRapido} className="btn-primary flex-1">Salvar e usar</button>
-              <button onClick={() => setModalCadastroRapido(false)} className="btn-secondary">Cancelar</button>
+              <button
+                onClick={salvarProdutoRapido}
+                className="btn-primary flex-1"
+              >
+                Salvar e usar
+              </button>
+              <button
+                onClick={() => setModalCadastroRapido(false)}
+                className="btn-secondary"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 SCANNER \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
+      {/* ══════════ SCANNER ══════════ */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -5460,7 +5680,7 @@ export default function PDVPage() {
         />
       )}
 
-      {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 CUPOM \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
+      {/* ══════════ CUPOM ══════════ */}
       {cupomAberto && dadosCupom && (
         <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
       )}
@@ -8025,7 +8245,7 @@ export default function Signup() {
       nome_completo: nomeCompleto,
       nome_negocio: nomeNegocio,
     },
-    emailRedirectTo: `${window.location.origin}/auth/callback`,
+    emailRedirectTo: `${window.location.origin}/auth/confirmado`,
   },
 })
 
