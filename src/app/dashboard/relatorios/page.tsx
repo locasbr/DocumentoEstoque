@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import {
   TrendingUp,
@@ -266,6 +267,39 @@ export default function RelatoriosPage() {
           </div>
         ))}
       </div>
+
+        {/* ══════════ GRÁFICO DE MOVIMENTAÇÃO ══════════ */}
+        {movimentosPorDiaArray.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 md:p-6">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+              📊 Movimentação no período
+            </h3>
+            <div className="w-full h-64 md:h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={movimentosPorDiaArray}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                  <XAxis 
+                    dataKey="data" 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#9CA3AF"
+                  />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#9CA3AF" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: 'none', 
+                      borderRadius: '12px',
+                      color: '#F9FAFB' 
+                    }} 
+                  />
+                  <Legend />
+                  <Bar dataKey="entradas" name="Entradas" fill="#22C55E" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="saidas" name="Saídas" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
       {/* ══════════ TOP PRODUTOS ══════════ */}
       <div className="card p-3 md:p-6 min-w-0 overflow-hidden">

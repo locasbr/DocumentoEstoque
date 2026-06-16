@@ -108,4 +108,7 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
+  
 }
+
+

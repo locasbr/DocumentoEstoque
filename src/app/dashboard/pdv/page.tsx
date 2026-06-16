@@ -715,31 +715,48 @@ export default function PDVPage() {
         </div>
       </div>
 
-      {/* \u2500\u2500 BARRA MOBILE INFERIOR \u2500\u2500 */}
+      {/* ── BARRA MOBILE INFERIOR ── */}
       {carrinho.length > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl p-4 z-40">
-          <div className="flex justify-between items-center mb-3">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
+          {/* Lista de itens do carrinho (scrollável) */}
+          <div className="max-h-40 overflow-y-auto px-4 pt-3 space-y-2">
+            {carrinho.map((item) => {
+              const produto = produtos.find((p) => p.id === item.produto_id)
+              return (
+                <div key={item.produto_id} className="flex items-center justify-between text-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-800 dark:text-gray-200 truncate text-xs">{produto?.nome}</p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-2">
+                    <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade - 1)} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                      <Minus size={12} />
+                    </button>
+                    <span className="text-xs font-bold w-5 text-center">{item.quantidade}</span>
+                    <button onClick={() => atualizarQuantidade(item.produto_id, item.quantidade + 1)} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                      <Plus size={12} />
+                    </button>
+                    <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-16 text-right">
+                      {formatarMoeda(item.quantidade * item.preco_unitario)}
+                    </span>
+                    <button onClick={() => removerDoCarrinho(item.produto_id)} className="text-red-400 ml-1">
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Barra de total + ações */}
+          <div className="flex justify-between items-center p-4 border-t dark:border-gray-800">
             <div>
-              <p className="text-xs text-gray-400">
-                {carrinho.length} produto(s) \u00b7 {totalItens} un
-              </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {formatarMoeda(totalPagar)}
-              </p>
+              <p className="text-xs text-gray-400">{carrinho.length} produto(s) · {totalItens} un</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatarMoeda(totalPagar)}</p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => setCarrinho([])}
-                className="btn-secondary py-2.5 px-4 text-sm"
-              >
-                Limpar
-              </button>
-              <button
-                onClick={abrirPagamento}
-                className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1"
-              >
-                <Check size={16} />
-                Vender
+              <button onClick={() => setCarrinho([])} className="btn-secondary py-2.5 px-4 text-sm">Limpar</button>
+              <button onClick={abrirPagamento} className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1">
+                <Check size={16} /> Vender
               </button>
             </div>
           </div>
