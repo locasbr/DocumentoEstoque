@@ -150,7 +150,7 @@ export default function DashboardLayout({
       <Navbar />
       <Sidebar />
       <SearchCommand />
-      <main className="md:ml-56 pt-16 p-4 md:p-6 pb-24 md:pb-6">{children}</main>
+      <main className="md:ml-56 mt-14 p-4 md:p-6 pb-24 md:pb-6">{children}</main>
     </div>
   )
 }
