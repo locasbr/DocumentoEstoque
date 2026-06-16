@@ -60,6 +60,14 @@ export default function PDVPage() {
 
   // USB Scanner (leitor pistola)
   const [usbDetectado, setUsbDetectado] = useState(false)
+
+  // Estado do cadastro rápido
+  const [cadastroNome, setCadastroNome] = useState('')
+  const [cadastroMarca, setCadastroMarca] = useState('')
+  const [cadastroDescricao, setCadastroDescricao] = useState('')
+  const [cadastroCategoria, setCadastroCategoria] = useState('')
+  const [cadastroPreco, setCadastroPreco] = useState('')
+  const [cadastroQuantidade, setCadastroQuantidade] = useState('1')
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -171,9 +179,9 @@ export default function PDVPage() {
         setModalCadastroRapido(true)
       } else {
         addNotification(
-          `\u274c Produto ${codigoBarras} n\u00e3o encontrado. Cadastre manualmente.`,
+          `Produto ${codigoBarras} n\u00e3o encontrado na base. Cadastre manualmente para come\u00e7ar a us\u00e1-lo.`,
           'warning',
-          5000
+          6000
         )
       }
     },
@@ -253,42 +261,27 @@ export default function PDVPage() {
 
   // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
   //  CADASTRO R\u00c1PIDO
+
+  // Atualiza estado do cadastro rápido quando dados da API chegam
+  useEffect(() => {
+    if (dadosProdutoAPI) {
+      setCadastroNome(dadosProdutoAPI.nome || '')
+      setCadastroMarca(dadosProdutoAPI.marca || '')
+      setCadastroDescricao(dadosProdutoAPI.descricao || '')
+      setCadastroCategoria(dadosProdutoAPI.categoria || '')
+    }
+  }, [dadosProdutoAPI])
+
+
   // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-  const salvarProdutoRapido = async () => {
-    const nomeInput = document.getElementById(
-      'cadastroNome'
-    ) as HTMLInputElement
-    const marcaInput = document.getElementById(
-      'cadastroMarca'
-    ) as HTMLInputElement
-    const descricaoInput = document.getElementById(
-      'cadastroDescricao'
-    ) as HTMLTextAreaElement
-    const categoriaInput = document.getElementById(
-      'cadastroCategoria'
-    ) as HTMLInputElement
-    const precoInput = document.getElementById(
-      'cadastroPreco'
-    ) as HTMLInputElement
-    const quantidadeInput = document.getElementById(
-      'cadastroQuantidade'
-    ) as HTMLInputElement
-    const imagemInput = document.getElementById(
-      'cadastroImagem'
-    ) as HTMLInputElement
-
-    const nome = nomeInput?.value.trim()
-    const marca = marcaInput?.value.trim()
-    const descricao = descricaoInput?.value.trim()
-    const categoria = categoriaInput?.value.trim()
-    const preco = parseFloat(precoInput?.value || '0')
-    const quantidade = parseInt(quantidadeInput?.value || '0')
-    const imagem = imagemInput?.value || dadosProdutoAPI?.imagem_url || ''
-
-    if (!nome || isNaN(preco) || preco <= 0) {
+    const salvarProdutoRapido = async () => {
+    if (!cadastroNome.trim() || !cadastroPreco || parseFloat(cadastroPreco) <= 0) {
       addNotification('Nome e pre\u00e7o s\u00e3o obrigat\u00f3rios', 'error')
       return
     }
+
+    const preco = parseFloat(cadastroPreco)
+    const quantidade = parseInt(cadastroQuantidade) || 0
 
     try {
       const { data: userData } = await supabase.auth.getUser()
@@ -296,13 +289,13 @@ export default function PDVPage() {
 
       const { error: insertError } = await supabase.from('produtos').insert({
         sku: skuParaCadastro,
-        nome,
-        marca,
-        descricao,
-        categoria,
+        nome: cadastroNome,
+        marca: cadastroMarca,
+        descricao: cadastroDescricao,
+        categoria: cadastroCategoria,
         preco_venda: preco,
         quantidade_atual: quantidade,
-        imagem_url: imagem,
+        imagem_url: dadosProdutoAPI?.imagem_url || '',
         ativo: true,
         usuario_id: userData.user.id,
         quantidade_minima: 10,
@@ -312,7 +305,7 @@ export default function PDVPage() {
       if (insertError) throw insertError
 
       addNotification(
-        `\u2705 Produto "${nome}" cadastrado com sucesso!`,
+        `\u2705 Produto "${cadastroNome}" cadastrado com sucesso!`,
         'success'
       )
       setModalCadastroRapido(false)
@@ -321,7 +314,7 @@ export default function PDVPage() {
       const novoProduto = {
         id: 'temp',
         sku: skuParaCadastro,
-        nome,
+        nome: cadastroNome,
         preco_venda: preco,
         quantidade_atual: quantidade,
       } as Produto
@@ -586,6 +579,7 @@ export default function PDVPage() {
             >
               <Camera size={18} /> <span>Ler codigo</span>
             </button>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 hidden md:inline">Nem todos os códigos são encontrados na base pública</span>
           </div>
 
           {error && <Alert message={error} type="error" />}
@@ -847,131 +841,60 @@ export default function PDVPage() {
 
       {/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 MODAL DE CADASTRO R\u00c1PIDO \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */}
       {modalCadastroRapido && dadosProdutoAPI && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold dark:text-white">
-                Cadastrar novo produto
-              </h2>
-              <button
-                onClick={() => setModalCadastroRapido(false)}
-                className="text-gray-400"
-              >
-                <X size={22} />
-              </button>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Cadastrar novo produto</h3>
+              <button onClick={() => setModalCadastroRapido(false)} className="text-gray-400"><X className="w-5 h-5" /></button>
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
-              Produto encontrado na base externa. Confirme os dados e ajuste o
-              necess\u00e1rio.
-            </p>
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 mb-4">
+              <p className="text-blue-700 dark:text-blue-300 text-sm">
+                Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
+              </p>
+            </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  SKU (c\u00f3digo)
-                </label>
-                <input
-                  type="text"
-                  value={skuParaCadastro}
-                  disabled
-                  className="input-field bg-gray-100 dark:bg-gray-800"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU (código)</label>
+                <input value={skuParaCadastro} disabled className="input-field w-full bg-gray-100 dark:bg-gray-700" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Nome *
-                </label>
-                <input
-                  id="cadastroNome"
-                  defaultValue={dadosProdutoAPI.nome}
-                  className="input-field"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nome *</label>
+                <input value={cadastroNome} onChange={(e) => setCadastroNome(e.target.value)} className="input-field w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Marca</label>
-                <input
-                  id="cadastroMarca"
-                  defaultValue={dadosProdutoAPI.marca}
-                  className="input-field"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Marca</label>
+                <input value={cadastroMarca} onChange={(e) => setCadastroMarca(e.target.value)} className="input-field w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Descri\u00e7\u00e3o
-                </label>
-                <textarea
-                  id="cadastroDescricao"
-                  defaultValue={dadosProdutoAPI.descricao}
-                  rows={2}
-                  className="input-field"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Descrição</label>
+                <textarea value={cadastroDescricao} onChange={(e) => setCadastroDescricao(e.target.value)} className="input-field w-full" rows={2} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Categoria
-                </label>
-                <input
-                  id="cadastroCategoria"
-                  defaultValue={dadosProdutoAPI.categoria}
-                  className="input-field"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Categoria</label>
+                <input value={cadastroCategoria} onChange={(e) => setCadastroCategoria(e.target.value)} className="input-field w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Pre\u00e7o de venda *
-                </label>
-                <input
-                  id="cadastroPreco"
-                  type="number"
-                  step="0.01"
-                  className="input-field"
-                  placeholder="0,00"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Preço de venda *</label>
+                <input type="number" step="0.01" value={cadastroPreco} onChange={(e) => setCadastroPreco(e.target.value)} className="input-field w-full" placeholder="0.00" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Quantidade inicial
-                </label>
-                <input
-                  id="cadastroQuantidade"
-                  type="number"
-                  defaultValue="0"
-                  className="input-field"
-                />
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade inicial</label>
+                <input type="number" value={cadastroQuantidade} onChange={(e) => setCadastroQuantidade(e.target.value)} className="input-field w-full" />
               </div>
+
               {dadosProdutoAPI.imagem_url && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Imagem
-                  </label>
-                  <img
-                    src={dadosProdutoAPI.imagem_url}
-                    alt="pr\u00e9via"
-                    className="w-24 h-24 object-cover rounded border"
-                  />
-                  <input
-                    id="cadastroImagem"
-                    type="hidden"
-                    value={dadosProdutoAPI.imagem_url}
-                  />
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Imagem</label>
+                  <Image src={dadosProdutoAPI.imagem_url} alt="preview" width={80} height={80} className="rounded-lg mt-1" />
                 </div>
               )}
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={salvarProdutoRapido}
-                className="btn-primary flex-1"
-              >
-                Salvar e usar
-              </button>
-              <button
-                onClick={() => setModalCadastroRapido(false)}
-                className="btn-secondary"
-              >
-                Cancelar
-              </button>
+              <button onClick={salvarProdutoRapido} className="btn-primary flex-1">Salvar e usar</button>
+              <button onClick={() => setModalCadastroRapido(false)} className="btn-secondary">Cancelar</button>
             </div>
           </div>
         </div>

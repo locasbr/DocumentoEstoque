@@ -521,6 +521,11 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           </button>
         </div>
 
+        {/* Aviso sobre base de produtos */}
+        <p className="text-center text-gray-500 text-[11px] leading-tight px-4">
+          {'Nossa base p\u00FAblica cobre milhares de produtos, mas alguns c\u00F3digos podem n\u00E3o ser encontrados. Nesse caso, voc\u00EA pode cadastrar manualmente em segundos.'}
+        </p>
+
         {/* Alternar câmera ↔ manual */}
         <div className="mt-3 text-center">
           {!modoManual && (

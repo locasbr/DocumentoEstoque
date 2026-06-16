@@ -313,7 +313,7 @@ function DashboardContent() {
         ].map(({ icon: Icon, label, value, gradient, bgLight }) => (
           <div
             key={label}
-            className={`${bgLight} rounded-xl p-4 md:p-5 border border-transparent`}
+            className={`${bgLight} rounded-2xl p-4 md:p-5 animate-fade-in-up`}
           >
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3`}>
               <Icon className="w-5 h-5 text-white" />

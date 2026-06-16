@@ -84,6 +84,25 @@ export default function AlertasPage() {
     }
   }
 
+  const handleMarcarTodosComoVistos = async () => {
+    const naoVistos = alertas.filter((a) => !a.visualizado)
+    if (naoVistos.length === 0) return
+    if (!confirm(`Marcar ${naoVistos.length} alerta(s) como visualizado(s)?`)) return
+    try {
+      const ids = naoVistos.map((a) => a.id)
+      const { error } = await supabase
+        .from('alertas')
+        .update({ visualizado: true })
+        .in('id', ids)
+      if (!error) {
+        setMessage(`${naoVistos.length} alerta(s) marcado(s) como visualizado(s)`)
+        fetchAlertas()
+      }
+    } catch (error) {
+      console.error('Erro ao marcar alertas:', error)
+    }
+  }
+
   const alertasFiltrados = alertas.filter((a) => {
     if (filtro === 'nao_visualizados') return !a.visualizado
     if (filtro === 'visualizados') return a.visualizado
@@ -135,6 +154,16 @@ export default function AlertasPage() {
           >
             Visualizados ({alertas.filter((a) => a.visualizado).length})
           </button>
+
+      {alertas.filter((a) => !a.visualizado).length > 0 && (
+        <button
+          onClick={handleMarcarTodosComoVistos}
+          className="px-3 md:px-4 py-2 rounded-lg text-sm md:text-base font-medium h-10 flex items-center bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800 transition-colors ml-auto"
+        >
+          <CheckCircle className="w-4 h-4 mr-1" />
+          Marcar todos como lidos
+        </button>
+      )}
         </div>
 
         {alertasFiltrados.length === 0 ? (
