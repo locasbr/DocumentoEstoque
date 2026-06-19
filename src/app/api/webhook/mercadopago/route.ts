@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 🔧 Força rota dinâmica (webhook não pode ser pré-renderizado)
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
+  // ✅ Cria o client DENTRO da função (lazy initialization)
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
   try {
     const body = await req.json()
     console.log('Webhook recebido:', body)
 
-    // Webhook de pagamento unico (PIX/Cartao)
+    // ══════════ PAGAMENTO ÚNICO (PIX/Cartão) ══════════
     if (body.type === 'payment' || body.action === 'payment.updated') {
       const paymentId = body.data?.id
       if (!paymentId) return NextResponse.json({ ok: true })
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Webhook de assinatura recorrente (preapproval)
+    // ══════════ ASSINATURA RECORRENTE (preapproval) ══════════
     if (body.type === 'subscription_preapproval' || body.action === 'updated') {
       const subscriptionId = body.data?.id
       if (!subscriptionId) return NextResponse.json({ ok: true })

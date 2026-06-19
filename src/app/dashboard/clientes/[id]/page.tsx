@@ -10,6 +10,8 @@ import {
   ArrowLeft, User, Phone, Mail, MapPin, Plus, Minus,
   DollarSign, Clock, TrendingDown, TrendingUp, X
 } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 interface Cliente {
   id: string
@@ -31,6 +33,8 @@ interface Fiado {
 }
 
 export default function ClienteDetalhePage() {
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const params = useParams()
   const id = params?.id as string
   const { addNotification } = useNotification()
@@ -39,7 +43,6 @@ export default function ClienteDetalhePage() {
   const [fiados, setFiados] = useState<Fiado[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Modal
   const [modalAberto, setModalAberto] = useState(false)
   const [modalTipo, setModalTipo] = useState<'debito' | 'pagamento'>('debito')
   const [modalValor, setModalValor] = useState('')
@@ -63,8 +66,32 @@ export default function ClienteDetalhePage() {
   }, [id])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (!isIniciante) {
+      fetchData()
+    } else {
+      setLoading(false)
+    }
+  }, [fetchData, isIniciante])
+
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Detalhes do Cliente"
+          descricao="Veja histórico completo de fiado, pagamentos e movimentações. Disponível no plano Profissional."
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const saldo = fiados.reduce((acc, f) => {
     return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
@@ -118,7 +145,11 @@ export default function ClienteDetalhePage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
   }
 
   if (!cliente) {
@@ -132,7 +163,6 @@ export default function ClienteDetalhePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard/clientes" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
           <ArrowLeft className="w-5 h-5" />
@@ -143,9 +173,7 @@ export default function ClienteDetalhePage() {
         </div>
       </div>
 
-      {/* Info + Saldo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Info do cliente */}
         <div className="card p-5 space-y-3">
           <h4 className="font-semibold text-gray-900 dark:text-white">Informações</h4>
           {cliente.telefone && (
@@ -169,11 +197,10 @@ export default function ClienteDetalhePage() {
             </p>
           )}
           {cliente.notas && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-2">{`\u201c${cliente.notas}\u201d`}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-2">{`"${cliente.notas}"`}</p>
           )}
         </div>
 
-        {/* Saldo */}
         <div className={`card p-5 flex flex-col justify-center items-center ${
           saldo > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
         }`}>
@@ -186,7 +213,6 @@ export default function ClienteDetalhePage() {
           </p>
         </div>
 
-        {/* Resumo */}
         <div className="card p-5 space-y-3">
           <div className="flex items-center gap-2 text-sm">
             <TrendingDown className="w-4 h-4 text-red-500" />
@@ -206,7 +232,6 @@ export default function ClienteDetalhePage() {
         </div>
       </div>
 
-      {/* Botões de Ação */}
       <div className="flex gap-3">
         <button
           onClick={() => abrirModal('debito')}
@@ -222,7 +247,6 @@ export default function ClienteDetalhePage() {
         </button>
       </div>
 
-      {/* Histórico */}
       <div>
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Histórico de Fiado</h3>
         {fiados.length === 0 ? (
@@ -262,7 +286,6 @@ export default function ClienteDetalhePage() {
         )}
       </div>
 
-      {/* Modal */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="card p-6 w-full max-w-md space-y-4">

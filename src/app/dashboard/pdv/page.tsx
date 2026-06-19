@@ -1,6 +1,8 @@
 // src/app/dashboard/pdv/page.tsx
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'

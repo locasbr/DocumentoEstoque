@@ -9,6 +9,8 @@ import {
   Users, Plus, Search, Phone, DollarSign,
   AlertTriangle, Trash2, Eye, Download
 } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 interface Cliente {
   id: string
@@ -23,6 +25,9 @@ interface Cliente {
 }
 
 export default function ClientesPage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
@@ -63,8 +68,35 @@ export default function ClientesPage() {
   }, [addNotification])
 
   useEffect(() => {
-    fetchClientes()
-  }, [fetchClientes])
+    // Só busca clientes se NÃO for iniciante
+    if (!isIniciante) {
+      fetchClientes()
+    } else {
+      setLoading(false)
+    }
+  }, [fetchClientes, isIniciante])
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO PARA PLANO INICIANTE
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Controle de Clientes e Fiado"
+          descricao="Cadastre clientes, controle quem deve, quanto deve e tenha histórico completo de pagamentos. Adeus caderninho!"
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleDeletar = async (id: string, nome: string) => {
     if (!confirm(`Tem certeza que deseja remover "${nome}"? Os registros de fiado também serão removidos.`)) return

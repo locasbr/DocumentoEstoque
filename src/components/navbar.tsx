@@ -1,40 +1,48 @@
 'use client'
 
-import { HelpCircle } from 'lucide-react'
-import { Shield } from 'lucide-react'
+import { HelpCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { LogOut, Menu, Moon, Sun, Home, Package, BarChart3, ShoppingCart, AlertCircle, TrendingUp, Users, UserCircle } from 'lucide-react'
+import {
+  LogOut, Menu, Moon, Sun, Home, Package, BarChart3,
+  ShoppingCart, AlertCircle, TrendingUp, Users, UserCircle
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useMembro } from '@/hooks/useMembro'
-
+import { usePlano } from '@/hooks/usePlano'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono' },
-  { href: '/dashboard/produtos', label: 'Produtos', icon: Package, requiredLevel: 'dono' },
-  { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3, requiredLevel: null },
-  { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
-  { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
-  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
-  { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
-  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
+  { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/produtos', label: 'Produtos', icon: Package, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono', planoBloqueio: 'iniciante' },
+  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono', planoBloqueio: null },
 ]
 
 export default function Navbar() {
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
   const { isDono } = useMembro()
+  const { isIniciante } = usePlano()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  const isBloqueadoPorPlano = (planoBloqueio: string | null) => {
+    if (planoBloqueio === 'iniciante' && isIniciante) return true
+    return false
   }
 
   const filteredNavItems = navItems.filter(item => {
@@ -47,7 +55,11 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 border-b dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <Link href="/dashboard" className="font-bold text-xl text-primary">
+
+          <Link
+            href="/dashboard"
+            className="font-bold text-xl text-primary"
+          >
             📦 EstoqueSystem
           </Link>
 
@@ -83,22 +95,41 @@ export default function Navbar() {
 
         {mobileMenuOpen && (
           <div className="md:hidden pb-4 space-y-1 border-t dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 max-h-96 overflow-y-auto">
-            {/* Navegação */}
-            {filteredNavItems.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="block w-full text-left px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors font-medium flex items-center gap-3"
-              >
-                <Icon size={18} />
-                {label}
-              </Link>
-            ))}
+
+            {filteredNavItems.map(({ href, label, icon: Icon, planoBloqueio }) => {
+              const bloqueado = isBloqueadoPorPlano(planoBloqueio)
+
+              if (bloqueado) {
+                return (
+                  <Link
+                    key={href}
+                    href="/dashboard/assinar"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full text-left px-4 py-3 text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 rounded transition-colors font-medium flex items-center gap-3"
+                  >
+                    <Icon size={18} />
+                    <span className="flex-1">{label}</span>
+                    <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
+                    <Lock size={12} className="text-yellow-500" />
+                  </Link>
+                )
+              }
+
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors font-medium flex items-center gap-3"
+                >
+                  <Icon size={18} />
+                  {label}
+                </Link>
+              )
+            })}
 
             <hr className="dark:border-gray-700 my-2" />
 
-            {/* Dark Mode */}
             <button
               onClick={() => {
                 toggleTheme()
@@ -109,7 +140,6 @@ export default function Navbar() {
               {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
             </button>
 
-            {/* Logout */}
             <button
               onClick={() => {
                 handleLogout()

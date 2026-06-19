@@ -7,8 +7,13 @@ import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import Alert from '@/components/alerts'
 import { ArrowLeft, User, Phone, Mail, MapPin } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 export default function NovoClientePage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const router = useRouter()
   const { addNotification } = useNotification()
   const [loading, setLoading] = useState(false)
@@ -21,6 +26,28 @@ export default function NovoClientePage() {
     endereco: '',
     notas: '',
   })
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO PARA PLANO INICIANTE
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Cadastrar Clientes"
+          descricao="Cadastre clientes, controle quem deve e tenha histórico completo de pagamentos. Disponível no plano Profissional."
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
