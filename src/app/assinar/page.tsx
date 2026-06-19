@@ -1,43 +1,90 @@
 'use client'
 
-import { Suspense } from 'react'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Loading from '@/components/loading'
-import { CreditCard, QrCode, Shield, CheckCircle } from 'lucide-react'
+import { CheckCircle, Sparkles, Crown, Zap } from 'lucide-react'
+import Link from 'next/link'
 
-const BENEFICIOS = [
-  'Controle ilimitado de produtos',
-  'Dashboard com métricas em tempo real',
-  'Alertas de estoque baixo e crítico',
-  'Relatórios de entrada e saída',
-  'PDV completo com leitor de código de barras',
-  'Múltiplos funcionários por conta',
-  'Cupom fiscal não-fiscal via WhatsApp',
-  'Suporte prioritário via WhatsApp',
-  'Atualizações e novos recursos inclusos',
+const PLANOS = [
+  {
+    id: 'iniciante',
+    nome: 'Iniciante',
+    descricao: 'Pra quem ta comecando',
+    preco: 39.90,
+    icon: Zap,
+    cor: 'border-gray-300 dark:border-gray-700',
+    corIcon: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+    beneficios: [
+      'Ate 100 produtos',
+      '1 usuario',
+      'PDV completo',
+      'Leitor de codigo de barras',
+      'Alertas de estoque baixo',
+      'Relatorios basicos',
+      'Suporte por email',
+    ],
+  },
+  {
+    id: 'profissional',
+    nome: 'Profissional',
+    descricao: 'Pro mercadinho que cresce',
+    preco: 79.90,
+    icon: Sparkles,
+    cor: 'border-green-500 ring-4 ring-green-500/20',
+    corIcon: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+    destaque: true,
+    beneficios: [
+      'Produtos ilimitados',
+      'Ate 3 usuarios',
+      'Clientes + Fiado',
+      'Controle de validade',
+      'Relatorios avancados (lucro/margem)',
+      'Exportacao CSV',
+      'Cupom via WhatsApp',
+      'Suporte prioritario WhatsApp',
+    ],
+  },
+  {
+    id: 'negocio',
+    nome: 'Negocio',
+    descricao: 'Pra mercadinho com filiais',
+    preco: 149.90,
+    icon: Crown,
+    cor: 'border-purple-500',
+    corIcon: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+    beneficios: [
+      'Tudo do Profissional',
+      'Ate 10 usuarios',
+      'Ate 2 filiais',
+      'Backup automatico diario',
+      'Historico estendido (24 meses)',
+      'Onboarding 1-a-1 com Lucas',
+      'Suporte VIP 24/7',
+    ],
+  },
 ]
 
 function AssinarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
-  const [processando, setProcessando] = useState(false)
+  const [processando, setProcessando] = useState<string | null>(null)
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [planoSelecionado, setPlanoSelecionado] = useState<string>('profissional')
+  const [tipoPagamento, setTipoPagamento] = useState<'pix' | 'assinatura'>('assinatura')
 
   const statusPagamento = searchParams.get('pagamento')
 
   useEffect(() => {
     const verificar = async () => {
       const { data } = await supabase.auth.getSession()
-
       if (!data.session) {
         router.push('/login')
         return
       }
-
       setUserId(data.session.user.id)
       setUserEmail(data.session.user.email ?? '')
 
@@ -51,172 +98,175 @@ function AssinarContent() {
         router.push('/dashboard')
         return
       }
-
       setLoading(false)
     }
-
     verificar()
   }, [router])
 
-  const handlePagarPix = async () => {
-    setProcessando(true)
+  const handlePagar = async () => {
+    setProcessando(planoSelecionado)
     try {
-      const response = await fetch('/api/pagamento/criar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userEmail }),
-      })
-      const data = await response.json()
-      if (data.init_point) window.location.href = data.init_point
-      else alert('Erro ao criar pagamento PIX.')
-    } catch {
-      alert('Erro ao processar.')
-    } finally {
-      setProcessando(false)
-    }
-  }
+      const endpoint = tipoPagamento === 'pix'
+        ? '/api/pagamento/criar'
+        : '/api/pagamento/assinatura'
 
-  const handleAssinarCartao = async () => {
-    setProcessando(true)
-    try {
-      const response = await fetch('/api/pagamento/assinatura', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userEmail }),
+        body: JSON.stringify({
+          userId,
+          userEmail,
+          tipoPlano: planoSelecionado,
+        }),
       })
       const data = await response.json()
-      if (data.init_point) window.location.href = data.init_point
-      else alert('Erro ao criar assinatura.')
+      if (data.init_point) {
+        window.location.href = data.init_point
+      } else {
+        alert('Erro ao criar pagamento. Tente novamente.')
+      }
     } catch {
-      alert('Erro ao processar.')
+      alert('Erro ao processar pagamento.')
     } finally {
-      setProcessando(false)
+      setProcessando(null)
     }
   }
 
   if (loading) return <Loading />
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center p-4">
-      <div className="max-w-lg w-full space-y-8">
-
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-12 px-4">
+      <div className="max-w-6xl mx-auto">
         {statusPagamento === 'falhou' && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-            <p className="text-red-400 font-medium">
-              ❌ O pagamento não foi concluído. Tente novamente.
-            </p>
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center text-red-700 dark:text-red-300">
+            Pagamento nao concluido. Tente novamente.
           </div>
         )}
         {statusPagamento === 'pendente' && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
-            <p className="text-yellow-400 font-medium">
-              ⏳ Pagamento pendente. Assim que for confirmado, seu acesso será liberado automaticamente.
-            </p>
+          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl text-center text-yellow-700 dark:text-yellow-300">
+            Pagamento pendente. Assim que confirmado, seu acesso sera liberado.
           </div>
         )}
 
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-500/10 mb-2">
-            <span className="text-4xl">🔒</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white">
-            Seu período de teste encerrou
+        <div className="text-center mb-12">
+          <div className="text-6xl mb-4">🔒</div>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
+            Seu periodo de teste encerrou
           </h1>
-          <p className="text-gray-400 text-lg">
-            Assine o{' '}
-            <span className="text-white font-semibold">EstoqueSystem</span> e
-            continue gerenciando seu estoque sem interrupções.
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Escolha o plano ideal e continue gerenciando seu estoque sem interrupcoes.
           </p>
         </div>
 
-        <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-8 space-y-6 backdrop-blur-sm">
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-10">
+          {PLANOS.map((plano) => {
+            const Icon = plano.icon
+            const isSelected = planoSelecionado === plano.id
+            return (
+              <button
+                key={plano.id}
+                onClick={() => setPlanoSelecionado(plano.id)}
+                className={`text-left relative bg-white dark:bg-gray-900 border-2 ${isSelected ? plano.cor : 'border-gray-200 dark:border-gray-700'} rounded-2xl p-6 transition-all hover:shadow-lg ${plano.destaque && !isSelected ? 'md:scale-105' : ''} ${isSelected ? 'shadow-xl scale-105' : ''}`}
+              >
+                {plano.destaque && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-green-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
+                    MAIS POPULAR
+                  </div>
+                )}
 
-          <div className="text-center space-y-1">
-            <p className="text-sm text-gray-400 uppercase tracking-wider font-medium">
-              Plano Profissional
-            </p>
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-sm text-gray-400">R$</span>
-              <span className="text-5xl font-extrabold text-white">79</span>
-              <span className="text-2xl font-bold text-white">,90</span>
-              <span className="text-gray-400 ml-1">/mês</span>
-            </div>
-          </div>
+                {isSelected && (
+                  <div className="absolute top-4 right-4 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                  </div>
+                )}
 
-          <div className="border-t border-gray-700" />
+                <div className={`w-12 h-12 ${plano.corIcon} rounded-xl flex items-center justify-center mb-4`}>
+                  <Icon className="w-6 h-6" />
+                </div>
 
-          <ul className="space-y-3">
-            {BENEFICIOS.map((b) => (
-              <li key={b} className="flex items-start gap-3 text-gray-300">
-                <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                  {plano.nome}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  {plano.descricao}
+                </p>
 
-          <div className="border-t border-gray-700" />
+                <div className="mb-6">
+                  <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
+                    R$ {Math.floor(plano.preco)}
+                  </span>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    ,{(plano.preco % 1).toFixed(2).slice(2)}
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400 ml-1 text-sm">/mes</span>
+                </div>
 
-          <div className="flex items-center justify-center gap-6 text-gray-400">
-            <div className="flex items-center gap-2 text-sm">
-              <QrCode className="w-5 h-5" />
-              <span>PIX</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <CreditCard className="w-5 h-5" />
-              <span>Cartão</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Shield className="w-5 h-5" />
-              <span>Seguro</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={handlePagarPix}
-              disabled={processando}
-              className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
-            >
-              <QrCode className="w-5 h-5" />
-              Pagar com PIX (R$ 79,90/mês)
-            </button>
-            <p className="text-center text-xs text-gray-500">
-              Pagamento único — você renova manualmente todo mês
-            </p>
-
-            <button
-              onClick={handleAssinarCartao}
-              disabled={processando}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
-            >
-              <CreditCard className="w-5 h-5" />
-              Assinar com Cartão (R$ 79,90/mês)
-            </button>
-            <p className="text-center text-xs text-gray-500">
-              Cobrança automática mensal — cancele quando quiser
-            </p>
-          </div>
-
-          <div className="text-center space-y-2">
-            <p className="text-gray-500 text-sm">
-              🔒 Pagamento 100% seguro via Mercado Pago
-            </p>
-            <p className="text-gray-600 text-xs">
-              Aceitamos PIX e cartão de crédito/débito à vista.
-              Seu acesso é liberado automaticamente após a confirmação.
-            </p>
-          </div>
+                <ul className="space-y-2 text-sm">
+                  {plano.beneficios.map((b) => (
+                    <li key={b} className="flex items-start gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700 dark:text-gray-300">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </button>
+            )
+          })}
         </div>
 
-        <p className="text-center text-gray-600 text-xs">
-          Dúvidas? Fale conosco via WhatsApp.
-        </p>
+        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8">
+          <h3 className="font-bold text-gray-900 dark:text-white mb-4">Forma de pagamento</h3>
+
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button
+              onClick={() => setTipoPagamento('pix')}
+              className={`p-4 rounded-xl border-2 transition ${tipoPagamento === 'pix' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+            >
+              <div className="text-2xl mb-1">💸</div>
+              <div className="font-bold text-gray-900 dark:text-white">PIX</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Pagamento unico mensal</div>
+            </button>
+
+            <button
+              onClick={() => setTipoPagamento('assinatura')}
+              className={`p-4 rounded-xl border-2 transition ${tipoPagamento === 'assinatura' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+            >
+              <div className="text-2xl mb-1">💳</div>
+              <div className="font-bold text-gray-900 dark:text-white">Cartao</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Assinatura automatica</div>
+            </button>
+          </div>
+
+          <button
+            onClick={handlePagar}
+            disabled={processando !== null}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-full text-lg transition shadow-lg hover:shadow-green-600/30"
+          >
+            {processando
+              ? 'Processando...'
+              : `Assinar ${PLANOS.find(p => p.id === planoSelecionado)?.nome} (R$ ${PLANOS.find(p => p.id === planoSelecionado)?.preco.toFixed(2).replace('.', ',')}/mes)`
+            }
+          </button>
+
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-4">
+            Pagamento 100% seguro via Mercado Pago | Cancele quando quiser
+          </p>
+
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-center">
+            <Link
+              href="https://wa.me/5522999467499?text=Tenho%20duvidas%20sobre%20os%20planos%20do%20EstoqueSystem"
+              target="_blank"
+              className="text-sm text-green-600 dark:text-green-400 hover:underline"
+            >
+              Tenho duvidas, falar com Lucas pelo WhatsApp
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
 export default function AssinarPage() {
   return (
     <Suspense fallback={<Loading />}>

@@ -1,42 +1,92 @@
-// src/app/api/pagamento/assinatura/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!
+const PLANOS = {
+  iniciante: {
+    nome: 'EstoqueSystem - Plano Iniciante',
+    preco: 39.90,
+  },
+  profissional: {
+    nome: 'EstoqueSystem - Plano Profissional',
+    preco: 79.90,
+  },
+  negocio: {
+    nome: 'EstoqueSystem - Plano Negocio',
+    preco: 149.90,
+  },
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, userEmail } = await req.json()
+    const { userId, userEmail, tipoPlano } = await req.json()
+
+    if (!userId || !userEmail) {
+      return NextResponse.json(
+        { error: 'Dados incompletos' },
+        { status: 400 }
+      )
+    }
+
+    const planoEscolhido = PLANOS[tipoPlano as keyof typeof PLANOS]
+    if (!planoEscolhido) {
+      return NextResponse.json(
+        { error: 'Plano invalido' },
+        { status: 400 }
+      )
+    }
+
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Configuracao do servidor incompleta' },
+        { status: 500 }
+      )
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://estoquesystem.com.br'
 
     const response = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        reason: 'EstoqueSystem - Plano Profissional',
-        external_reference: userId,
+        reason: planoEscolhido.nome,
+        external_reference: `${userId}|${tipoPlano}`,
         payer_email: userEmail,
         auto_recurring: {
           frequency: 1,
           frequency_type: 'months',
-          transaction_amount: 79.90,
+          transaction_amount: planoEscolhido.preco,
           currency_id: 'BRL',
         },
-        back_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?pagamento=sucesso`,
+        back_url: `${siteUrl}/dashboard?pagamento=sucesso`,
         status: 'pending',
       }),
     })
 
     const data = await response.json()
 
-    if (data.init_point) {
-      return NextResponse.json({ init_point: data.init_point, id: data.id })
+    if (!response.ok) {
+      console.error('Erro Mercado Pago:', data)
+      return NextResponse.json(
+        { error: 'Erro ao criar assinatura', detalhes: data },
+        { status: 500 }
+      )
     }
 
-    return NextResponse.json({ error: 'Erro ao criar assinatura' }, { status: 500 })
-  } catch (error) {
-    console.error('Erro ao criar assinatura:', error)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+    return NextResponse.json({
+      init_point: data.init_point,
+      preapproval_id: data.id,
+      plano: tipoPlano,
+      valor: planoEscolhido.preco,
+    })
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Erro inesperado'
+    console.error('Erro na API:', err)
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    )
   }
 }

@@ -1,66 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+const PLANOS = {
+  iniciante: {
+    nome: 'EstoqueSystem - Plano Iniciante (1 mes)',
+    preco: 39.90,
+  },
+  profissional: {
+    nome: 'EstoqueSystem - Plano Profissional (1 mes)',
+    preco: 79.90,
+  },
+  negocio: {
+    nome: 'EstoqueSystem - Plano Negocio (1 mes)',
+    preco: 149.90,
+  },
+}
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, userEmail } = body
+    const { userId, userEmail, tipoPlano } = await req.json()
 
     if (!userId || !userEmail) {
       return NextResponse.json(
-        { error: 'userId e userEmail são obrigatórios' },
+        { error: 'Dados incompletos' },
         { status: 400 }
       )
     }
 
-    const response = await fetch(
-      'https://api.mercadopago.com/checkout/preferences',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+    const planoEscolhido = PLANOS[tipoPlano as keyof typeof PLANOS]
+    if (!planoEscolhido) {
+      return NextResponse.json(
+        { error: 'Plano invalido' },
+        { status: 400 }
+      )
+    }
+
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Configuracao do servidor incompleta' },
+        { status: 500 }
+      )
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://estoquesystem.com.br'
+
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            title: planoEscolhido.nome,
+            quantity: 1,
+            unit_price: planoEscolhido.preco,
+            currency_id: 'BRL',
+          },
+        ],
+        payer: {
+          email: userEmail,
         },
-        body: JSON.stringify({
-          items: [
-            {
-              id: 'estoquesystem-mensal',
-              title: 'EstoqueSystem — Plano Profissional (Mensal)',
-              description: 'Acesso completo ao sistema de estoque, PDV e relatórios',
-              quantity: 1,
-              currency_id: 'BRL',
-              unit_price: 79.90,
-            },
-          ],
-          external_reference: userId,
-          payer: {
-            email: userEmail,
-          },
-          payment_methods: {
-            installments: 1,
-          },
-          back_urls: {
-            success: `${appUrl}/dashboard?pagamento=sucesso`,
-            failure: `${appUrl}/assinar?pagamento=falhou`,
-            pending: `${appUrl}/assinar?pagamento=pendente`,
-          },
-          auto_return: 'approved',
-          notification_url: `${appUrl}/api/pagamento/webhook`,
-        }),
-      }
-    )
+        external_reference: `${userId}|${tipoPlano}`,
+        back_urls: {
+          success: `${siteUrl}/dashboard?pagamento=sucesso`,
+          failure: `${siteUrl}/assinar?pagamento=falhou`,
+          pending: `${siteUrl}/assinar?pagamento=pendente`,
+        },
+        auto_return: 'approved',
+        payment_methods: {
+          excluded_payment_types: [],
+          installments: 1,
+        },
+        notification_url: `${siteUrl}/api/webhook/mercadopago`,
+      }),
+    })
 
     const data = await response.json()
 
+    if (!response.ok) {
+      console.error('Erro Mercado Pago:', data)
+      return NextResponse.json(
+        { error: 'Erro ao criar pagamento', detalhes: data },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({
-      id: data.id,
       init_point: data.init_point,
+      preference_id: data.id,
+      plano: tipoPlano,
+      valor: planoEscolhido.preco,
     })
-  } catch (error: any) {
-    console.error('Erro ao criar preferência:', error)
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Erro inesperado'
+    console.error('Erro na API:', err)
     return NextResponse.json(
-      { error: 'Erro ao criar pagamento' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

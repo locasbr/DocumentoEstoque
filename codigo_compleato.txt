@@ -781,7 +781,6 @@ export default function DashboardLayout({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      // Só redireciona no logout EXPLÍCITO
       if (event === 'SIGNED_OUT') {
         initialCheckDone.current = false
         router.push('/login')
@@ -797,7 +796,6 @@ export default function DashboardLayout({
   // ══════════ AUTH CHECK ══════════
   useEffect(() => {
     const checkAuth = async () => {
-      // Já checou? Só valida rota restrita
       if (initialCheckDone.current) {
         if (userLevelRef.current === 'funcionario') {
           const isRestricted = RESTRICTED_ROUTES.some((route) =>
@@ -809,17 +807,14 @@ export default function DashboardLayout({
       }
 
       try {
-        // Tenta recuperar a sessão
         let { data } = await supabase.auth.getSession()
 
-        // Se não achou, espera a restauração do localStorage
         if (!data.session) {
           await new Promise((resolve) => setTimeout(resolve, 500))
           const retry = await supabase.auth.getSession()
           data = retry.data
         }
 
-        // Ainda sem sessão? Vai pro login
         if (!data.session) {
           router.push('/login')
           return
@@ -848,11 +843,19 @@ export default function DashboardLayout({
         // ── Verifica plano/trial ──
         const { data: perfil } = await supabase
           .from('perfis')
-          .select('plano, trial_fim, plano_fim, tipo_pagamento')
+          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin') // 👈 ADICIONADO is_admin
           .eq('id', data.session.user.id)
           .single()
 
         if (perfil) {
+          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano
+          if (perfil.is_admin === true) {
+            console.log('🛡️ Admin detectado - acesso liberado sem restrições')
+            initialCheckDone.current = true
+            setIsLoading(false)
+            return
+          }
+
           const agora = new Date()
           const trialFim = perfil.trial_fim
             ? new Date(perfil.trial_fim)
