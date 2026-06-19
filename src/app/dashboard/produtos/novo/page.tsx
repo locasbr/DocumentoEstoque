@@ -11,9 +11,21 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle, Lock, Zap } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 export default function NovoProdutoPage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const {
+    isIniciante,
+    loading: loadingPlano,
+    podeAdicionarProduto,
+    totalProdutos,
+    limites,
+    temValidade,
+  } = usePlano()
+
   const router = useRouter()
   const { addNotification } = useNotification()
   const [loading, setLoading] = useState(false)
@@ -25,6 +37,9 @@ export default function NovoProdutoPage() {
   const [barcodeDetectado, setBarcodeDetectado] = useState('')
   const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
   const [buscandoBarcode, setBuscandoBarcode] = useState(false)
+
+  // 🔒 Modal de limite atingido
+  const [mostrarLimiteAtingido, setMostrarLimiteAtingido] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -38,6 +53,28 @@ export default function NovoProdutoPage() {
     data_validade: '',
     imagem_url: '',
   })
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO DE LIMITE — se já atingiu 100 produtos
+  if (!podeAdicionarProduto) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo={`Limite de ${limites.produtos} produtos atingido`}
+          descricao={`Você já cadastrou ${totalProdutos} produtos no plano Iniciante. Faça upgrade para o Profissional e cadastre produtos ilimitados!`}
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -54,10 +91,8 @@ export default function NovoProdutoPage() {
     setBuscandoBarcode(true)
     setProdutoBarcode(null)
 
-    // Preenche SKU imediatamente
     setFormData((prev) => ({ ...prev, sku: codigoBarras }))
 
-    // Busca informações na API
     const resultado = await buscarProdutoPorBarcode(codigoBarras)
     setProdutoBarcode(resultado)
     setBuscandoBarcode(false)
@@ -96,7 +131,6 @@ export default function NovoProdutoPage() {
     }
   }
 
-  // Calcula info de validade para avisos visuais
   const getValidadeInfo = () => {
     if (!formData.data_validade) return null
     const hoje = new Date()
@@ -112,6 +146,13 @@ export default function NovoProdutoPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    // 🔒 DUPLA VERIFICAÇÃO de limite no submit (segurança extra)
+    if (!podeAdicionarProduto) {
+      setMostrarLimiteAtingido(true)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -123,10 +164,10 @@ export default function NovoProdutoPage() {
         return
       }
 
-      // Prepara dados — converte data_validade vazia em null
+      // 🔒 Remove data_validade se Iniciante (não tem essa feature)
       const dadosParaSalvar = {
         ...formData,
-        data_validade: formData.data_validade || null,
+        data_validade: temValidade ? (formData.data_validade || null) : null,
         ativo: true,
         usuario_id: user.id,
       }
@@ -156,6 +197,11 @@ export default function NovoProdutoPage() {
     }
   }
 
+  // 🟡 Calcula porcentagem de uso (pra banner)
+  const porcentagemUso = isIniciante ? Math.round((totalProdutos / limites.produtos) * 100) : 0
+  const restantes = isIniciante ? limites.produtos - totalProdutos : 0
+  const quasePerto = isIniciante && restantes <= 20 && restantes > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -167,6 +213,48 @@ export default function NovoProdutoPage() {
           <p className="text-gray-600 dark:text-gray-400 mt-2">Adicionar um novo produto ao estoque</p>
         </div>
       </div>
+
+      {/* 🔒 BANNER DE USO (apenas Iniciante) */}
+      {isIniciante && (
+        <div className={`card p-4 border-2 ${
+          quasePerto
+            ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800'
+            : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800'
+        }`}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock size={16} className={quasePerto ? 'text-amber-600' : 'text-blue-600'} />
+                <h4 className="font-semibold text-gray-900 dark:text-white">
+                  Plano Iniciante — {totalProdutos}/{limites.produtos} produtos
+                </h4>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    quasePerto ? 'bg-amber-500' : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${porcentagemUso}%` }}
+                />
+              </div>
+              <p className={`text-sm ${
+                quasePerto ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'
+              }`}>
+                {quasePerto
+                  ? `⚠️ Você tem apenas ${restantes} produtos restantes!`
+                  : `Você ainda pode cadastrar ${restantes} produtos`}
+              </p>
+            </div>
+            <Link
+              href="/assinar"
+              className="btn-primary bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Zap size={16} />
+              Upgrade
+            </Link>
+          </div>
+        </div>
+      )}
 
       {error && <Alert message={error} type="error" />}
       {success && <Alert message={success} type="success" />}
@@ -327,51 +415,78 @@ export default function NovoProdutoPage() {
             />
           </div>
 
-          {/* ══════════ DATA DE VALIDADE (NOVO) ══════════ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
-              <Calendar size={16} className="text-gray-400" />
-              Data de Validade
-            </label>
-            <input
-              type="date"
-              name="data_validade"
-              value={formData.data_validade}
-              onChange={handleInputChange}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-            />
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-              Deixe em branco se o produto não tem validade
-            </p>
+          {/* ══════════ DATA DE VALIDADE — só mostra se temValidade ══════════ */}
+          {temValidade ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+                <Calendar size={16} className="text-gray-400" />
+                Data de Validade
+              </label>
+              <input
+                type="date"
+                name="data_validade"
+                value={formData.data_validade}
+                onChange={handleInputChange}
+                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                Deixe em branco se o produto não tem validade
+              </p>
 
-            {/* Aviso visual de validade */}
-            {validadeInfo && validadeInfo.vencido && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
-                  Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
-                </p>
-              </div>
-            )}
+              {validadeInfo && validadeInfo.vencido && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                  <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                    Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                  </p>
+                </div>
+              )}
 
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
-                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
-                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
-                </p>
-              </div>
-            )}
+              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                    Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                  </p>
+                </div>
+              )}
 
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
-                <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                  Validade: {validadeInfo.diasRestantes} dias restantes
-                </p>
+              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                  <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                  <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                    Validade: {validadeInfo.diasRestantes} dias restantes
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            // 🔒 BLOQUEIO DE VALIDADE (Iniciante)
+            <div className="p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    <Lock size={18} className="text-gray-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                      Data de Validade
+                      <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Controle vencimentos e evite prejuízos
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/assinar"
+                  className="text-sm text-blue-600 dark:text-blue-400 font-semibold hover:underline whitespace-nowrap"
+                >
+                  Fazer upgrade →
+                </Link>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={loading || imagemUpload} className="btn-primary">
@@ -401,6 +516,25 @@ export default function NovoProdutoPage() {
           onConfirmar={handleConfirmarBarcode}
           onCancelar={() => setBarcodeModalAberto(false)}
         />
+      )}
+
+      {/* 🔒 Modal de limite atingido (segurança extra) */}
+      {mostrarLimiteAtingido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="card p-6 max-w-md w-full">
+            <UpgradeBlock
+              titulo={`Limite de ${limites.produtos} produtos atingido`}
+              descricao={`Você já cadastrou ${totalProdutos} produtos. Faça upgrade para o Profissional e tenha produtos ilimitados!`}
+              planoNecessario="profissional"
+            />
+            <button
+              onClick={() => setMostrarLimiteAtingido(false)}
+              className="mt-4 w-full btn-outline"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

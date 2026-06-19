@@ -60,7 +60,7 @@ export default function Sidebar() {
               return (
                 <Link
                   key={href}
-                  href="/dashboard/assinar"
+                  href="/assinar"
                   className="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 group"
                   title="Disponível no plano Profissional"
                 >

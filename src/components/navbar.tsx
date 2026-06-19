@@ -103,7 +103,7 @@ export default function Navbar() {
                 return (
                   <Link
                     key={href}
-                    href="/dashboard/assinar"
+                    href="/assinar"
                     onClick={() => setMobileMenuOpen(false)}
                     className="block w-full text-left px-4 py-3 text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 rounded transition-colors font-medium flex items-center gap-3"
                   >

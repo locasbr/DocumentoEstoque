@@ -75,6 +75,7 @@ function AssinarContent() {
   const [processando, setProcessando] = useState<string | null>(null)
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [tipoPlanoAtual, setTipoPlanoAtual] = useState<string | null>(null)
   const [planoSelecionado, setPlanoSelecionado] = useState<string>('profissional')
   const [tipoPagamento, setTipoPagamento] = useState<'pix' | 'assinatura'>('assinatura')
 
@@ -92,14 +93,24 @@ function AssinarContent() {
 
       const { data: perfil } = await supabase
         .from('perfis')
-        .select('plano')
+        .select('plano, tipo_plano')
         .eq('id', data.session.user.id)
         .single()
 
-      if (perfil?.plano === 'ativo') {
+      if (perfil?.plano === 'ativo' && perfil?.tipo_plano === 'negocio') {
         router.push('/dashboard')
         return
       }
+
+      if (perfil?.tipo_plano) {
+        setTipoPlanoAtual(perfil.tipo_plano)
+        if (perfil.tipo_plano === 'iniciante') {
+          setPlanoSelecionado('profissional')
+        } else if (perfil.tipo_plano === 'profissional') {
+          setPlanoSelecionado('negocio')
+        }
+      }
+
       setLoading(false)
     }
     verificar()
@@ -136,6 +147,12 @@ function AssinarContent() {
 
   if (loading) return <Loading />
 
+  const isUpgrade = tipoPlanoAtual === 'iniciante' || tipoPlanoAtual === 'profissional'
+  const tituloHeader = isUpgrade ? 'Faça upgrade do seu plano' : 'Seu periodo de teste encerrou'
+  const subtituloHeader = isUpgrade
+    ? `Você está no plano ${tipoPlanoAtual === 'iniciante' ? 'Iniciante' : 'Profissional'}. Desbloqueie mais recursos!`
+    : 'Escolha o plano ideal e continue gerenciando seu estoque sem interrupcoes.'
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-12 px-4">
       <div className="max-w-6xl mx-auto">
@@ -150,13 +167,24 @@ function AssinarContent() {
           </div>
         )}
 
+        {isUpgrade && (
+          <div className="mb-6">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+            >
+              ← Voltar pro dashboard
+            </Link>
+          </div>
+        )}
+
         <div className="text-center mb-12">
-          <div className="text-6xl mb-4">🔒</div>
+          <div className="text-6xl mb-4">{isUpgrade ? '🚀' : '🔒'}</div>
           <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
-            Seu periodo de teste encerrou
+            {tituloHeader}
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Escolha o plano ideal e continue gerenciando seu estoque sem interrupcoes.
+            {subtituloHeader}
           </p>
         </div>
 
@@ -164,19 +192,27 @@ function AssinarContent() {
           {PLANOS.map((plano) => {
             const Icon = plano.icon
             const isSelected = planoSelecionado === plano.id
+            const isCurrent = tipoPlanoAtual === plano.id
             return (
               <button
                 key={plano.id}
-                onClick={() => setPlanoSelecionado(plano.id)}
-                className={`text-left relative bg-white dark:bg-gray-900 border-2 ${isSelected ? plano.cor : 'border-gray-200 dark:border-gray-700'} rounded-2xl p-6 transition-all hover:shadow-lg ${plano.destaque && !isSelected ? 'md:scale-105' : ''} ${isSelected ? 'shadow-xl scale-105' : ''}`}
+                onClick={() => !isCurrent && setPlanoSelecionado(plano.id)}
+                disabled={isCurrent}
+                className={`text-left relative bg-white dark:bg-gray-900 border-2 ${isSelected ? plano.cor : 'border-gray-200 dark:border-gray-700'} rounded-2xl p-6 transition-all hover:shadow-lg ${plano.destaque && !isSelected ? 'md:scale-105' : ''} ${isSelected ? 'shadow-xl scale-105' : ''} ${isCurrent ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                {plano.destaque && (
+                {plano.destaque && !isCurrent && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-green-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
                     MAIS POPULAR
                   </div>
                 )}
 
-                {isSelected && (
+                {isCurrent && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-blue-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
+                    SEU PLANO ATUAL
+                  </div>
+                )}
+
+                {isSelected && !isCurrent && (
                   <div className="absolute top-4 right-4 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
                     <CheckCircle className="w-5 h-5 text-white" />
                   </div>
@@ -241,12 +277,14 @@ function AssinarContent() {
 
           <button
             onClick={handlePagar}
-            disabled={processando !== null}
+            disabled={processando !== null || tipoPlanoAtual === planoSelecionado}
             className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-full text-lg transition shadow-lg hover:shadow-green-600/30"
           >
             {processando
               ? 'Processando...'
-              : `Assinar ${PLANOS.find(p => p.id === planoSelecionado)?.nome} (R$ ${PLANOS.find(p => p.id === planoSelecionado)?.preco.toFixed(2).replace('.', ',')}/mes)`
+              : tipoPlanoAtual === planoSelecionado
+              ? 'Este é seu plano atual'
+              : `${isUpgrade ? 'Fazer upgrade pro' : 'Assinar'} ${PLANOS.find(p => p.id === planoSelecionado)?.nome} (R$ ${PLANOS.find(p => p.id === planoSelecionado)?.preco.toFixed(2).replace('.', ',')}/mes)`
             }
           </button>
 
