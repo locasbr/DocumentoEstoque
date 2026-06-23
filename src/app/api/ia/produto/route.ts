@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { chamarIAJson } from '@/lib/gemini'
 import { createClient } from '@supabase/supabase-js'
 
-// Categorias padrão do EstoqueSystem
 const CATEGORIAS_VALIDAS = [
   'Alimentos',
   'Bebidas',
@@ -20,6 +19,7 @@ interface ResponseIA {
   marca?: string
   preco_sugerido_min?: number
   preco_sugerido_max?: number
+  confianca: 'alta' | 'media' | 'baixa'
   observacao?: string
 }
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const { sku, nomeOriginal, marca, descricaoOriginal, userId } =
       await request.json()
 
-    // 🔒 SEGURANÇA: verifica se o usuário tem plano Negócio
+    // 🔒 Auth check
     if (!userId) {
       return NextResponse.json(
         { erro: 'Usuário não autenticado' },
@@ -36,6 +36,18 @@ export async function POST(request: Request) {
       )
     }
 
+    // ✨ NOVA REGRA: exige nome do produto (evita alucinação)
+    if (!nomeOriginal || nomeOriginal.trim().length < 3) {
+      return NextResponse.json(
+        {
+          erro: 'Digite o nome do produto primeiro. A IA precisa de pelo menos o nome pra te ajudar.',
+          motivo: 'nome_obrigatorio',
+        },
+        { status: 400 }
+      )
+    }
+
+    // 🔒 Plano check
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -60,54 +72,77 @@ export async function POST(request: Request) {
       )
     }
 
-    // 🤖 PROMPT pra IA
+    // 🤖 PROMPT REFINADO — anti-alucinação
     const prompt = `
 Você é um assistente especializado em cadastro de produtos pra mercadinhos brasileiros.
 
-DADOS DO PRODUTO RECEBIDO:
-- Código de barras: ${sku || 'não informado'}
-- Nome: ${nomeOriginal || 'não informado'}
+DADOS RECEBIDOS DO LOJISTA:
+- Nome digitado: "${nomeOriginal}"
 - Marca: ${marca || 'não informada'}
-- Descrição original: ${descricaoOriginal || 'não informada'}
+- Descrição: ${descricaoOriginal || 'não informada'}
+- Código de barras: ${sku || 'não informado'}
+
+REGRAS CRÍTICAS — LEIA COM ATENÇÃO:
+1. NUNCA invente o nome do produto. O nome que o lojista digitou é VERDADEIRO. Apenas formate ele melhor (corrija ortografia, padronize maiúsculas/minúsculas).
+2. NÃO use o código de barras para inferir o produto. Códigos de barras NÃO são confiáveis sem uma base de dados.
+3. Se você não tiver CERTEZA sobre algo, use "confianca": "baixa" e seja conservador nas sugestões.
+4. Trabalhe APENAS com o que o nome do produto te diz.
 
 SUA TAREFA:
-Complete e melhore os dados desse produto pra cadastro num mercadinho. Retorne um JSON com:
+Retorne um JSON com:
 
-1. "nome": Nome do produto bem formatado, com marca e tamanho quando relevante (ex: "Refrigerante Coca-Cola 350ml")
-2. "descricao": Descrição curta e vendedora, MÁXIMO 100 caracteres (ex: "Refrigerante Coca-Cola tradicional, lata 350ml, refrescante")
-3. "categoria": OBRIGATORIAMENTE uma destas opções exatas: ${CATEGORIAS_VALIDAS.join(', ')}
-4. "marca": Marca do produto, se identificável (ex: "Coca-Cola")
-5. "preco_sugerido_min": Preço mínimo de venda sugerido em reais (número, sem R$), baseado em preço de mercado brasileiro 2026
-6. "preco_sugerido_max": Preço máximo de venda sugerido em reais (número, sem R$)
-7. "observacao": Dica curta pro lojista sobre esse produto, se relevante (opcional, MÁXIMO 80 caracteres)
+1. "nome": Nome formatado e padronizado, baseado APENAS no que o lojista digitou (ex: se digitou "coca lata 350", retorne "Coca-Cola Lata 350ml")
+2. "descricao": Descrição curta vendedora baseada no nome, MÁX 100 caracteres
+3. "categoria": OBRIGATORIAMENTE uma dessas: ${CATEGORIAS_VALIDAS.join(', ')}
+4. "marca": Marca inferida do nome (se possível). Se não conseguir inferir com clareza, retorne string vazia ""
+5. "preco_sugerido_min": Preço mínimo de venda em reais (número), baseado em mercado brasileiro 2026
+6. "preco_sugerido_max": Preço máximo de venda em reais (número)
+7. "confianca": "alta" se o nome é claro e tu sabe do produto, "media" se tem dúvidas, "baixa" se não conseguiu identificar bem
+8. "observacao": Dica curta pro lojista (opcional, MÁX 80 caracteres)
 
 REGRAS IMPORTANTES:
-- Se não tiver dados suficientes pra inferir, retorne nome "Produto sem identificação" e categoria "Outros"
-- NUNCA invente dados absurdos
-- Preços devem ser realistas pro mercado brasileiro de mercadinhos
-- A descrição NÃO pode ter aspas duplas dentro dela
+- Se o nome digitado for muito vago (ex: "produto", "item", "x"), retorne "confianca": "baixa", "categoria": "Outros", e preços em 0
+- NUNCA invente marcas. Se o nome for "biscoito recheado", marca = "" (vazia), nome = "Biscoito Recheado"
+- Preços realistas pro mercado brasileiro de mercadinhos
+- Categoria SEMPRE deve estar na lista fornecida
 - Retorne APENAS o JSON, sem markdown nem explicação
 
-Exemplo de retorno válido:
-{
-  "nome": "Refrigerante Coca-Cola 350ml",
+EXEMPLO BOM:
+Input: nome = "coca lata 350"
+Output: {
+  "nome": "Coca-Cola Lata 350ml",
   "descricao": "Refrigerante Coca-Cola lata 350ml, sabor original",
   "categoria": "Bebidas",
   "marca": "Coca-Cola",
   "preco_sugerido_min": 4.50,
   "preco_sugerido_max": 6.00,
-  "observacao": "Produto de alta saída, mantenha sempre em estoque"
+  "confianca": "alta",
+  "observacao": "Produto de alta saída"
+}
+
+EXEMPLO COM POUCA INFO:
+Input: nome = "biscoito"
+Output: {
+  "nome": "Biscoito",
+  "descricao": "Biscoito",
+  "categoria": "Alimentos",
+  "marca": "",
+  "preco_sugerido_min": 3.00,
+  "preco_sugerido_max": 8.00,
+  "confianca": "baixa",
+  "observacao": "Especifique a marca pra melhor sugestão de preço"
 }
 `
 
     const resposta = await chamarIAJson<ResponseIA>(prompt)
 
-    // ✅ Valida categoria (segurança extra)
+    // ✅ Sanitização
     if (!CATEGORIAS_VALIDAS.includes(resposta.categoria)) {
       resposta.categoria = 'Outros'
     }
-
-    // ✅ Sanitiza preços
+    if (!['alta', 'media', 'baixa'].includes(resposta.confianca)) {
+      resposta.confianca = 'baixa'
+    }
     if (
       resposta.preco_sugerido_min &&
       typeof resposta.preco_sugerido_min === 'number'

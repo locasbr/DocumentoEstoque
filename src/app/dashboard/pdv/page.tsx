@@ -885,17 +885,27 @@ export default function PDVPage() {
             </div>
 
             {/* ✨ BOTÃO IA — Completar dados automaticamente */}
-            <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
-              <BotaoIA
-                onClick={handleCompletarComIA}
-                carregando={carregandoIA}
-                label="✨ Completar tudo com IA"
-                className="w-full justify-center"
-              />
-              <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-2">
-                A IA preenche categoria, descrição e sugere preço automaticamente
-              </p>
-            </div>
+<div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
+  <div className="flex items-start gap-2 mb-3">
+    <span className="text-lg">💡</span>
+    <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+      <strong>Como usar:</strong> Digite o <strong>nome do produto</strong> no campo abaixo
+      (ex: &quot;coca lata 350&quot;) e clique no botão. A IA completa categoria, descrição
+      e sugere preço.
+    </p>
+  </div>
+  <BotaoIA
+    onClick={handleCompletarComIA}
+    carregando={carregandoIA}
+    label="✨ Completar com IA"
+    className="w-full justify-center"
+  />
+  {!cadastroNome.trim() && (
+    <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-2 font-medium">
+      ⚠️ Digite o nome do produto primeiro
+    </p>
+  )}
+</div>
 
             {dadosProdutoAPI.encontrado !== false && (
               <p className="text-sm text-green-600 dark:text-green-400 mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">

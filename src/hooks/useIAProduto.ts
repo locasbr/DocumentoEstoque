@@ -12,6 +12,7 @@ export interface DadosIAProduto {
   marca?: string
   preco_sugerido_min?: number
   preco_sugerido_max?: number
+  confianca: 'alta' | 'media' | 'baixa'
   observacao?: string
 }
 
@@ -25,6 +26,16 @@ export function useIAProduto() {
     marca?: string
     descricaoOriginal?: string
   }): Promise<DadosIAProduto | null> => {
+    // ✨ Validação no frontend (UX rápida)
+    if (!params.nomeOriginal || params.nomeOriginal.trim().length < 3) {
+      addNotification(
+        '✏️ Digite o nome do produto primeiro pra IA te ajudar',
+        'warning',
+        4000
+      )
+      return null
+    }
+
     setCarregando(true)
 
     try {
@@ -52,14 +63,37 @@ export function useIAProduto() {
             'warning',
             5000
           )
+        } else if (data.motivo === 'nome_obrigatorio') {
+          addNotification(
+            '✏️ Digite o nome do produto primeiro pra IA te ajudar',
+            'warning',
+            4000
+          )
         } else {
           addNotification(data.erro || 'Erro ao chamar IA', 'error')
         }
         return null
       }
 
-      addNotification('✨ IA completou os dados!', 'success', 3000)
-      return data.dados as DadosIAProduto
+      // ✨ Feedback baseado na confiança
+      const dados = data.dados as DadosIAProduto
+      if (dados.confianca === 'alta') {
+        addNotification('✨ IA completou com alta precisão!', 'success', 3000)
+      } else if (dados.confianca === 'media') {
+        addNotification(
+          '✨ IA completou — confira os dados',
+          'info',
+          4000
+        )
+      } else {
+        addNotification(
+          '⚠️ IA com pouca info — revise antes de salvar',
+          'warning',
+          5000
+        )
+      }
+
+      return dados
     } catch (error: any) {
       console.error('Erro IA:', error)
       addNotification('Erro ao processar com IA', 'error')
@@ -70,4 +104,4 @@ export function useIAProduto() {
   }
 
   return { completarComIA, carregando }
-}
+} 
