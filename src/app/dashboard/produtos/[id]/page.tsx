@@ -1,5 +1,8 @@
 'use client'
 
+import BotaoIA from '@/components/botao-ia'
+import SugestaoPrecoIA from '@/components/sugestao-preco-ia'
+import { useIAPreco, type SugestaoPreco } from '@/hooks/useIAPreco'
 import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
 import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState, useEffect } from 'react'
@@ -33,6 +36,30 @@ export default function EditarProdutoPage() {
   const [barcodeDetectado, setBarcodeDetectado] = useState('')
   const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
   const [buscandoBarcode, setBuscandoBarcode] = useState(false)
+
+  // ✨ IA de preço
+const { sugerirPreco, carregando: carregandoIAPreco } = useIAPreco()
+const [sugestaoPreco, setSugestaoPreco] = useState<SugestaoPreco | null>(null)
+
+const handleSugerirPreco = async () => {
+  if (!formData) return
+  const sugestao = await sugerirPreco({
+    nome: formData.nome,
+    categoria: formData.categoria,
+    descricao: formData.descricao,
+    precoCusto: formData.preco_custo,
+  })
+  if (sugestao) {
+    setSugestaoPreco(sugestao)
+  }
+}
+
+const handleSelecionarPreco = (preco: number) => {
+  setFormData((prev) =>
+    prev ? { ...prev, preco_venda: preco } : null
+  )
+  setSugestaoPreco(null)
+}
 
   useEffect(() => {
     if (!id) {
@@ -369,21 +396,44 @@ export default function EditarProdutoPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-              Preço de Venda (R$) *
-            </label>
-            <input
-              type="number"
-              name="preco_venda"
-              value={formData.preco_venda}
-              onChange={handleInputChange}
-              min="0"
-              step="0.01"
-              required
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-              placeholder="0.00"
-            />
-          </div>
+  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    Preço de Venda (R$) *
+  </label>
+  <input
+    type="number"
+    name="preco_venda"
+    value={formData.preco_venda}
+    onChange={handleInputChange}
+    step="0.01"
+    min="0"
+    required
+    className="input-field w-full mt-1"
+  />
+
+  {/* ✨ BOTÃO IA — Sugestão de preço */}
+  <div className="mt-2">
+    <BotaoIA
+      onClick={handleSugerirPreco}
+      carregando={carregandoIAPreco}
+      label="✨ Sugerir preço com IA"
+      className="w-full justify-center text-sm"
+    />
+    {(!formData.nome?.trim() || formData.preco_custo <= 0) && (
+      <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-1">
+        ⚠️ Preencha o nome e o preço de custo primeiro
+      </p>
+    )}
+  </div>
+
+  {/* ✨ Painel de sugestões */}
+  {sugestaoPreco && (
+    <SugestaoPrecoIA
+      sugestao={sugestaoPreco}
+      onSelecionar={handleSelecionarPreco}
+      onFechar={() => setSugestaoPreco(null)}
+    />
+  )}
+</div>
 
           {/* ══════════ DATA DE VALIDADE ══════════ */}
           <div>
