@@ -8,52 +8,58 @@ export type TipoPlano = 'iniciante' | 'profissional' | 'negocio'
 interface LimitesPlano {
   produtos: number
   usuarios: number
-  filiais: number
   temFiado: boolean
   temValidade: boolean
   temRelatoriosAvancados: boolean
   temExportarCSV: boolean
   temCupomWhatsApp: boolean
-  temBackupAutomatico: boolean
-  temComparativoMensal: boolean
+  // ✨ IA — exclusivo Negócio
+  temIA: boolean
+  temIACadastroAutomatico: boolean
+  temIASugestaoPreco: boolean
+  temIAAnaliseMensal: boolean
 }
 
 const LIMITES: Record<TipoPlano, LimitesPlano> = {
   iniciante: {
     produtos: 100,
     usuarios: 1,
-    filiais: 1,
     temFiado: false,
     temValidade: false,
     temRelatoriosAvancados: false,
     temExportarCSV: false,
     temCupomWhatsApp: false,
-    temBackupAutomatico: false,
-    temComparativoMensal: false,
+    temIA: false,
+    temIACadastroAutomatico: false,
+    temIASugestaoPreco: false,
+    temIAAnaliseMensal: false,
   },
   profissional: {
     produtos: 999999,
     usuarios: 3,
-    filiais: 1,
     temFiado: true,
     temValidade: true,
     temRelatoriosAvancados: true,
     temExportarCSV: true,
     temCupomWhatsApp: true,
-    temBackupAutomatico: false,
-    temComparativoMensal: false,
+    temIA: false,
+    temIACadastroAutomatico: false,
+    temIASugestaoPreco: false,
+    temIAAnaliseMensal: false,
   },
   negocio: {
     produtos: 999999,
     usuarios: 10,
-    filiais: 2,
     temFiado: true,
     temValidade: true,
     temRelatoriosAvancados: true,
     temExportarCSV: true,
     temCupomWhatsApp: true,
-    temBackupAutomatico: true,
-    temComparativoMensal: true,
+    // ✨ IA liberada só no Negócio
+    temIA: true,
+    temIACadastroAutomatico: true,
+    temIASugestaoPreco: true,
+    temIAAnaliseMensal: true,
   },
 }
 
@@ -70,7 +76,6 @@ export function usePlano() {
       return
     }
 
-    // Busca plano + admin
     const { data: perfil } = await supabase
       .from('perfis')
       .select('tipo_plano, is_admin')
@@ -79,11 +84,9 @@ export function usePlano() {
 
     if (perfil) {
       setTipoPlano((perfil.tipo_plano as TipoPlano) || 'profissional')
-    //  setIsAdmin(false)
       setIsAdmin(perfil.is_admin === true)
     }
 
-    // Conta produtos atuais
     const { count } = await supabase
       .from('produtos')
       .select('*', { count: 'exact', head: true })
@@ -97,7 +100,7 @@ export function usePlano() {
     recarregar()
   }, [recarregar])
 
-  // Admin tem acesso a TUDO sem limite
+  // Admin tem acesso a TUDO
   const limites = isAdmin ? LIMITES.negocio : LIMITES[tipoPlano]
 
   return {
@@ -108,19 +111,25 @@ export function usePlano() {
     totalProdutos,
     recarregar,
 
-    // Helpers booleanos
+    // Helpers de limite
     podeAdicionarProduto: isAdmin || totalProdutos < limites.produtos,
+
+    // Helpers de features (Profissional + Negócio)
     temFiado: limites.temFiado,
     temValidade: limites.temValidade,
     temRelatoriosAvancados: limites.temRelatoriosAvancados,
     temExportarCSV: limites.temExportarCSV,
     temCupomWhatsApp: limites.temCupomWhatsApp,
-    temBackupAutomatico: limites.temBackupAutomatico,
-    temComparativoMensal: limites.temComparativoMensal,
+
+    // Helpers de IA (exclusivo Negócio)
+    temIA: limites.temIA,
+    temIACadastroAutomatico: limites.temIACadastroAutomatico,
+    temIASugestaoPreco: limites.temIASugestaoPreco,
+    temIAAnaliseMensal: limites.temIAAnaliseMensal,
 
     // Plano atual
     isIniciante: tipoPlano === 'iniciante' && !isAdmin,
-    isProfissional: tipoPlano === 'profissional',
-    isNegocio: tipoPlano === 'negocio',
+    isProfissional: tipoPlano === 'profissional' && !isAdmin,
+    isNegocio: tipoPlano === 'negocio' || isAdmin,
   }
 }

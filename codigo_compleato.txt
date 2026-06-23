@@ -98,7 +98,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   Package, BarChart3, ShoppingCart, AlertCircle, Users, QrCode,
-  CheckCircle, ArrowRight, XCircle, Smartphone, Menu, X,
+  CheckCircle, ArrowRight, XCircle, Smartphone, Menu, X, Calendar,
+  MessageCircle, Crown, Sparkles, Zap,
 } from 'lucide-react'
 
 const E = {
@@ -112,34 +113,22 @@ const E = {
 }
 
 const FUNCIONALIDADES = [
-  { icon: Package, titulo: 'Controle de Estoque Completo', desc: 'Cadastre produtos, defina estoques m\u00EDnimos e saiba exatamente o que tem e o que est\u00E1 faltando.' },
-  { icon: ShoppingCart, titulo: 'PDV no Celular', desc: 'Ponto de venda integrado com leitor de c\u00F3digo de barras pela c\u00E2mera. Venda direto do bolso.' },
-  { icon: BarChart3, titulo: 'Relat\u00F3rios que Fazem Sentido', desc: 'Veja vendas, lucro, margem e movimenta\u00E7\u00E3o com gr\u00E1ficos simples \u2014 sem precisar ser contador.' },
-  { icon: AlertCircle, titulo: 'Alertas Autom\u00E1ticos', desc: 'Receba avisos antes que o produto acabe. Nunca mais perca uma venda por falta de estoque.' },
-  { icon: Users, titulo: 'Equipe & Funcion\u00E1rios', desc: 'Adicione funcion\u00E1rios com acesso limitado ao PDV. Voc\u00EA controla tudo, eles s\u00F3 vendem.' },
-  { icon: QrCode, titulo: 'Leitor de C\u00F3digo de Barras', desc: 'Escaneie produtos pela c\u00E2mera do celular. Sem precisar comprar equipamento extra.' },
-]
-
-const BENEFICIOS = [
-  'Controle ilimitado de produtos',
-  'Dashboard com m\u00E9tricas em tempo real',
-  'Alertas de estoque baixo e cr\u00EDtico',
-  'Relat\u00F3rios de entrada e sa\u00EDda',
-  'PDV completo com c\u00F3digo de barras',
-  'M\u00FAltiplos funcion\u00E1rios por conta',
-  'Cupom via WhatsApp',
-  'Suporte priorit\u00E1rio',
-  'Atualiza\u00E7\u00F5es inclusas',
+  { icon: Package, titulo: 'Controle de Estoque Completo', desc: 'Cadastre produtos, defina estoques minimos e saiba exatamente o que tem e o que esta faltando.' },
+  { icon: ShoppingCart, titulo: 'PDV no Celular', desc: 'Ponto de venda integrado com leitor de codigo de barras pela camera. Venda direto do bolso.' },
+  { icon: BarChart3, titulo: 'Relatorios que Fazem Sentido', desc: 'Veja vendas, lucro, margem e movimentacao com graficos simples sem precisar ser contador.' },
+  { icon: AlertCircle, titulo: 'Alertas Automaticos', desc: 'Receba avisos antes que o produto acabe. Nunca mais perca uma venda por falta de estoque.' },
+  { icon: Users, titulo: 'Clientes e Fiado', desc: 'Controle quem deve, quanto deve e historico completo de pagamentos. Adeus caderninho!' },
+  { icon: Calendar, titulo: 'Controle de Validade', desc: 'Receba alertas antes do produto vencer. Pare de perder dinheiro com mercadoria estragada.' },
 ]
 
 const NAV_LINKS = [
   { label: 'Funcionalidades', href: '#funcionalidades' },
-  { label: 'Pre\u00E7o', href: '#preco' },
+  { label: 'Planos', href: '#preco' },
   { label: 'FAQ', href: '#faq' },
 ]
 
 const WA_NUM = '5522999467499'
-const WA_MSG = encodeURIComponent('Ol\u00E1! Gostaria de saber mais sobre o EstoqueSystem.')
+const WA_MSG = encodeURIComponent('Ola! Gostaria de saber mais sobre o EstoqueSystem.')
 
 export default function LandingPage() {
   const [demoAtiva, setDemoAtiva] = useState('dashboard')
@@ -154,12 +143,8 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
-      {/* ========== NAVBAR ========== */}
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? 'bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-sm py-3' : 'bg-transparent py-4'
-        }`}
-      >
+      {/* NAVBAR */}
+      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-sm py-3' : 'bg-transparent py-4'}`}>
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
           <a href="#" className="flex items-center gap-2">
             <span className="text-2xl">{E.pkg}</span>
@@ -170,7 +155,7 @@ export default function LandingPage() {
               <a key={href} href={href} className={`text-sm font-medium transition hover:opacity-80 ${scrolled ? 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' : 'text-white/80 hover:text-white'}`}>{label}</a>
             ))}
             <Link href="/login" className={`text-sm font-medium transition ${scrolled ? 'text-gray-600 dark:text-gray-400 hover:text-gray-900' : 'text-white/80 hover:text-white'}`}>Entrar</Link>
-            <Link href="/signup" className={`text-sm font-semibold px-5 py-2 rounded-full transition ${scrolled ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-white/20 backdrop-blur text-white hover:bg-white/30'}`}>{'Teste gr\u00E1tis'}</Link>
+            <Link href="/signup" className={`text-sm font-semibold px-5 py-2 rounded-full transition ${scrolled ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-white/20 backdrop-blur text-white hover:bg-white/30'}`}>Teste gratis</Link>
           </div>
           <button onClick={() => setMenuAberto(!menuAberto)} className={`md:hidden p-2 rounded-lg ${scrolled ? 'text-gray-900 dark:text-white' : 'text-white'}`}>
             {menuAberto ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -183,49 +168,50 @@ export default function LandingPage() {
                 <a key={href} href={href} onClick={() => setMenuAberto(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">{label}</a>
               ))}
               <Link href="/login" onClick={() => setMenuAberto(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium">Entrar</Link>
-              <Link href="/signup" onClick={() => setMenuAberto(false)} className="px-4 py-3 bg-green-600 text-white rounded-lg font-semibold text-center mt-2">{'Teste gr\u00E1tis'}</Link>
+              <Link href="/signup" onClick={() => setMenuAberto(false)} className="px-4 py-3 bg-green-600 text-white rounded-lg font-semibold text-center mt-2">Teste gratis</Link>
             </div>
           </div>
         )}
       </nav>
 
-      {/* ========== HERO ========== */}
+      {/* HERO */}
       <section className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-green-900 pt-32 pb-20 md:pt-40 md:pb-28 overflow-hidden">
         <div className="absolute inset-0 opacity-5">
           <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
         </div>
         <div className="relative z-10 max-w-4xl mx-auto text-center px-4">
           <div className="inline-flex items-center gap-2 bg-green-500/10 backdrop-blur-sm text-green-400 text-sm font-medium px-4 py-2 rounded-full mb-8 border border-green-500/20">
-            <CheckCircle className="w-4 h-4" />{'15 dias gr\u00E1tis \u2014 sem cart\u00E3o de cr\u00E9dito'}
+            <CheckCircle className="w-4 h-4" />15 dias gratis sem cartao de credito
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
-            {'Voc\u00EA est\u00E1 '}<span className="text-red-400 line-through decoration-red-500/50">perdendo dinheiro</span>{' no seu estoque'}<br /><span className="text-green-400">e nem sabe</span>
+            O sistema feito para <span className="text-green-400">mercadinhos brasileiros</span>
           </h1>
           <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto leading-relaxed">
-            {'Controle tudo pelo celular. '}<strong className="text-white">Sem planilha, sem caderno, sem erro.</strong>{' Sistema completo de estoque, PDV e relat\u00F3rios feito para pequenos mercados, mercearias e com\u00E9rcios.'}
+            Controle estoque, vendas e fiado pelo <strong className="text-white">celular</strong>.
+            Sem planilha, sem caderno, sem complicacao. A partir de <strong className="text-green-400">R$ 39,90/mes</strong>.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
             <Link href="/signup" className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-bold text-lg px-8 py-4 rounded-full transition-all hover:shadow-lg hover:shadow-green-600/30 flex items-center justify-center gap-2">
-              {'Testar gr\u00E1tis agora'} <ArrowRight className="w-5 h-5" />
+              Testar gratis agora <ArrowRight className="w-5 h-5" />
             </Link>
-            <Link href="/login" className="w-full sm:w-auto text-gray-300 hover:text-white font-medium px-8 py-4 rounded-full border border-gray-600 hover:border-gray-400 transition text-center">{'J\u00E1 tenho conta'}</Link>
+            <Link href="/login" className="w-full sm:w-auto text-gray-300 hover:text-white font-medium px-8 py-4 rounded-full border border-gray-600 hover:border-gray-400 transition text-center">Ja tenho conta</Link>
           </div>
           <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-400">
-            <span>{'\u2705 Sem cart\u00E3o'}</span><span>{'\u00B7'}</span><span>{'\u2705 Cancele quando quiser'}</span><span>{'\u00B7'}</span><span>{'\u2705 Suporte via WhatsApp'}</span>
+            <span>Sem cartao</span><span>|</span><span>Cancele quando quiser</span><span>|</span><span>Suporte via WhatsApp</span>
           </div>
         </div>
       </section>
 
-      {/* ========== PROPOSTA DE VALOR ========== */}
+      {/* PROPOSTA DE VALOR */}
       <section className="py-16 md:py-20 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-5xl mx-auto px-4">
-          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-4">{'Tudo na palma da sua m\u00E3o'}</h3>
-          <p className="text-center text-gray-600 dark:text-gray-400 mb-12 max-w-2xl mx-auto">{'Saiba exatamente o que est\u00E1 vendendo, o que est\u00E1 faltando e onde voc\u00EA est\u00E1 perdendo dinheiro \u2014 tudo em tempo real.'}</p>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-4">Tudo na palma da sua mao</h3>
+          <p className="text-center text-gray-600 dark:text-gray-400 mb-12 max-w-2xl mx-auto">Saiba exatamente o que esta vendendo, o que esta faltando e onde voce esta perdendo dinheiro tudo em tempo real.</p>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: Smartphone, titulo: 'Funciona no Celular', desc: '100% responsivo. Use no celular, tablet ou computador. Sem instalar nada \u2014 acesse pelo navegador.', cor: 'bg-blue-50 dark:bg-blue-900/20', iconCor: 'text-blue-600 dark:text-blue-400', bordaCor: 'border-blue-200 dark:border-blue-800' },
-              { icon: QrCode, titulo: 'Leitor de C\u00F3digo de Barras', desc: 'Escaneie produtos pela c\u00E2mera do celular ou com leitor USB. Sem comprar equipamento extra.', cor: 'bg-green-50 dark:bg-green-900/20', iconCor: 'text-green-600 dark:text-green-400', bordaCor: 'border-green-200 dark:border-green-800' },
-              { icon: BarChart3, titulo: 'Controle em Tempo Real', desc: 'Dashboard com m\u00E9tricas ao vivo. Saiba exatamente o que est\u00E1 vendendo e o que est\u00E1 faltando.', cor: 'bg-purple-50 dark:bg-purple-900/20', iconCor: 'text-purple-600 dark:text-purple-400', bordaCor: 'border-purple-200 dark:border-purple-800' },
+              { icon: Smartphone, titulo: 'Funciona no Celular', desc: '100% responsivo. Use no celular, tablet ou computador. Sem instalar nada.', cor: 'bg-blue-50 dark:bg-blue-900/20', iconCor: 'text-blue-600 dark:text-blue-400', bordaCor: 'border-blue-200 dark:border-blue-800' },
+              { icon: QrCode, titulo: 'Leitor de Codigo de Barras', desc: 'Escaneie produtos pela camera do celular ou com leitor USB. Sem comprar equipamento extra.', cor: 'bg-green-50 dark:bg-green-900/20', iconCor: 'text-green-600 dark:text-green-400', bordaCor: 'border-green-200 dark:border-green-800' },
+              { icon: MessageCircle, titulo: 'Suporte Direto Comigo', desc: 'Sem chatbot, sem fila. Falo direto com voce pelo WhatsApp quando precisar.', cor: 'bg-purple-50 dark:bg-purple-900/20', iconCor: 'text-purple-600 dark:text-purple-400', bordaCor: 'border-purple-200 dark:border-purple-800' },
             ].map(({ icon: Icon, titulo, desc, cor, iconCor, bordaCor }) => (
               <div key={titulo} className={`${cor} border ${bordaCor} rounded-2xl p-6 md:p-8 text-center transition hover:shadow-lg hover:-translate-y-1`}>
                 <div className={`w-14 h-14 ${cor} rounded-xl flex items-center justify-center mx-auto mb-4`}><Icon className={`w-7 h-7 ${iconCor}`} /></div>
@@ -237,37 +223,31 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== DEMO ========== */}
+      {/* DEMO */}
       <section className="py-16 md:py-20 bg-white dark:bg-gray-950">
         <div className="max-w-5xl mx-auto px-4">
           <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-2">Veja o sistema funcionando</h3>
           <p className="text-center text-gray-500 dark:text-gray-400 mb-10">Simples de usar, poderoso de verdade.</p>
           <div className="flex flex-wrap justify-center gap-2 mb-8">
-            {[{ id: 'dashboard', label: 'Dashboard' }, { id: 'pdv', label: 'PDV' }, { id: 'relatorios', label: 'Relat\u00F3rios' }, { id: 'alertas', label: 'Alertas' }].map(({ id, label }) => (
+            {[{ id: 'dashboard', label: 'Dashboard' }, { id: 'pdv', label: 'PDV' }, { id: 'relatorios', label: 'Relatorios' }, { id: 'alertas', label: 'Alertas' }].map(({ id, label }) => (
               <button key={id} onClick={() => setDemoAtiva(id)} className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition ${demoAtiva === id ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{label}</button>
             ))}
           </div>
           <div className="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl max-w-4xl mx-auto">
             <div className="hidden sm:flex items-center gap-2 px-4 py-3 bg-gray-800 border-b border-gray-700">
               <div className="flex gap-1.5"><div className="w-3 h-3 rounded-full bg-red-500" /><div className="w-3 h-3 rounded-full bg-yellow-500" /><div className="w-3 h-3 rounded-full bg-green-500" /></div>
-              <div className="flex-1 text-center"><span className="text-xs text-gray-400 bg-gray-700/50 px-3 py-1 rounded">estoquesystem.com/dashboard</span></div>
+              <div className="flex-1 text-center"><span className="text-xs text-gray-400 bg-gray-700/50 px-3 py-1 rounded">estoquesystem.com.br/dashboard</span></div>
             </div>
             <Image src={`/demo-${demoAtiva}.png`} alt={`Demo ${demoAtiva}`} width={1200} height={700} className="w-full" priority />
           </div>
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
-            {demoAtiva === 'dashboard' && 'Veja todas as m\u00E9tricas do seu neg\u00F3cio em um s\u00F3 lugar'}
-            {demoAtiva === 'pdv' && 'Venda direto pelo celular com c\u00F3digo de barras'}
-            {demoAtiva === 'relatorios' && 'Saiba seu lucro real, margem e produtos mais vendidos'}
-            {demoAtiva === 'alertas' && 'Receba avisos autom\u00E1ticos antes do estoque acabar'}
-          </p>
         </div>
       </section>
 
-      {/* ========== FUNCIONALIDADES ========== */}
+      {/* FUNCIONALIDADES */}
       <section id="funcionalidades" className="py-16 md:py-20 bg-gray-50 dark:bg-gray-900 scroll-mt-20">
         <div className="max-w-5xl mx-auto px-4">
-          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-2">{'Tudo que voc\u00EA precisa em um s\u00F3 lugar'}</h3>
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-12">{'Sem planilha, sem caderno, sem complica\u00E7\u00E3o.'}</p>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-2">Tudo que voce precisa em um so lugar</h3>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12">Sem planilha, sem caderno, sem complicacao.</p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {FUNCIONALIDADES.map(({ icon: Icon, titulo, desc }) => (
               <div key={titulo} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl p-6 hover:shadow-lg transition">
@@ -280,15 +260,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== COMO FUNCIONA ========== */}
+      {/* COMO FUNCIONA */}
       <section className="py-16 md:py-20 bg-white dark:bg-gray-950">
         <div className="max-w-4xl mx-auto px-4">
           <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-12">Comece em 2 minutos</h3>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro r\u00E1pido com email e senha. Sem burocracia, sem cart\u00E3o.', emoji: E.memo },
-              { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione seus produtos manualmente ou escaneie o c\u00F3digo de barras com a c\u00E2mera.', emoji: E.pkg },
-              { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relat\u00F3rios e nunca mais perca uma venda por falta de estoque.', emoji: E.rocket },
+              { passo: '1', titulo: 'Crie sua conta', desc: 'Cadastro rapido com email e senha. Sem burocracia, sem cartao.', emoji: E.memo },
+              { passo: '2', titulo: 'Cadastre produtos', desc: 'Adicione manualmente ou escaneie o codigo de barras com a camera.', emoji: E.pkg },
+              { passo: '3', titulo: 'Comece a vender', desc: 'Use o PDV, acompanhe relatorios e nunca mais perca uma venda.', emoji: E.rocket },
             ].map(({ passo, titulo, desc, emoji }) => (
               <div key={passo} className="text-center">
                 <div className="text-4xl mb-3">{emoji}</div>
@@ -301,20 +281,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== ANTES vs DEPOIS ========== */}
+      {/* ANTES vs DEPOIS */}
       <section className="py-16 md:py-20 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-4xl mx-auto px-4">
-          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-12">{'A diferen\u00E7a \u00E9 clara'}</h3>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-12">A diferenca e clara</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-2xl p-6">
               <h4 className="font-bold text-red-800 dark:text-red-400 mb-4 text-lg">Antes do EstoqueSystem</h4>
-              {['Controle no caderno ou planilha', 'Produto vence e voc\u00EA nem percebe', 'N\u00E3o sabe o lucro real do m\u00EAs', 'Funcion\u00E1rio vende e voc\u00EA n\u00E3o v\u00EA', 'Estoque acaba e voc\u00EA perde venda'].map((item) => (
+              {['Controle no caderno ou planilha', 'Produto vence e voce nem percebe', 'Nao sabe o lucro real do mes', 'Funcionario vende e voce nao ve', 'Estoque acaba e voce perde venda', 'Cliente fica devendo e voce esquece'].map((item) => (
                 <div key={item} className="flex items-start gap-2 mb-3"><XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 text-sm">{item}</span></div>
               ))}
             </div>
             <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/30 rounded-2xl p-6">
               <h4 className="font-bold text-green-800 dark:text-green-400 mb-4 text-lg">Depois do EstoqueSystem</h4>
-              {['Controle completo no celular', 'Alertas autom\u00E1ticos de vencimento', 'Relat\u00F3rios de lucro e margem em tempo real', 'Cada venda registrada automaticamente', 'Avisos antes do estoque acabar'].map((item) => (
+              {['Controle completo no celular', 'Alertas automaticos de vencimento', 'Relatorios de lucro em tempo real', 'Cada venda registrada automaticamente', 'Avisos antes do estoque acabar', 'Historico completo de fiado por cliente'].map((item) => (
                 <div key={item} className="flex items-start gap-2 mb-3"><CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 text-sm">{item}</span></div>
               ))}
             </div>
@@ -322,65 +302,144 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== QUEM CRIOU ========== */}
+      {/* QUEM CRIOU */}
       <section className="py-16 md:py-20 bg-white dark:bg-gray-950">
         <div className="max-w-4xl mx-auto px-4">
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-2">{'Quem est\u00E1 por tr\u00E1s'}</p>
-          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-10">{'Prazer, Lucas Machado '}{E.wave}</h3>
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-2">Quem esta por tras</p>
+          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-10">Prazer, Lucas Machado {E.wave}</h3>
           <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-10">
-            <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed mb-4">{'Tenho 20 anos e sou desenvolvedor. Criei o EstoqueSystem porque vi de perto pequenos comerciantes '}<strong>perdendo dinheiro por falta de controle</strong>{' \u2014 usando caderno, planilha ou simplesmente confiando na mem\u00F3ria.'}</p>
-            <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed mb-4">{'Ent\u00E3o resolvi construir algo '}<strong>simples, direto e que realmente funcionasse</strong>{' no dia a dia de quem est\u00E1 atr\u00E1s do balc\u00E3o.'}</p>
-            <p className="text-gray-600 dark:text-gray-400 leading-relaxed mb-8">{'Cada tela, cada bot\u00E3o e cada funcionalidade foi pensada para quem n\u00E3o tem tempo de aprender sistemas complicados. '}<strong>{'Se voc\u00EA \u00E9 essa pessoa, o EstoqueSystem foi feito pra voc\u00EA.'}</strong></p>
+            <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed mb-4">Tenho 20 anos e sou desenvolvedor. Criei o EstoqueSystem porque vi de perto pequenos comerciantes <strong>perdendo dinheiro por falta de controle</strong> usando caderno, planilha ou simplesmente confiando na memoria.</p>
+            <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed mb-4">Entao resolvi construir algo <strong>simples, direto e que realmente funcionasse</strong> no dia a dia de quem esta atras do balcao.</p>
+            <p className="text-gray-600 dark:text-gray-400 leading-relaxed mb-8">Cada tela, cada botao e cada funcionalidade foi pensada para quem nao tem tempo de aprender sistemas complicados. <strong>Se voce e essa pessoa, o EstoqueSystem foi feito pra voce.</strong></p>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="flex items-start gap-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-4">
                 <span className="text-2xl">{E.target}</span>
-                <div><p className="font-bold text-gray-900 dark:text-white text-sm">{'Miss\u00E3o'}</p><p className="text-gray-600 dark:text-gray-400 text-sm">{'Tornar o controle de estoque acess\u00EDvel pra todo pequeno com\u00E9rcio'}</p></div>
+                <div><p className="font-bold text-gray-900 dark:text-white text-sm">Missao</p><p className="text-gray-600 dark:text-gray-400 text-sm">Tornar o controle de estoque acessivel pra todo pequeno comercio</p></div>
               </div>
               <div className="flex items-start gap-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-4">
                 <span className="text-2xl">{E.speech}</span>
-                <div><p className="font-bold text-gray-900 dark:text-white text-sm">Suporte direto</p><p className="text-gray-600 dark:text-gray-400 text-sm">{'Fale comigo pelo WhatsApp \u2014 sem rob\u00F4, sem fila'}</p></div>
+                <div><p className="font-bold text-gray-900 dark:text-white text-sm">Suporte direto</p><p className="text-gray-600 dark:text-gray-400 text-sm">Fale comigo pelo WhatsApp sem robo, sem fila</p></div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ========== PRECO ========== */}
+      {/* 3 PLANOS */}
       <section id="preco" className="py-16 md:py-20 bg-gray-50 dark:bg-gray-900 scroll-mt-20">
-        <div className="max-w-xl mx-auto px-4">
-          <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-2">{'Simples e acess\u00EDvel'}</h3>
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-10">{'Um plano s\u00F3, com tudo incluso. Sem surpresas.'}</p>
-          <div className="bg-white dark:bg-gray-800 border-2 border-green-500 rounded-3xl p-8 md:p-10 shadow-xl">
-            <div className="text-center mb-6"><span className="text-sm font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">Plano Profissional</span></div>
-            <div className="text-center mb-2"><span className="text-5xl font-extrabold text-gray-900 dark:text-white">R$ 79</span><span className="text-2xl font-bold text-gray-900 dark:text-white">,90</span><span className="text-gray-500 dark:text-gray-400 ml-1">{'/m\u00EAs'}</span></div>
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-2">{'Menos de R$ 3 por dia para controlar todo seu neg\u00F3cio'}</p>
-            <p className="text-center text-sm text-green-600 dark:text-green-400 font-medium mb-6">{'15 dias gr\u00E1tis para testar \u2014 sem compromisso'}</p>
-            <div className="space-y-3 mb-8">
-              {BENEFICIOS.map((b) => (
-                <div key={b} className="flex items-center gap-3"><CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" /><span className="text-gray-700 dark:text-gray-300 text-sm">{b}</span></div>
-              ))}
+        <div className="max-w-6xl mx-auto px-4">
+          <h3 className="text-2xl md:text-4xl font-extrabold text-center text-gray-900 dark:text-white mb-2">Escolha o plano ideal</h3>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12">Sem fidelidade. Cancele quando quiser. 15 dias gratis.</p>
+
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {/* INICIANTE */}
+            <div className="bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-6 transition-all hover:shadow-lg">
+              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center mb-4">
+                <Zap className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+              </div>
+              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Iniciante</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Pra quem ta comecando</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-gray-900 dark:text-white">R$ 39</span>
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">,90</span>
+                <span className="text-gray-500 dark:text-gray-400 ml-1">/mes</span>
+              </div>
+              <ul className="space-y-3 mb-6 text-sm">
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Ate <strong>100 produtos</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">1 usuario</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">PDV completo</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Leitor de codigo de barras</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Alertas de estoque baixo</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Relatorios basicos</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Suporte por email</span></li>
+              </ul>
+              <Link href="/signup?plano=iniciante" className="block w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-full text-center transition">
+                Comecar 15 dias gratis
+              </Link>
             </div>
-            <Link href="/signup" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold text-lg py-4 rounded-full text-center transition hover:shadow-lg hover:shadow-green-600/30">{'Come\u00E7ar teste gr\u00E1tis'}</Link>
-            <p className="text-center text-xs text-gray-400 mt-4">{'Sem cart\u00E3o de cr\u00E9dito no teste \u00B7 Cancele quando quiser'}</p>
+
+            {/* PROFISSIONAL */}
+            <div className="bg-white dark:bg-gray-800 border-2 border-green-500 ring-4 ring-green-500/20 rounded-2xl p-6 relative md:scale-105 shadow-xl">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-green-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
+                MAIS POPULAR
+              </div>
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-4">
+                <Sparkles className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Profissional</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Pro mercadinho que cresce</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-gray-900 dark:text-white">R$ 79</span>
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">,90</span>
+                <span className="text-gray-500 dark:text-gray-400 ml-1">/mes</span>
+              </div>
+              <ul className="space-y-3 mb-6 text-sm">
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300"><strong>Produtos ilimitados</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Ate <strong>3 usuarios</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 font-semibold">Clientes + Fiado</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 font-semibold">Controle de validade</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Relatorios avancados (lucro/margem)</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Exportacao CSV</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Cupom via WhatsApp</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300"><strong>Suporte prioritario WhatsApp</strong></span></li>
+              </ul>
+              <Link href="/signup?plano=profissional" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-full text-center transition shadow-lg hover:shadow-green-600/30">
+                Comecar 15 dias gratis
+              </Link>
+            </div>
+
+            {/* NEGOCIO */}
+            <div className="bg-white dark:bg-gray-800 border-2 border-purple-500 rounded-2xl p-6 transition-all hover:shadow-lg">
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4">
+                <Crown className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Negocio</h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Pra mercadinho com filiais</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-gray-900 dark:text-white">R$ 149</span>
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">,90</span>
+                <span className="text-gray-500 dark:text-gray-400 ml-1">/mes</span>
+              </div>
+              <ul className="space-y-3 mb-6 text-sm">
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300"><strong>Tudo do Profissional</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Ate <strong>10 usuarios</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Ate <strong>2 filiais</strong></span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 font-semibold">Backup automatico diario</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300">Historico estendido (24 meses)</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300 font-semibold">Onboarding 1-a-1</span></li>
+                <li className="flex items-start gap-2"><CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" /><span className="text-gray-700 dark:text-gray-300"><strong>Suporte VIP 24/7</strong></span></li>
+              </ul>
+              <Link href="/signup?plano=negocio" className="block w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-full text-center transition shadow-lg">
+                Comecar 15 dias gratis
+              </Link>
+            </div>
           </div>
+
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-8">
+            Pagamento 100% seguro via Mercado Pago | Sem cartao no teste | Cancele quando quiser
+          </p>
         </div>
       </section>
 
-      {/* ========== FAQ ========== */}
+      {/* FAQ */}
       <section id="faq" className="py-16 md:py-20 bg-white dark:bg-gray-950 scroll-mt-20">
         <div className="max-w-3xl mx-auto px-4">
           <h3 className="text-2xl md:text-3xl font-extrabold text-center text-gray-900 dark:text-white mb-10">Perguntas frequentes</h3>
           <div className="space-y-4">
             {[
-              { p: 'Preciso instalar alguma coisa?', r: 'N\u00E3o! O EstoqueSystem funciona direto no navegador, no celular ou computador. \u00C9 s\u00F3 acessar e usar.' },
-              { p: 'Funciona no celular?', r: 'Sim! O sistema \u00E9 100% responsivo. O PDV e o leitor de c\u00F3digo de barras funcionam perfeitamente pelo celular.' },
-              { p: 'Como funciona o per\u00EDodo de teste?', r: 'Voc\u00EA tem 15 dias gr\u00E1tis com acesso completo. Sem cart\u00E3o de cr\u00E9dito.' },
-              { p: 'Como fa\u00E7o o pagamento?', r: 'Pelo Mercado Pago. Aceitamos PIX e cart\u00E3o. Acesso liberado automaticamente.' },
-              { p: 'Posso adicionar funcion\u00E1rios?', r: 'Sim! Funcion\u00E1rios t\u00EAm acesso apenas ao PDV. Voc\u00EA controla tudo.' },
-              { p: 'Meus dados ficam seguros?', r: 'Sim! Criptografia e servidores seguros. Seus dados s\u00E3o s\u00F3 seus.' },
+              { p: 'Preciso instalar alguma coisa?', r: 'Nao! O EstoqueSystem funciona direto no navegador, no celular ou computador. E so acessar e usar.' },
+              { p: 'Funciona no celular?', r: 'Sim! O sistema e 100% responsivo. O PDV e o leitor de codigo de barras funcionam perfeitamente pelo celular.' },
+              { p: 'Como funciona o periodo de teste?', r: 'Voce tem 15 dias gratis com acesso completo a TODOS os recursos do plano escolhido. Sem cartao de credito.' },
+              { p: 'Posso mudar de plano depois?', r: 'Sim! Voce pode fazer upgrade ou downgrade a qualquer momento. A cobranca e ajustada proporcionalmente.' },
+              { p: 'Como faco o pagamento?', r: 'Pelo Mercado Pago. Aceitamos PIX e cartao de credito. Acesso liberado automaticamente apos confirmacao.' },
+              { p: 'Posso adicionar funcionarios?', r: 'Sim! Funcionarios tem acesso apenas ao PDV e estoque. Voce controla tudo. Limite varia por plano (1, 3 ou 10 usuarios).' },
+              { p: 'E o controle de fiado?', r: 'Disponivel nos planos Profissional e Negocio. Cadastra cliente, registra debito, acompanha pagamentos. Adeus caderninho!' },
+              { p: 'Meus dados ficam seguros?', r: 'Sim! Criptografia em transito (SSL) e em repouso. Seus dados sao so seus.' },
             ].map(({ p, r }) => (
               <details key={p} className="group bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-                <summary className="flex items-center justify-between p-5 cursor-pointer font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition list-none">{p}<span className="text-gray-400 ml-4 group-open:rotate-180 transition-transform">{E.arrow}</span></summary>
+                <summary className="flex items-center justify-between p-5 cursor-pointer font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition list-none">
+                  {p}<span className="text-gray-400 ml-4 group-open:rotate-180 transition-transform">{E.arrow}</span>
+                </summary>
                 <p className="px-5 pb-5 text-gray-600 dark:text-gray-400 leading-relaxed">{r}</p>
               </details>
             ))}
@@ -388,20 +447,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ========== CTA FINAL ========== */}
+      {/* CTA FINAL */}
       <section className="py-16 md:py-20 bg-gradient-to-br from-green-600 to-emerald-700">
         <div className="max-w-3xl mx-auto text-center px-4">
-          <h3 className="text-2xl md:text-4xl font-extrabold text-white mb-4">{'Quanto dinheiro voc\u00EA j\u00E1 perdeu por falta de controle?'}</h3>
-          <p className="text-green-100 text-lg mb-8 max-w-xl mx-auto">{'Come\u00E7e agora e veja a diferen\u00E7a em poucos dias. \u00C9 gr\u00E1tis por 15 dias, sem compromisso.'}</p>
-          <Link href="/signup" className="inline-flex items-center gap-2 bg-white text-green-700 font-bold text-lg px-10 py-4 rounded-full hover:shadow-xl transition hover:-translate-y-0.5">Quero organizar meu estoque <ArrowRight className="w-5 h-5" /></Link>
+          <h3 className="text-2xl md:text-4xl font-extrabold text-white mb-4">Quanto dinheiro voce ja perdeu por falta de controle?</h3>
+          <p className="text-green-100 text-lg mb-8 max-w-xl mx-auto">Comece agora a partir de R$ 39,90/mes. 15 dias gratis, sem cartao.</p>
+          <Link href="/signup" className="inline-flex items-center gap-2 bg-white text-green-700 font-bold text-lg px-10 py-4 rounded-full hover:shadow-xl transition hover:-translate-y-0.5">
+            Quero organizar meu estoque <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </section>
 
-      {/* ========== FOOTER ========== */}
+      {/* FOOTER */}
       <footer className="bg-gray-900 text-gray-400 py-10">
         <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4"><span className="text-xl">{E.pkg}</span><span className="font-bold text-white">EstoqueSystem</span></div>
-          <p className="text-sm mb-4">{'\u00A9 '}{new Date().getFullYear()}{' EstoqueSystem. Todos os direitos reservados.'}</p>
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <span className="text-xl">{E.pkg}</span>
+            <span className="font-bold text-white">EstoqueSystem</span>
+          </div>
+          <p className="text-sm mb-4">{`(c) ${new Date().getFullYear()} EstoqueSystem. Todos os direitos reservados.`}</p>
           <div className="flex justify-center gap-6 text-sm">
             <Link href="/login" className="hover:text-white transition">Entrar</Link>
             <Link href="/signup" className="hover:text-white transition">Criar conta</Link>
@@ -411,7 +475,7 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* ========== WHATSAPP ========== */}
+      {/* WHATSAPP */}
       <a
         href={`https://wa.me/${WA_NUM}?text=${WA_MSG}`}
         target="_blank"
@@ -420,9 +484,7 @@ export default function LandingPage() {
         aria-label="WhatsApp"
         style={{ animationDuration: '2s' }}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-        </svg>
+        <MessageCircle className="w-7 h-7" />
       </a>
     </div>
   )
@@ -432,223 +494,313 @@ export default function LandingPage() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\assinar\page.tsx ===
 'use client'
 
-import { Suspense } from 'react'
-import { useEffect, useState } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Loading from '@/components/loading'
-import { CreditCard, QrCode, Shield, CheckCircle } from 'lucide-react'
+import { CheckCircle, Sparkles, Crown, Zap } from 'lucide-react'
+import Link from 'next/link'
 
-const BENEFICIOS = [
-  'Controle ilimitado de produtos',
-  'Dashboard com métricas em tempo real',
-  'Alertas de estoque baixo e crítico',
-  'Relatórios de entrada e saída',
-  'PDV completo com leitor de código de barras',
-  'Múltiplos funcionários por conta',
-  'Cupom fiscal não-fiscal via WhatsApp',
-  'Suporte prioritário via WhatsApp',
-  'Atualizações e novos recursos inclusos',
+const PLANOS = [
+  {
+    id: 'iniciante',
+    nome: 'Iniciante',
+    descricao: 'Pra quem ta comecando',
+    preco: 39.90,
+    icon: Zap,
+    cor: 'border-gray-300 dark:border-gray-700',
+    corIcon: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+    beneficios: [
+      'Ate 100 produtos',
+      '1 usuario',
+      'PDV completo',
+      'Leitor de codigo de barras',
+      'Alertas de estoque baixo',
+      'Relatorios basicos',
+      'Suporte por email',
+    ],
+  },
+  {
+    id: 'profissional',
+    nome: 'Profissional',
+    descricao: 'Pro mercadinho que cresce',
+    preco: 79.90,
+    icon: Sparkles,
+    cor: 'border-green-500 ring-4 ring-green-500/20',
+    corIcon: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+    destaque: true,
+    beneficios: [
+      'Produtos ilimitados',
+      'Ate 3 usuarios',
+      'Clientes + Fiado',
+      'Controle de validade',
+      'Relatorios avancados (lucro/margem)',
+      'Exportacao CSV',
+      'Cupom via WhatsApp',
+      'Suporte prioritario WhatsApp',
+    ],
+  },
+  {
+    id: 'negocio',
+    nome: 'Negocio',
+    descricao: 'Pra mercadinho com filiais',
+    preco: 149.90,
+    icon: Crown,
+    cor: 'border-purple-500',
+    corIcon: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+    beneficios: [
+      'Tudo do Profissional',
+      'Ate 10 usuarios',
+      'Ate 2 filiais',
+      'Backup automatico diario',
+      'Historico estendido (24 meses)',
+      'Onboarding 1-a-1 com Lucas',
+      'Suporte VIP 24/7',
+    ],
+  },
 ]
 
 function AssinarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
-  const [processando, setProcessando] = useState(false)
+  const [processando, setProcessando] = useState<string | null>(null)
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [tipoPlanoAtual, setTipoPlanoAtual] = useState<string | null>(null)
+  const [planoSelecionado, setPlanoSelecionado] = useState<string>('profissional')
+  const [tipoPagamento, setTipoPagamento] = useState<'pix' | 'assinatura'>('assinatura')
 
   const statusPagamento = searchParams.get('pagamento')
 
   useEffect(() => {
     const verificar = async () => {
       const { data } = await supabase.auth.getSession()
-
       if (!data.session) {
         router.push('/login')
         return
       }
-
       setUserId(data.session.user.id)
       setUserEmail(data.session.user.email ?? '')
 
       const { data: perfil } = await supabase
         .from('perfis')
-        .select('plano')
+        .select('plano, tipo_plano')
         .eq('id', data.session.user.id)
         .single()
 
-      if (perfil?.plano === 'ativo') {
+      if (perfil?.plano === 'ativo' && perfil?.tipo_plano === 'negocio') {
         router.push('/dashboard')
         return
       }
 
+      if (perfil?.tipo_plano) {
+        setTipoPlanoAtual(perfil.tipo_plano)
+        if (perfil.tipo_plano === 'iniciante') {
+          setPlanoSelecionado('profissional')
+        } else if (perfil.tipo_plano === 'profissional') {
+          setPlanoSelecionado('negocio')
+        }
+      }
+
       setLoading(false)
     }
-
     verificar()
   }, [router])
 
-  const handlePagarPix = async () => {
-    setProcessando(true)
+  const handlePagar = async () => {
+    setProcessando(planoSelecionado)
     try {
-      const response = await fetch('/api/pagamento/criar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userEmail }),
-      })
-      const data = await response.json()
-      if (data.init_point) window.location.href = data.init_point
-      else alert('Erro ao criar pagamento PIX.')
-    } catch {
-      alert('Erro ao processar.')
-    } finally {
-      setProcessando(false)
-    }
-  }
+      const endpoint = tipoPagamento === 'pix'
+        ? '/api/pagamento/criar'
+        : '/api/pagamento/assinatura'
 
-  const handleAssinarCartao = async () => {
-    setProcessando(true)
-    try {
-      const response = await fetch('/api/pagamento/assinatura', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, userEmail }),
+        body: JSON.stringify({
+          userId,
+          userEmail,
+          tipoPlano: planoSelecionado,
+        }),
       })
       const data = await response.json()
-      if (data.init_point) window.location.href = data.init_point
-      else alert('Erro ao criar assinatura.')
+      if (data.init_point) {
+        window.location.href = data.init_point
+      } else {
+        alert('Erro ao criar pagamento. Tente novamente.')
+      }
     } catch {
-      alert('Erro ao processar.')
+      alert('Erro ao processar pagamento.')
     } finally {
-      setProcessando(false)
+      setProcessando(null)
     }
   }
 
   if (loading) return <Loading />
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center p-4">
-      <div className="max-w-lg w-full space-y-8">
+  const isUpgrade = tipoPlanoAtual === 'iniciante' || tipoPlanoAtual === 'profissional'
+  const tituloHeader = isUpgrade ? 'Faça upgrade do seu plano' : 'Seu periodo de teste encerrou'
+  const subtituloHeader = isUpgrade
+    ? `Você está no plano ${tipoPlanoAtual === 'iniciante' ? 'Iniciante' : 'Profissional'}. Desbloqueie mais recursos!`
+    : 'Escolha o plano ideal e continue gerenciando seu estoque sem interrupcoes.'
 
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-12 px-4">
+      <div className="max-w-6xl mx-auto">
         {statusPagamento === 'falhou' && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-            <p className="text-red-400 font-medium">
-              ❌ O pagamento não foi concluído. Tente novamente.
-            </p>
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center text-red-700 dark:text-red-300">
+            Pagamento nao concluido. Tente novamente.
           </div>
         )}
         {statusPagamento === 'pendente' && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
-            <p className="text-yellow-400 font-medium">
-              ⏳ Pagamento pendente. Assim que for confirmado, seu acesso será liberado automaticamente.
-            </p>
+          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl text-center text-yellow-700 dark:text-yellow-300">
+            Pagamento pendente. Assim que confirmado, seu acesso sera liberado.
           </div>
         )}
 
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-500/10 mb-2">
-            <span className="text-4xl">🔒</span>
+        {isUpgrade && (
+          <div className="mb-6">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+            >
+              ← Voltar pro dashboard
+            </Link>
           </div>
-          <h1 className="text-3xl font-bold text-white">
-            Seu período de teste encerrou
+        )}
+
+        <div className="text-center mb-12">
+          <div className="text-6xl mb-4">{isUpgrade ? '🚀' : '🔒'}</div>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
+            {tituloHeader}
           </h1>
-          <p className="text-gray-400 text-lg">
-            Assine o{' '}
-            <span className="text-white font-semibold">EstoqueSystem</span> e
-            continue gerenciando seu estoque sem interrupções.
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            {subtituloHeader}
           </p>
         </div>
 
-        <div className="bg-gray-800/60 border border-gray-700 rounded-2xl p-8 space-y-6 backdrop-blur-sm">
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-10">
+          {PLANOS.map((plano) => {
+            const Icon = plano.icon
+            const isSelected = planoSelecionado === plano.id
+            const isCurrent = tipoPlanoAtual === plano.id
+            return (
+              <button
+                key={plano.id}
+                onClick={() => !isCurrent && setPlanoSelecionado(plano.id)}
+                disabled={isCurrent}
+                className={`text-left relative bg-white dark:bg-gray-900 border-2 ${isSelected ? plano.cor : 'border-gray-200 dark:border-gray-700'} rounded-2xl p-6 transition-all hover:shadow-lg ${plano.destaque && !isSelected ? 'md:scale-105' : ''} ${isSelected ? 'shadow-xl scale-105' : ''} ${isCurrent ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                {plano.destaque && !isCurrent && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-green-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
+                    MAIS POPULAR
+                  </div>
+                )}
 
-          <div className="text-center space-y-1">
-            <p className="text-sm text-gray-400 uppercase tracking-wider font-medium">
-              Plano Profissional
-            </p>
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-sm text-gray-400">R$</span>
-              <span className="text-5xl font-extrabold text-white">79</span>
-              <span className="text-2xl font-bold text-white">,90</span>
-              <span className="text-gray-400 ml-1">/mês</span>
-            </div>
-          </div>
+                {isCurrent && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-blue-600 text-white text-sm font-bold rounded-full whitespace-nowrap">
+                    SEU PLANO ATUAL
+                  </div>
+                )}
 
-          <div className="border-t border-gray-700" />
+                {isSelected && !isCurrent && (
+                  <div className="absolute top-4 right-4 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                  </div>
+                )}
 
-          <ul className="space-y-3">
-            {BENEFICIOS.map((b) => (
-              <li key={b} className="flex items-start gap-3 text-gray-300">
-                <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
+                <div className={`w-12 h-12 ${plano.corIcon} rounded-xl flex items-center justify-center mb-4`}>
+                  <Icon className="w-6 h-6" />
+                </div>
 
-          <div className="border-t border-gray-700" />
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                  {plano.nome}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  {plano.descricao}
+                </p>
 
-          <div className="flex items-center justify-center gap-6 text-gray-400">
-            <div className="flex items-center gap-2 text-sm">
-              <QrCode className="w-5 h-5" />
-              <span>PIX</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <CreditCard className="w-5 h-5" />
-              <span>Cartão</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Shield className="w-5 h-5" />
-              <span>Seguro</span>
-            </div>
-          </div>
+                <div className="mb-6">
+                  <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
+                    R$ {Math.floor(plano.preco)}
+                  </span>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    ,{(plano.preco % 1).toFixed(2).slice(2)}
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400 ml-1 text-sm">/mes</span>
+                </div>
 
-          <div className="space-y-3">
-            <button
-              onClick={handlePagarPix}
-              disabled={processando}
-              className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
-            >
-              <QrCode className="w-5 h-5" />
-              Pagar com PIX (R$ 79,90/mês)
-            </button>
-            <p className="text-center text-xs text-gray-500">
-              Pagamento único — você renova manualmente todo mês
-            </p>
-
-            <button
-              onClick={handleAssinarCartao}
-              disabled={processando}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl text-lg transition flex items-center justify-center gap-3"
-            >
-              <CreditCard className="w-5 h-5" />
-              Assinar com Cartão (R$ 79,90/mês)
-            </button>
-            <p className="text-center text-xs text-gray-500">
-              Cobrança automática mensal — cancele quando quiser
-            </p>
-          </div>
-
-          <div className="text-center space-y-2">
-            <p className="text-gray-500 text-sm">
-              🔒 Pagamento 100% seguro via Mercado Pago
-            </p>
-            <p className="text-gray-600 text-xs">
-              Aceitamos PIX e cartão de crédito/débito à vista.
-              Seu acesso é liberado automaticamente após a confirmação.
-            </p>
-          </div>
+                <ul className="space-y-2 text-sm">
+                  {plano.beneficios.map((b) => (
+                    <li key={b} className="flex items-start gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700 dark:text-gray-300">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </button>
+            )
+          })}
         </div>
 
-        <p className="text-center text-gray-600 text-xs">
-          Dúvidas? Fale conosco via WhatsApp.
-        </p>
+        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8">
+          <h3 className="font-bold text-gray-900 dark:text-white mb-4">Forma de pagamento</h3>
+
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button
+              onClick={() => setTipoPagamento('pix')}
+              className={`p-4 rounded-xl border-2 transition ${tipoPagamento === 'pix' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+            >
+              <div className="text-2xl mb-1">💸</div>
+              <div className="font-bold text-gray-900 dark:text-white">PIX</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Pagamento unico mensal</div>
+            </button>
+
+            <button
+              onClick={() => setTipoPagamento('assinatura')}
+              className={`p-4 rounded-xl border-2 transition ${tipoPagamento === 'assinatura' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+            >
+              <div className="text-2xl mb-1">💳</div>
+              <div className="font-bold text-gray-900 dark:text-white">Cartao</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Assinatura automatica</div>
+            </button>
+          </div>
+
+          <button
+            onClick={handlePagar}
+            disabled={processando !== null || tipoPlanoAtual === planoSelecionado}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-full text-lg transition shadow-lg hover:shadow-green-600/30"
+          >
+            {processando
+              ? 'Processando...'
+              : tipoPlanoAtual === planoSelecionado
+              ? 'Este é seu plano atual'
+              : `${isUpgrade ? 'Fazer upgrade pro' : 'Assinar'} ${PLANOS.find(p => p.id === planoSelecionado)?.nome} (R$ ${PLANOS.find(p => p.id === planoSelecionado)?.preco.toFixed(2).replace('.', ',')}/mes)`
+            }
+          </button>
+
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-4">
+            Pagamento 100% seguro via Mercado Pago | Cancele quando quiser
+          </p>
+
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-center">
+            <Link
+              href="https://wa.me/5522999467499?text=Tenho%20duvidas%20sobre%20os%20planos%20do%20EstoqueSystem"
+              target="_blank"
+              className="text-sm text-green-600 dark:text-green-400 hover:underline"
+            >
+              Tenho duvidas, falar com Lucas pelo WhatsApp
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// Wrapper com Suspense (exigido pelo Next.js pra useSearchParams)
 export default function AssinarPage() {
   return (
     <Suspense fallback={<Loading />}>
@@ -2924,6 +3076,8 @@ import {
   Users, Plus, Search, Phone, DollarSign,
   AlertTriangle, Trash2, Eye, Download
 } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 interface Cliente {
   id: string
@@ -2938,6 +3092,9 @@ interface Cliente {
 }
 
 export default function ClientesPage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
@@ -2978,8 +3135,35 @@ export default function ClientesPage() {
   }, [addNotification])
 
   useEffect(() => {
-    fetchClientes()
-  }, [fetchClientes])
+    // Só busca clientes se NÃO for iniciante
+    if (!isIniciante) {
+      fetchClientes()
+    } else {
+      setLoading(false)
+    }
+  }, [fetchClientes, isIniciante])
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO PARA PLANO INICIANTE
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Controle de Clientes e Fiado"
+          descricao="Cadastre clientes, controle quem deve, quanto deve e tenha histórico completo de pagamentos. Adeus caderninho!"
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleDeletar = async (id: string, nome: string) => {
     if (!confirm(`Tem certeza que deseja remover "${nome}"? Os registros de fiado também serão removidos.`)) return
@@ -3202,8 +3386,13 @@ import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import Alert from '@/components/alerts'
 import { ArrowLeft, User, Phone, Mail, MapPin } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 export default function NovoClientePage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const router = useRouter()
   const { addNotification } = useNotification()
   const [loading, setLoading] = useState(false)
@@ -3216,6 +3405,28 @@ export default function NovoClientePage() {
     endereco: '',
     notas: '',
   })
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO PARA PLANO INICIANTE
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Cadastrar Clientes"
+          descricao="Cadastre clientes, controle quem deve e tenha histórico completo de pagamentos. Disponível no plano Profissional."
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -3375,7 +3586,6 @@ export default function NovoClientePage() {
 }
 
 
-
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\clientes\[id]\page.tsx ===
 'use client'
 
@@ -3389,6 +3599,8 @@ import {
   ArrowLeft, User, Phone, Mail, MapPin, Plus, Minus,
   DollarSign, Clock, TrendingDown, TrendingUp, X
 } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 interface Cliente {
   id: string
@@ -3410,6 +3622,8 @@ interface Fiado {
 }
 
 export default function ClienteDetalhePage() {
+  const { isIniciante, loading: loadingPlano } = usePlano()
+
   const params = useParams()
   const id = params?.id as string
   const { addNotification } = useNotification()
@@ -3418,7 +3632,6 @@ export default function ClienteDetalhePage() {
   const [fiados, setFiados] = useState<Fiado[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Modal
   const [modalAberto, setModalAberto] = useState(false)
   const [modalTipo, setModalTipo] = useState<'debito' | 'pagamento'>('debito')
   const [modalValor, setModalValor] = useState('')
@@ -3442,8 +3655,32 @@ export default function ClienteDetalhePage() {
   }, [id])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (!isIniciante) {
+      fetchData()
+    } else {
+      setLoading(false)
+    }
+  }, [fetchData, isIniciante])
+
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  if (isIniciante) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo="Detalhes do Cliente"
+          descricao="Veja histórico completo de fiado, pagamentos e movimentações. Disponível no plano Profissional."
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const saldo = fiados.reduce((acc, f) => {
     return f.tipo === 'debito' ? acc + Number(f.valor) : acc - Number(f.valor)
@@ -3497,7 +3734,11 @@ export default function ClienteDetalhePage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
   }
 
   if (!cliente) {
@@ -3511,7 +3752,6 @@ export default function ClienteDetalhePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard/clientes" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
           <ArrowLeft className="w-5 h-5" />
@@ -3522,9 +3762,7 @@ export default function ClienteDetalhePage() {
         </div>
       </div>
 
-      {/* Info + Saldo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Info do cliente */}
         <div className="card p-5 space-y-3">
           <h4 className="font-semibold text-gray-900 dark:text-white">Informações</h4>
           {cliente.telefone && (
@@ -3548,11 +3786,10 @@ export default function ClienteDetalhePage() {
             </p>
           )}
           {cliente.notas && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-2">{`\u201c${cliente.notas}\u201d`}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-2">{`"${cliente.notas}"`}</p>
           )}
         </div>
 
-        {/* Saldo */}
         <div className={`card p-5 flex flex-col justify-center items-center ${
           saldo > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
         }`}>
@@ -3565,7 +3802,6 @@ export default function ClienteDetalhePage() {
           </p>
         </div>
 
-        {/* Resumo */}
         <div className="card p-5 space-y-3">
           <div className="flex items-center gap-2 text-sm">
             <TrendingDown className="w-4 h-4 text-red-500" />
@@ -3585,7 +3821,6 @@ export default function ClienteDetalhePage() {
         </div>
       </div>
 
-      {/* Botões de Ação */}
       <div className="flex gap-3">
         <button
           onClick={() => abrirModal('debito')}
@@ -3601,7 +3836,6 @@ export default function ClienteDetalhePage() {
         </button>
       </div>
 
-      {/* Histórico */}
       <div>
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Histórico de Fiado</h3>
         {fiados.length === 0 ? (
@@ -3641,7 +3875,6 @@ export default function ClienteDetalhePage() {
         )}
       </div>
 
-      {/* Modal */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="card p-6 w-full max-w-md space-y-4">
@@ -3710,7 +3943,6 @@ export default function ClienteDetalhePage() {
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\equipe\page.tsx ===
@@ -4797,6 +5029,8 @@ export default function NovoMovimentoPage() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\pdv\page.tsx ===
 // src/app/dashboard/pdv/page.tsx
 "use client"
+
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
@@ -6353,9 +6587,21 @@ import Alert from '@/components/alerts'
 import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Camera, Calendar, AlertTriangle, Lock, Zap } from 'lucide-react'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 export default function NovoProdutoPage() {
+  // 🔒 BLOQUEIO POR PLANO
+  const {
+    isIniciante,
+    loading: loadingPlano,
+    podeAdicionarProduto,
+    totalProdutos,
+    limites,
+    temValidade,
+  } = usePlano()
+
   const router = useRouter()
   const { addNotification } = useNotification()
   const [loading, setLoading] = useState(false)
@@ -6367,6 +6613,9 @@ export default function NovoProdutoPage() {
   const [barcodeDetectado, setBarcodeDetectado] = useState('')
   const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
   const [buscandoBarcode, setBuscandoBarcode] = useState(false)
+
+  // 🔒 Modal de limite atingido
+  const [mostrarLimiteAtingido, setMostrarLimiteAtingido] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -6380,6 +6629,28 @@ export default function NovoProdutoPage() {
     data_validade: '',
     imagem_url: '',
   })
+
+  // 🔒 LOADING DO PLANO
+  if (loadingPlano) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  // 🔒 BLOQUEIO DE LIMITE — se já atingiu 100 produtos
+  if (!podeAdicionarProduto) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <UpgradeBlock
+          titulo={`Limite de ${limites.produtos} produtos atingido`}
+          descricao={`Você já cadastrou ${totalProdutos} produtos no plano Iniciante. Faça upgrade para o Profissional e cadastre produtos ilimitados!`}
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -6396,10 +6667,8 @@ export default function NovoProdutoPage() {
     setBuscandoBarcode(true)
     setProdutoBarcode(null)
 
-    // Preenche SKU imediatamente
     setFormData((prev) => ({ ...prev, sku: codigoBarras }))
 
-    // Busca informações na API
     const resultado = await buscarProdutoPorBarcode(codigoBarras)
     setProdutoBarcode(resultado)
     setBuscandoBarcode(false)
@@ -6438,7 +6707,6 @@ export default function NovoProdutoPage() {
     }
   }
 
-  // Calcula info de validade para avisos visuais
   const getValidadeInfo = () => {
     if (!formData.data_validade) return null
     const hoje = new Date()
@@ -6454,6 +6722,13 @@ export default function NovoProdutoPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    // 🔒 DUPLA VERIFICAÇÃO de limite no submit (segurança extra)
+    if (!podeAdicionarProduto) {
+      setMostrarLimiteAtingido(true)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -6465,10 +6740,10 @@ export default function NovoProdutoPage() {
         return
       }
 
-      // Prepara dados — converte data_validade vazia em null
+      // 🔒 Remove data_validade se Iniciante (não tem essa feature)
       const dadosParaSalvar = {
         ...formData,
-        data_validade: formData.data_validade || null,
+        data_validade: temValidade ? (formData.data_validade || null) : null,
         ativo: true,
         usuario_id: user.id,
       }
@@ -6498,6 +6773,11 @@ export default function NovoProdutoPage() {
     }
   }
 
+  // 🟡 Calcula porcentagem de uso (pra banner)
+  const porcentagemUso = isIniciante ? Math.round((totalProdutos / limites.produtos) * 100) : 0
+  const restantes = isIniciante ? limites.produtos - totalProdutos : 0
+  const quasePerto = isIniciante && restantes <= 20 && restantes > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -6509,6 +6789,48 @@ export default function NovoProdutoPage() {
           <p className="text-gray-600 dark:text-gray-400 mt-2">Adicionar um novo produto ao estoque</p>
         </div>
       </div>
+
+      {/* 🔒 BANNER DE USO (apenas Iniciante) */}
+      {isIniciante && (
+        <div className={`card p-4 border-2 ${
+          quasePerto
+            ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800'
+            : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800'
+        }`}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock size={16} className={quasePerto ? 'text-amber-600' : 'text-blue-600'} />
+                <h4 className="font-semibold text-gray-900 dark:text-white">
+                  Plano Iniciante — {totalProdutos}/{limites.produtos} produtos
+                </h4>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    quasePerto ? 'bg-amber-500' : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${porcentagemUso}%` }}
+                />
+              </div>
+              <p className={`text-sm ${
+                quasePerto ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'
+              }`}>
+                {quasePerto
+                  ? `⚠️ Você tem apenas ${restantes} produtos restantes!`
+                  : `Você ainda pode cadastrar ${restantes} produtos`}
+              </p>
+            </div>
+            <Link
+              href="/assinar"
+              className="btn-primary bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Zap size={16} />
+              Upgrade
+            </Link>
+          </div>
+        </div>
+      )}
 
       {error && <Alert message={error} type="error" />}
       {success && <Alert message={success} type="success" />}
@@ -6669,51 +6991,78 @@ export default function NovoProdutoPage() {
             />
           </div>
 
-          {/* ══════════ DATA DE VALIDADE (NOVO) ══════════ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
-              <Calendar size={16} className="text-gray-400" />
-              Data de Validade
-            </label>
-            <input
-              type="date"
-              name="data_validade"
-              value={formData.data_validade}
-              onChange={handleInputChange}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-            />
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-              Deixe em branco se o produto não tem validade
-            </p>
+          {/* ══════════ DATA DE VALIDADE — só mostra se temValidade ══════════ */}
+          {temValidade ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
+                <Calendar size={16} className="text-gray-400" />
+                Data de Validade
+              </label>
+              <input
+                type="date"
+                name="data_validade"
+                value={formData.data_validade}
+                onChange={handleInputChange}
+                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                Deixe em branco se o produto não tem validade
+              </p>
 
-            {/* Aviso visual de validade */}
-            {validadeInfo && validadeInfo.vencido && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
-                  Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
-                </p>
-              </div>
-            )}
+              {validadeInfo && validadeInfo.vencido && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                  <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                    Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                  </p>
+                </div>
+              )}
 
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
-                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
-                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
-                </p>
-              </div>
-            )}
+              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                    Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                  </p>
+                </div>
+              )}
 
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
-                <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                  Validade: {validadeInfo.diasRestantes} dias restantes
-                </p>
+              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+                <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                  <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
+                  <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                    Validade: {validadeInfo.diasRestantes} dias restantes
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            // 🔒 BLOQUEIO DE VALIDADE (Iniciante)
+            <div className="p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    <Lock size={18} className="text-gray-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                      Data de Validade
+                      <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Controle vencimentos e evite prejuízos
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/assinar"
+                  className="text-sm text-blue-600 dark:text-blue-400 font-semibold hover:underline whitespace-nowrap"
+                >
+                  Fazer upgrade →
+                </Link>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-4">
             <button type="submit" disabled={loading || imagemUpload} className="btn-primary">
@@ -6744,10 +7093,28 @@ export default function NovoProdutoPage() {
           onCancelar={() => setBarcodeModalAberto(false)}
         />
       )}
+
+      {/* 🔒 Modal de limite atingido (segurança extra) */}
+      {mostrarLimiteAtingido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="card p-6 max-w-md w-full">
+            <UpgradeBlock
+              titulo={`Limite de ${limites.produtos} produtos atingido`}
+              descricao={`Você já cadastrou ${totalProdutos} produtos. Faça upgrade para o Profissional e tenha produtos ilimitados!`}
+              planoNecessario="profissional"
+            />
+            <button
+              onClick={() => setMostrarLimiteAtingido(false)}
+              className="mt-4 w-full btn-outline"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\produtos\[id]\page.tsx ===
@@ -10285,41 +10652,49 @@ export default function Loading() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\navbar.tsx ===
 'use client'
 
-import { HelpCircle } from 'lucide-react'
-import { Shield } from 'lucide-react'
+import { HelpCircle, Lock, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { LogOut, Menu, Moon, Sun, Home, Package, BarChart3, ShoppingCart, AlertCircle, TrendingUp, Users, UserCircle } from 'lucide-react'
+import {
+  LogOut, Menu, Moon, Sun, Home, Package, BarChart3,
+  ShoppingCart, AlertCircle, TrendingUp, Users, UserCircle
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useMembro } from '@/hooks/useMembro'
-
+import { usePlano } from '@/hooks/usePlano'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono' },
-  { href: '/dashboard/produtos', label: 'Produtos', icon: Package, requiredLevel: 'dono' },
-  { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3, requiredLevel: null },
-  { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono' },
-  { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono' },
-  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
-  { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null },
-  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono' },
-  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono' },
+  { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/produtos', label: 'Produtos', icon: Package, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono', planoBloqueio: 'iniciante' },
+  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null, planoBloqueio: null },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono', planoBloqueio: null },
 ]
 
 export default function Navbar() {
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
   const { isDono } = useMembro()
+  const { isIniciante } = usePlano()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  const isBloqueadoPorPlano = (planoBloqueio: string | null) => {
+    if (planoBloqueio === 'iniciante' && isIniciante) return true
+    return false
   }
 
   const filteredNavItems = navItems.filter(item => {
@@ -10332,7 +10707,11 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 border-b dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <Link href="/dashboard" className="font-bold text-xl text-primary">
+
+          <Link
+            href="/dashboard"
+            className="font-bold text-xl text-primary"
+          >
             📦 EstoqueSystem
           </Link>
 
@@ -10368,22 +10747,41 @@ export default function Navbar() {
 
         {mobileMenuOpen && (
           <div className="md:hidden pb-4 space-y-1 border-t dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 max-h-96 overflow-y-auto">
-            {/* Navegação */}
-            {filteredNavItems.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="block w-full text-left px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors font-medium flex items-center gap-3"
-              >
-                <Icon size={18} />
-                {label}
-              </Link>
-            ))}
+
+            {filteredNavItems.map(({ href, label, icon: Icon, planoBloqueio }) => {
+              const bloqueado = isBloqueadoPorPlano(planoBloqueio)
+
+              if (bloqueado) {
+                return (
+                  <Link
+                    key={href}
+                    href="/assinar"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full text-left px-4 py-3 text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 rounded transition-colors font-medium flex items-center gap-3"
+                  >
+                    <Icon size={18} />
+                    <span className="flex-1">{label}</span>
+                    <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
+                    <Lock size={12} className="text-yellow-500" />
+                  </Link>
+                )
+              }
+
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors font-medium flex items-center gap-3"
+                >
+                  <Icon size={18} />
+                  {label}
+                </Link>
+              )
+            })}
 
             <hr className="dark:border-gray-700 my-2" />
 
-            {/* Dark Mode */}
             <button
               onClick={() => {
                 toggleTheme()
@@ -10394,7 +10792,6 @@ export default function Navbar() {
               {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
             </button>
 
-            {/* Logout */}
             <button
               onClick={() => {
                 handleLogout()
@@ -10411,7 +10808,6 @@ export default function Navbar() {
     </nav>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\onboarding.tsx ===
@@ -10854,42 +11250,49 @@ export default function SearchCommand() {
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\sidebar.tsx ===
 'use client'
 
-import { Shield, HelpCircle } from 'lucide-react'
+import { Shield, HelpCircle, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Package, BarChart3, AlertCircle, Home, ShoppingCart, TrendingUp, UserCircle, Users } from 'lucide-react'
 import { useMembro } from '@/hooks/useMembro'
+import { usePlano } from '@/hooks/usePlano'
 
 const allNavItems = [
-  { href: '/dashboard',            label: 'Dashboard',  icon: Home,         requiredLevel: 'dono' },
-  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package,      requiredLevel: 'dono' },
-  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3,    requiredLevel: null },
-  { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp,   requiredLevel: 'dono' },
-  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle,  requiredLevel: 'dono' },
-  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono' },
-  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users,        requiredLevel: 'dono' },
-  { href: '/dashboard/clientes',   label: 'Clientes',   icon: Users,        requiredLevel: 'dono' },
-  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle,   requiredLevel: null },
-  { href: '/dashboard/ajuda',      label: 'Ajuda',      icon: HelpCircle,   requiredLevel: null },
-  { href: '/dashboard/admin',      label: 'Admin',      icon: Shield,       requiredLevel: 'dono' },
-
+  { href: '/dashboard',            label: 'Dashboard',  icon: Home,         requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/produtos',   label: 'Produtos',   icon: Package,      requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/estoque',    label: 'Estoque',    icon: BarChart3,    requiredLevel: null,   planoBloqueio: null },
+  { href: '/dashboard/pdv',        label: 'PDV',        icon: ShoppingCart, requiredLevel: null,   planoBloqueio: null },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp,   requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/alertas',    label: 'Alertas',    icon: AlertCircle,  requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/vendas',     label: 'Vendas',     icon: ShoppingCart, requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/equipe',     label: 'Equipe',     icon: Users,        requiredLevel: 'dono', planoBloqueio: null },
+  { href: '/dashboard/clientes',   label: 'Clientes',   icon: Users,        requiredLevel: 'dono', planoBloqueio: 'iniciante' },
+  { href: '/dashboard/perfil',     label: 'Perfil',     icon: UserCircle,   requiredLevel: null,   planoBloqueio: null },
+  { href: '/dashboard/ajuda',      label: 'Ajuda',      icon: HelpCircle,   requiredLevel: null,   planoBloqueio: null },
+  { href: '/dashboard/admin',      label: 'Admin',      icon: Shield,       requiredLevel: 'dono', planoBloqueio: null },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { isDono } = useMembro()
+  const { isIniciante } = usePlano()
 
   const isActive = (path: string) => pathname === path
 
+  // Verifica se um item está bloqueado pelo plano
+  const isBloqueadoPorPlano = (planoBloqueio: string | null) => {
+    if (planoBloqueio === 'iniciante' && isIniciante) return true
+    return false
+  }
+
   // Filtra itens baseado no nível do usuário
   const filteredNavItems = allNavItems.filter(item => {
-    if (item.requiredLevel === null) return true // Todos têm acesso
+    if (item.requiredLevel === null) return true
     if (item.requiredLevel === 'dono') return isDono
     return false
   })
 
-  // Mobile Bottom Navigation — mostra só os essenciais (5 principais)
+  // Mobile Bottom Navigation — mostra só os essenciais
   const mobileNavItems = filteredNavItems.filter(item =>
     ['/dashboard', '/dashboard/estoque', '/dashboard/pdv', '/dashboard/alertas', '/dashboard/perfil'].includes(item.href)
   )
@@ -10899,17 +11302,42 @@ export default function Sidebar() {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-56 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 h-screen fixed top-14 left-0 border-r dark:border-gray-800 z-30">
         <nav className="flex-1 p-4 space-y-1">
-          {filteredNavItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
-                isActive(href)
-                  ? 'bg-primary text-white'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}>
-              <Icon size={20} />
-              <span className="text-sm font-medium">{label}</span>
-            </Link>
-          ))}
+          {filteredNavItems.map(({ href, label, icon: Icon, planoBloqueio }) => {
+            const bloqueado = isBloqueadoPorPlano(planoBloqueio)
+
+            // 🔒 ITEM BLOQUEADO POR PLANO
+            if (bloqueado) {
+              return (
+                <Link
+                  key={href}
+                  href="/assinar"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 group"
+                  title="Disponível no plano Profissional"
+                >
+                  <Icon size={20} />
+                  <span className="text-sm font-medium flex-1">{label}</span>
+                  <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
+                  <Lock size={12} className="text-yellow-500" />
+                </Link>
+              )
+            }
+
+            // ✅ ITEM NORMAL
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive(href)
+                    ? 'bg-primary text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                <Icon size={20} />
+                <span className="text-sm font-medium">{label}</span>
+              </Link>
+            )
+          })}
         </nav>
       </aside>
 
@@ -10917,10 +11345,13 @@ export default function Sidebar() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-30">
         <div className="flex items-center justify-around">
           {mobileNavItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href}
+            <Link
+              key={href}
+              href={href}
               className={`flex flex-col items-center gap-0.5 px-2 py-2 flex-1 transition-colors ${
                 isActive(href) ? 'text-primary' : 'text-gray-500 dark:text-gray-400'
-              }`}>
+              }`}
+            >
               <Icon size={22} />
               <span className="text-[10px] font-medium truncate">{label}</span>
             </Link>
@@ -10930,7 +11361,6 @@ export default function Sidebar() {
     </>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\skeleton-loaders.tsx ===
@@ -11063,6 +11493,116 @@ export default function TrialBanner({ diasRestantes, tipo = 'trial' }: TrialBann
       </Link>
     </div>
   )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\upgrade-block.tsx ===
+'use client'
+
+import Link from 'next/link'
+import { Crown, Sparkles, ArrowRight, X, Lock } from 'lucide-react'
+
+interface Props {
+  titulo: string
+  descricao: string
+  planoNecessario: 'profissional' | 'negocio'
+  onClose?: () => void
+  modal?: boolean
+}
+
+export default function UpgradeBlock({
+  titulo,
+  descricao,
+  planoNecessario,
+  onClose,
+  modal = false,
+}: Props) {
+  const isProfissional = planoNecessario === 'profissional'
+  const Icon = isProfissional ? Sparkles : Crown
+  const preco = isProfissional ? '79,90' : '149,90'
+  const nomePlano = isProfissional ? 'Profissional' : 'Negocio'
+
+  const corBg = isProfissional 
+    ? 'from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/30 border-green-200 dark:border-green-800'
+    : 'from-purple-50 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/30 border-purple-200 dark:border-purple-800'
+  
+  const corIcon = isProfissional ? 'bg-green-600' : 'bg-purple-600'
+  const corTexto = isProfissional ? 'text-green-600 dark:text-green-400' : 'text-purple-600 dark:text-purple-400'
+  const corBotao = isProfissional 
+    ? 'bg-green-600 hover:bg-green-700 hover:shadow-green-600/30'
+    : 'bg-purple-600 hover:bg-purple-700 hover:shadow-purple-600/30'
+
+  const conteudo = (
+    <div className={`bg-gradient-to-br ${corBg} border rounded-2xl p-6 md:p-10 text-center`}>
+      <div className={`w-16 h-16 ${corIcon} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`}>
+        <Icon className="w-8 h-8 text-white" />
+      </div>
+
+      <div className="inline-flex items-center gap-2 px-3 py-1 bg-white dark:bg-gray-800 rounded-full text-xs font-semibold text-gray-600 dark:text-gray-400 mb-4">
+        <Lock className="w-3 h-3" />
+        Funcionalidade bloqueada
+      </div>
+
+      <h3 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-3">
+        {titulo}
+      </h3>
+
+      <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto leading-relaxed">
+        {descricao}
+      </p>
+
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 mb-6 inline-block shadow-sm">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+          Disponivel no plano
+        </p>
+        <p className={`text-xl md:text-2xl font-extrabold ${corTexto}`}>
+          {nomePlano} - R$ {preco}/mes
+        </p>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <Link
+          href="/assinar"
+          className={`inline-flex items-center justify-center gap-2 ${corBotao} text-white font-bold py-3 px-8 rounded-full transition shadow-lg`}
+        >
+          Fazer upgrade agora
+          <ArrowRight className="w-5 h-5" />
+        </Link>
+
+        <Link
+          href="https://wa.me/5522999467499?text=Quero%20fazer%20upgrade%20do%20EstoqueSystem"
+          target="_blank"
+          className="inline-flex items-center justify-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold py-3 px-6 rounded-full transition border border-gray-200 dark:border-gray-700"
+        >
+          Falar com Lucas
+        </Link>
+      </div>
+
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
+        Voce so paga a diferenca pelos dias restantes do mes
+      </p>
+    </div>
+  )
+
+  if (modal) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-lg w-full relative">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition z-10"
+            >
+              <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </button>
+          )}
+          {conteudo}
+        </div>
+      </div>
+    )
+  }
+
+  return conteudo
 }
 
 

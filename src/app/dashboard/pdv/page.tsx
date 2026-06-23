@@ -10,8 +10,10 @@ import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import CupomImpressao from '@/components/cupom-impressao'
 import BarcodeScanner from '@/components/barcode-scanner'
+import BotaoIA from '@/components/botao-ia'
 import { buscarProdutoPorBarcode } from '@/lib/barcode-api'
 import { useCupom } from '@/hooks/useCupom'
+import { useIAProduto } from '@/hooks/useIAProduto'
 import { useNotification } from '@/contexts/NotificationContext'
 import {
   X,
@@ -70,20 +72,29 @@ export default function PDVPage() {
   const [cadastroPreco, setCadastroPreco] = useState('')
   const [cadastroQuantidade, setCadastroQuantidade] = useState('1')
 
+  // ✨ Sugestão de preço da IA
+  const [precoSugeridoIA, setPrecoSugeridoIA] = useState<{
+    min: number
+    max: number
+  } | null>(null)
+
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
 
+  // ✨ Hook da IA
+  const { completarComIA, carregando: carregandoIA } = useIAProduto()
+
   // ══════════════════════════════════════════════════
   // FETCH PRODUTOS
   // ══════════════════════════════════════════════════
 
- useEffect(() => {
-  fetchProdutos()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [])
+  useEffect(() => {
+    fetchProdutos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchProdutos = async () => {
     try {
@@ -179,10 +190,21 @@ export default function PDVPage() {
         setDadosProdutoAPI(resultadoAPI)
         setModalCadastroRapido(true)
       } else {
+        // ✨ MUDANÇA: mesmo se não encontrar, abre o modal com IA disponível
+        setSkuParaCadastro(codigoBarras)
+        setDadosProdutoAPI({
+          encontrado: false,
+          nome: '',
+          marca: '',
+          descricao: '',
+          categoria: '',
+          imagem_url: '',
+        })
+        setModalCadastroRapido(true)
         addNotification(
-          `Produto ${codigoBarras} não encontrado na base. Cadastre manualmente.`,
-          'warning',
-          6000
+          `Produto não encontrado. Use a IA ou preencha manualmente.`,
+          'info',
+          4000
         )
       }
     },
@@ -253,8 +275,50 @@ export default function PDVPage() {
     }
   }, [dadosProdutoAPI])
 
+  // ✨ Reseta sugestão IA ao fechar modal
+  useEffect(() => {
+    if (!modalCadastroRapido) {
+      setPrecoSugeridoIA(null)
+    }
+  }, [modalCadastroRapido])
+
   // ══════════════════════════════════════════════════
-  // SALVAR PRODUTO RÁPIDO (FIX: usa ID real do banco)
+  // ✨ HANDLER DA IA
+  // ══════════════════════════════════════════════════
+
+  const handleCompletarComIA = async () => {
+    const dados = await completarComIA({
+      sku: skuParaCadastro,
+      nomeOriginal: cadastroNome || dadosProdutoAPI?.nome,
+      marca: cadastroMarca || dadosProdutoAPI?.marca,
+      descricaoOriginal: cadastroDescricao || dadosProdutoAPI?.descricao,
+    })
+
+    if (dados) {
+      setCadastroNome(dados.nome)
+      setCadastroMarca(dados.marca || cadastroMarca)
+      setCadastroDescricao(dados.descricao)
+      setCadastroCategoria(dados.categoria)
+
+      // Sugestão de preço
+      if (dados.preco_sugerido_min && dados.preco_sugerido_max) {
+        setPrecoSugeridoIA({
+          min: dados.preco_sugerido_min,
+          max: dados.preco_sugerido_max,
+        })
+
+        // Se preço tá vazio, preenche com a média
+        if (!cadastroPreco) {
+          const precoMedio =
+            (dados.preco_sugerido_min + dados.preco_sugerido_max) / 2
+          setCadastroPreco(precoMedio.toFixed(2))
+        }
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════
+  // SALVAR PRODUTO RÁPIDO
   // ══════════════════════════════════════════════════
 
   const salvarProdutoRapido = async () => {
@@ -328,7 +392,7 @@ export default function PDVPage() {
       : 0
 
   // ══════════════════════════════════════════════════
-  // PAGAMENTO (FIX: transacional via RPC)
+  // PAGAMENTO
   // ══════════════════════════════════════════════════
 
   const abrirPagamento = () => {
@@ -508,7 +572,7 @@ export default function PDVPage() {
   }
 
   // ══════════════════════════════════════════════════
-  // RENDER (DOM UNIFICADO — sem duplicação)
+  // RENDER
   // ══════════════════════════════════════════════════
 
   return (
@@ -529,17 +593,15 @@ export default function PDVPage() {
             PDV
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Ponto de Venda &bull; Leitor USB ativo
+            Ponto de Venda • Leitor USB ativo
           </p>
         </div>
-        {/* Desktop: botão com texto */}
         <button
           onClick={() => setScannerAberto(true)}
           className="hidden sm:flex btn-primary items-center gap-2 px-4"
         >
           <Camera size={18} /> Ler código
         </button>
-        {/* Mobile: botão só ícone */}
         <button
           onClick={() => setScannerAberto(true)}
           className="sm:hidden btn-primary px-3 py-2"
@@ -550,7 +612,6 @@ export default function PDVPage() {
 
       {error && <Alert message={error} type="error" />}
 
-      {/* ══════════ BUSCA (única) ══════════ */}
       <input
         type="text"
         placeholder="Buscar produto por nome, SKU ou categoria..."
@@ -560,9 +621,7 @@ export default function PDVPage() {
         autoFocus
       />
 
-      {/* ══════════ LAYOUT PRINCIPAL ══════════ */}
       <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-        {/* ── GRID DE PRODUTOS (único) ── */}
         <div className="flex-1">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
             {produtosFiltrados.map((p) => (
@@ -571,7 +630,6 @@ export default function PDVPage() {
           </div>
         </div>
 
-        {/* ── CARRINHO DESKTOP (sidebar, só md+) ── */}
         <div className="hidden md:block w-72 lg:w-80 flex-shrink-0">
           <div className="sticky top-20 card p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -583,10 +641,7 @@ export default function PDVPage() {
 
             {carrinho.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
-                <ShoppingCart
-                  size={32}
-                  className="mx-auto mb-2 opacity-50"
-                />
+                <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Carrinho vazio</p>
               </div>
             ) : (
@@ -641,11 +696,9 @@ export default function PDVPage() {
           </div>
         </div>
       </div>
-
-      {/* ══════════ CARRINHO MOBILE (bottom bar) ══════════ */}
+{/* ══════════ CARRINHO MOBILE ══════════ */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
-          {/* Lista de itens (scrollável) */}
           <div className="max-h-40 overflow-y-auto px-3 pt-3 space-y-2">
             {carrinho.map((item) => {
               const produto = produtos.find((p) => p.id === item.produto_id)
@@ -698,7 +751,6 @@ export default function PDVPage() {
             })}
           </div>
 
-          {/* Total + ações */}
           <div className="px-3 py-3 border-t dark:border-gray-800">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-500">
@@ -816,7 +868,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
+     {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
       {modalCadastroRapido && dadosProdutoAPI && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
@@ -832,10 +884,24 @@ export default function PDVPage() {
               </button>
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
-              Produto encontrado na base externa. Confirme os dados e ajuste o
-              necessário.
-            </p>
+            {/* ✨ BOTÃO IA — Completar dados automaticamente */}
+            <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
+              <BotaoIA
+                onClick={handleCompletarComIA}
+                carregando={carregandoIA}
+                label="✨ Completar tudo com IA"
+                className="w-full justify-center"
+              />
+              <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-2">
+                A IA preenche categoria, descrição e sugere preço automaticamente
+              </p>
+            </div>
+
+            {dadosProdutoAPI.encontrado !== false && (
+              <p className="text-sm text-green-600 dark:text-green-400 mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
+                ✅ Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
+              </p>
+            )}
 
             <div className="space-y-3">
               <div>
@@ -846,6 +912,7 @@ export default function PDVPage() {
                   {skuParaCadastro}
                 </div>
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Nome *
@@ -856,6 +923,7 @@ export default function PDVPage() {
                   className="input-field w-full"
                 />
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Marca
@@ -866,6 +934,7 @@ export default function PDVPage() {
                   className="input-field w-full"
                 />
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Descrição
@@ -877,6 +946,7 @@ export default function PDVPage() {
                   rows={2}
                 />
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Categoria
@@ -887,6 +957,7 @@ export default function PDVPage() {
                   className="input-field w-full"
                 />
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Preço de venda *
@@ -898,7 +969,17 @@ export default function PDVPage() {
                   className="input-field w-full"
                   placeholder="0.00"
                 />
+                {/* ✨ Sugestão de preço da IA */}
+                {precoSugeridoIA && (
+                  <div className="mt-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                    <p className="text-xs text-purple-700 dark:text-purple-300">
+                      💡 IA sugere: {formatarMoeda(precoSugeridoIA.min)} a{' '}
+                      {formatarMoeda(precoSugeridoIA.max)}
+                    </p>
+                  </div>
+                )}
               </div>
+
               <div>
                 <label className="text-xs font-medium text-gray-500">
                   Quantidade inicial
@@ -910,6 +991,7 @@ export default function PDVPage() {
                   className="input-field w-full"
                 />
               </div>
+
               {dadosProdutoAPI.imagem_url && (
                 <div>
                   <label className="text-xs font-medium text-gray-500">

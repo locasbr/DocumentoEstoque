@@ -4,11 +4,21 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { MovimentoEstoque, Produto } from '@/lib/types'
-import { Plus, ArrowDown, ArrowUp, ShoppingCart, TrendingUp, Download, AlertTriangle } from 'lucide-react'
+import {
+  Plus,
+  ArrowDown,
+  ArrowUp,
+  ShoppingCart,
+  TrendingUp,
+  Download,
+  AlertTriangle,
+  Crown,
+} from 'lucide-react'
 import { formatarData } from '@/lib/utils'
 import { useNotification } from '@/contexts/NotificationContext'
 import { exportMovimentosDiariosCSV } from '@/lib/export-utils'
 import { SkeletonTable } from '@/components/skeleton-loaders'
+import { usePlano } from '@/hooks/usePlano'
 
 export default function EstoquePage() {
   const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([])
@@ -17,6 +27,9 @@ export default function EstoquePage() {
   const [tipoFiltro, setTipoFiltro] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [produtos, setProdutos] = useState<Produto[]>([])
   const { addNotification } = useNotification()
+
+  // 🔒 BLOQUEIO POR PLANO
+  const { temExportarCSV } = usePlano()
 
   const fetchData = useCallback(async () => {
     try {
@@ -87,6 +100,15 @@ export default function EstoquePage() {
     })
 
   const handleExportarMovimentos = () => {
+    // 🔒 Segurança extra contra burla via console
+    if (!temExportarCSV) {
+      addNotification(
+        'Exportação CSV disponível no plano Profissional',
+        'warning'
+      )
+      return
+    }
+
     const hoje = new Date()
     const dataStr = hoje.toLocaleDateString('pt-BR')
     const movimentosPorDia = [
@@ -121,13 +143,26 @@ export default function EstoquePage() {
             <ShoppingCart size={20} className="inline mr-2" />
             <span className="hidden sm:inline">PDV</span>
           </Link>
-          <button
-            onClick={handleExportarMovimentos}
-            className="btn-outline"
-          >
-            <Download size={20} className="inline mr-2" />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
+
+          {/* 🔒 BLOQUEIO: Exportar só Profissional+ */}
+          {temExportarCSV ? (
+            <button
+              onClick={handleExportarMovimentos}
+              className="btn-outline"
+            >
+              <Download size={20} className="inline mr-2" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
+          ) : (
+            <Link
+              href="/assinar"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg hover:shadow-green-500/30 transition font-medium"
+              title="Disponível no plano Profissional"
+            >
+              <Crown size={20} />
+              <span className="hidden sm:inline">Exportar PRO</span>
+            </Link>
+          )}
         </div>
       </div>
 

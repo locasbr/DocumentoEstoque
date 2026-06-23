@@ -26,7 +26,7 @@ interface Cliente {
 
 export default function ClientesPage() {
   // 🔒 BLOQUEIO POR PLANO
-  const { isIniciante, loading: loadingPlano } = usePlano()
+  const { isIniciante, temExportarCSV, loading: loadingPlano } = usePlano()
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
@@ -111,6 +111,12 @@ export default function ClientesPage() {
   }
 
   const exportarClientesCSV = () => {
+    // 🔒 Segurança extra contra burla via console
+    if (!temExportarCSV) {
+      addNotification('Exportação CSV disponível no plano Profissional', 'warning')
+      return
+    }
+
     const headers = ['Nome', 'Telefone', 'CPF', 'Email', 'Saldo Fiado']
     const linhas = clientes.map((c) => [
       c.nome,

@@ -1,7 +1,16 @@
 "use client"
 
 import { useEffect, useState, useCallback } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from 'recharts'
 import { supabase } from '@/lib/supabase'
 import {
   TrendingUp,
@@ -10,10 +19,13 @@ import {
   Download,
   Wallet,
   AlertTriangle,
+  Crown,
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 import { useNotification } from '@/contexts/NotificationContext'
 import { exportVendasCSV, exportMovimentosDiariosCSV } from '@/lib/export-utils'
+import { usePlano } from '@/hooks/usePlano'
+import UpgradeBlock from '@/components/upgrade-block'
 
 interface RelatorioVenda {
   produto_id: string
@@ -46,6 +58,9 @@ export default function RelatoriosPage() {
   const [vendasPorProduto, setVendasPorProduto] = useState<RelatorioVenda[]>([])
   const { addNotification } = useNotification()
 
+  // 🔒 BLOQUEIO POR PLANO
+  const { temRelatoriosAvancados, temExportarCSV, loading: loadingPlano } = usePlano()
+
   const fetchRelatorios = useCallback(async () => {
     setLoading(true)
     try {
@@ -76,6 +91,7 @@ export default function RelatoriosPage() {
       const vendas = movimentosData.filter(
         (m: any) => m.tipo_movimento === 'saida'
       )
+
       const agrupado: { [key: string]: RelatorioVenda } = {}
 
       for (const venda of vendas) {
@@ -91,8 +107,10 @@ export default function RelatoriosPage() {
             tem_custo: (produto?.preco_custo || 0) > 0,
           }
         }
+
         const precoVenda = produto?.preco_venda || 0
         const precoCusto = produto?.preco_custo || 0
+
         agrupado[venda.produto_id].quantidade_vendida += venda.quantidade
         agrupado[venda.produto_id].valor_total += venda.quantidade * precoVenda
         agrupado[venda.produto_id].custo_total += venda.quantidade * precoCusto
@@ -118,6 +136,7 @@ export default function RelatoriosPage() {
 
   const vendas = movimentos.filter((m) => m.tipo_movimento === 'saida')
   const entradas = movimentos.filter((m) => m.tipo_movimento === 'entrada')
+
   const totalVendas = vendas.reduce((acc, v) => acc + v.quantidade, 0)
   const totalEntradas = entradas.reduce((acc, v) => acc + v.quantidade, 0)
   const valorTotalVendas = vendasPorProduto.reduce(
@@ -151,39 +170,154 @@ export default function RelatoriosPage() {
 
   const maxVenda = vendasPorProduto[0]?.valor_total || 1
 
+  // 🔒 Funções protegidas — segurança extra contra burla via console
   const handleExportarVendas = () => {
+    if (!temExportarCSV) {
+      addNotification(
+        'Exportação CSV disponível no plano Profissional',
+        'warning'
+      )
+      return
+    }
     exportVendasCSV(vendasPorProduto, 'vendas', filtroData)
     addNotification('Vendas exportadas!', 'success', 2000)
   }
 
   const handleExportarMovimentos = () => {
+    if (!temExportarCSV) {
+      addNotification(
+        'Exportação CSV disponível no plano Profissional',
+        'warning'
+      )
+      return
+    }
     exportMovimentosDiariosCSV(movimentosPorDiaArray, filtroData)
     addNotification('Movimentos exportados!', 'success', 2000)
   }
 
-  if (loading)
+  if (loading || loadingPlano)
     return (
-      <div className="p-6 flex items-center justify-center min-h-[60vh]">
-        <div className="animate-pulse text-gray-500">
-          Carregando relatórios...
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-gray-500">Carregando relatórios...</div>
       </div>
     )
 
+  // ══════════════════════════════════════════════════
+  // 🔒 BLOQUEIO: INICIANTE VÊ VERSÃO SIMPLIFICADA
+  // ══════════════════════════════════════════════════
+  if (!temRelatoriosAvancados) {
+    return (
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+            Relatórios
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Versão básica do plano Iniciante
+          </p>
+        </div>
+
+        {/* Filtros de período */}
+        <div className="flex gap-2 flex-wrap">
+          {PERIODOS.map(({ label, value }) => (
+            <button
+              key={value}
+              onClick={() => setFiltroData(value)}
+              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition ${
+                filtroData === value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Métricas BÁSICAS — só quantidades */}
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Itens vendidos
+              </span>
+            </div>
+            <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+              {totalVendas}
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Itens recebidos
+              </span>
+            </div>
+            <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+              {totalEntradas}
+            </div>
+          </div>
+        </div>
+
+        {/* Preview borrado das métricas avançadas — pra mostrar o que o cara perde */}
+        <div className="relative">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 blur-sm select-none pointer-events-none">
+            {[
+              { label: 'Receita total', value: 'R$ ???', icon: DollarSign },
+              { label: 'Lucro estimado', value: 'R$ ???', icon: Wallet },
+              { label: 'Margem média', value: '??%', icon: TrendingUp },
+              { label: 'Top produtos', value: '???', icon: BarChart },
+            ].map(({ label, value, icon: Icon }) => (
+              <div
+                key={label}
+                className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="w-4 h-4 text-gray-400" />
+                  <span className="text-xs text-gray-400">{label}</span>
+                </div>
+                <div className="text-2xl font-bold text-gray-400">{value}</div>
+              </div>
+            ))}
+          </div>
+          {/* Selo PRO no overlay */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-sm shadow-lg">
+              <Crown className="w-4 h-4" />
+              Disponível no Profissional
+            </div>
+          </div>
+        </div>
+
+        {/* CTA principal de upgrade */}
+        <UpgradeBlock
+          titulo="Desbloqueie Relatórios Completos"
+          descricao="Veja receita total, lucro estimado, margem por produto, gráficos detalhados de movimentação e exporte tudo em CSV pra analisar onde quiser. Tome decisões inteligentes baseadas em dados reais do seu negócio."
+          planoNecessario="profissional"
+        />
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════════
+  // ✅ VERSÃO COMPLETA — Profissional + Negócio + Admin
+  // ══════════════════════════════════════════════════
   return (
-    <div className="w-full max-w-full overflow-x-hidden p-4 md:p-6 space-y-5 box-border">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="min-w-0">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
           Relatórios
-        </h2>
-        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">
           Análise de vendas e movimentação
         </p>
       </div>
 
       {/* Filtro */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 flex-wrap">
         {PERIODOS.map(({ label, value }) => (
           <button
             key={value}
@@ -201,23 +335,21 @@ export default function RelatoriosPage() {
 
       {/* Alerta */}
       {temProdutosSemCusto && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 min-w-0 overflow-hidden">
-          <div className="flex items-start gap-2 min-w-0">
-            <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="min-w-0 overflow-hidden">
-              <p className="font-semibold text-yellow-800 dark:text-yellow-200 text-xs truncate">
-                {produtosSemCusto.length} produto(s) sem preço de custo
-              </p>
-              <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-1">
-                O lucro pode estar incorreto. Cadastre o preço de custo.
-              </p>
-            </div>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-yellow-800 dark:text-yellow-300">
+              {produtosSemCusto.length} produto(s) sem preço de custo
+            </p>
+            <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+              O lucro pode estar incorreto. Cadastre o preço de custo.
+            </p>
           </div>
         </div>
       )}
 
       {/* ══════════ MÉTRICAS ══════════ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 min-w-0">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
           {
             label: 'Itens vendidos',
@@ -253,97 +385,84 @@ export default function RelatoriosPage() {
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div
             key={label}
-            className={`${bg} rounded-xl p-2.5 md:p-4 border border-gray-100 dark:border-gray-800 min-w-0 overflow-hidden`}
+            className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800"
           >
-            <div className="flex items-center gap-1.5 mb-1 min-w-0">
-              <Icon className={`w-3.5 h-3.5 md:w-4 md:h-4 ${color} flex-shrink-0`} />
-              <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 truncate">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`p-1.5 rounded-lg ${bg}`}>
+                <Icon className={`w-4 h-4 ${color}`} />
+              </div>
+              <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                 {label}
               </span>
             </div>
-            <p className={`text-base md:text-2xl font-bold ${color} truncate`}>
+            <div className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
               {value}
-            </p>
+            </div>
           </div>
         ))}
       </div>
 
-        {/* ══════════ GRÁFICO DE MOVIMENTAÇÃO ══════════ */}
-        {movimentosPorDiaArray.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 md:p-6">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-              📊 Movimentação no período
-            </h3>
-            <div className="w-full h-64 md:h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={movimentosPorDiaArray}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                  <XAxis 
-                    dataKey="data" 
-                    tick={{ fontSize: 11 }} 
-                    stroke="#9CA3AF"
-                  />
-                  <YAxis tick={{ fontSize: 11 }} stroke="#9CA3AF" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: 'none', 
-                      borderRadius: '12px',
-                      color: '#F9FAFB' 
-                    }} 
-                  />
-                  <Legend />
-                  <Bar dataKey="entradas" name="Entradas" fill="#22C55E" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="saidas" name="Saídas" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
+      {/* ══════════ GRÁFICO DE MOVIMENTAÇÃO ══════════ */}
+      {movimentosPorDiaArray.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl p-4 md:p-6 border border-gray-200 dark:border-gray-800">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+            📊 Movimentação no período
+          </h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={movimentosPorDiaArray}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="data" stroke="#9ca3af" fontSize={12} />
+              <YAxis stroke="#9ca3af" fontSize={12} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="entradas" fill="#10b981" name="Entradas" />
+              <Bar dataKey="saidas" fill="#ef4444" name="Saídas" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* ══════════ TOP PRODUTOS ══════════ */}
-      <div className="card p-3 md:p-6 min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between mb-4 min-w-0">
-          <h3 className="font-bold text-sm md:text-base text-gray-900 dark:text-white">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-4 md:p-6 border border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             Top Produtos
-          </h3>
+          </h2>
           <button
             onClick={handleExportarVendas}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs md:text-sm font-medium transition"
           >
-            <Download className="w-3.5 h-3.5" /> Exportar
+            <Download className="w-4 h-4" />
+            Exportar
           </button>
         </div>
 
         {vendasPorProduto.length === 0 ? (
-          <p className="text-center text-gray-400 py-8 text-sm">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             Sem vendas no período
-          </p>
+          </div>
         ) : (
-          <div className="space-y-4 min-w-0">
+          <div className="space-y-3">
             {vendasPorProduto.slice(0, 10).map((v) => {
               const porcentagem = (v.valor_total / maxVenda) * 100
               return (
-                <div key={v.produto_id} className="space-y-1.5 min-w-0 overflow-hidden">
-                  {/* Nome truncado */}
-                  <div className="min-w-0 overflow-hidden">
-                    <p className="text-xs md:text-sm text-gray-700 dark:text-gray-300 truncate">
+                <div key={v.produto_id} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1">
                       {v.produto_nome}
-                    </p>
-                  </div>
-                  {/* Valor + Qtd */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm md:text-base font-bold text-gray-900 dark:text-white">
-                      {formatarMoeda(v.valor_total)}
-                    </p>
-                    <span className="text-xs text-gray-500 flex-shrink-0">
-                      {v.quantidade_vendida} un
                     </span>
+                    <div className="flex items-center gap-2 text-xs flex-shrink-0">
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {formatarMoeda(v.valor_total)}
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {v.quantidade_vendida} un
+                      </span>
+                    </div>
                   </div>
-                  {/* Barra */}
-                  <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                  <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                     <div
-                      className="bg-green-500 h-2 rounded-full transition-all"
+                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all"
                       style={{ width: `${porcentagem}%` }}
                     />
                   </div>
@@ -355,28 +474,28 @@ export default function RelatoriosPage() {
       </div>
 
       {/* ══════════ DETALHAMENTO POR PRODUTO ══════════ */}
-      <div className="card p-3 md:p-6 min-w-0 overflow-hidden">
-        <h3 className="font-bold text-sm md:text-base text-gray-900 dark:text-white mb-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-4 md:p-6 border border-gray-200 dark:border-gray-800">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
           Detalhamento por produto
-        </h3>
+        </h2>
 
         {vendasPorProduto.length === 0 ? (
-          <p className="text-center text-gray-400 py-8 text-sm">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             Sem vendas no período
-          </p>
+          </div>
         ) : (
           <>
             {/* Desktop: Tabela */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm min-w-[500px]">
+              <table className="w-full">
                 <thead>
-                  <tr className="border-b dark:border-gray-700 text-left">
-                    <th className="pb-2 text-gray-500 font-medium">Produto</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Qtd</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Receita</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Custo</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Lucro</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Margem</th>
+                  <tr className="border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="text-left py-2 font-medium">Produto</th>
+                    <th className="text-right py-2 font-medium">Qtd</th>
+                    <th className="text-right py-2 font-medium">Receita</th>
+                    <th className="text-right py-2 font-medium">Custo</th>
+                    <th className="text-right py-2 font-medium">Lucro</th>
+                    <th className="text-right py-2 font-medium">Margem</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -386,28 +505,26 @@ export default function RelatoriosPage() {
                     return (
                       <tr
                         key={v.produto_id}
-                        className="border-b dark:border-gray-800"
+                        className="border-b dark:border-gray-800 text-sm"
                       >
-                        <td className="py-2.5 pr-3 max-w-[200px]">
-                          <span className="block truncate text-gray-800 dark:text-gray-200">
-                            {v.produto_nome}
-                          </span>
+                        <td className="py-3 text-gray-900 dark:text-white font-medium">
+                          {v.produto_nome}
                         </td>
-                        <td className="py-2.5 text-right text-gray-600 dark:text-gray-400">
+                        <td className="py-3 text-right text-gray-600 dark:text-gray-400">
                           {v.quantidade_vendida}
                         </td>
-                        <td className="py-2.5 text-right text-gray-800 dark:text-gray-200 font-medium">
+                        <td className="py-3 text-right text-gray-900 dark:text-white">
                           {formatarMoeda(v.valor_total)}
                         </td>
-                        <td className="py-2.5 text-right text-gray-500">
+                        <td className="py-3 text-right text-gray-600 dark:text-gray-400">
                           {formatarMoeda(v.custo_total)}
                         </td>
-                        <td className="py-2.5 text-right font-medium text-green-600 dark:text-green-400">
+                        <td className="py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
                           {formatarMoeda(v.lucro)}
                         </td>
-                        <td className="py-2.5 text-right">
+                        <td className="py-3 text-right">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
                               margem >= 30
                                 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                                 : margem >= 15
@@ -426,7 +543,7 @@ export default function RelatoriosPage() {
             </div>
 
             {/* Mobile: Cards */}
-            <div className="md:hidden space-y-3 min-w-0">
+            <div className="md:hidden space-y-3">
               {vendasPorProduto.map((v) => {
                 const margem =
                   v.valor_total > 0 ? (v.lucro / v.valor_total) * 100 : 0
@@ -434,39 +551,42 @@ export default function RelatoriosPage() {
                 return (
                   <div
                     key={v.produto_id}
-                    className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-700 min-w-0 overflow-hidden"
+                    className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-2"
                   >
-                    {/* Nome truncado */}
-                    <div className="min-w-0 overflow-hidden mb-2">
-                      <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                        {v.produto_nome}
-                      </p>
+                    <div className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                      {v.produto_nome}
                     </div>
-
-                    {/* Grid 2x2 */}
-                    <div className="grid grid-cols-2 gap-1.5 text-[11px] mb-2">
-                      <div className="bg-white dark:bg-gray-800 rounded-lg p-2 min-w-0">
-                        <span className="text-gray-500">Qtd</span>
-                        <p className="font-bold text-gray-900 dark:text-white text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          Qtd
+                        </span>
+                        <div className="font-semibold text-gray-900 dark:text-white">
                           {v.quantidade_vendida}
-                        </p>
+                        </div>
                       </div>
-                      <div className="bg-white dark:bg-gray-800 rounded-lg p-2 min-w-0">
-                        <span className="text-gray-500">Receita</span>
-                        <p className="font-bold text-gray-900 dark:text-white text-sm truncate">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          Receita
+                        </span>
+                        <div className="font-semibold text-gray-900 dark:text-white">
                           {formatarMoeda(v.valor_total)}
-                        </p>
+                        </div>
                       </div>
-                      <div className="bg-white dark:bg-gray-800 rounded-lg p-2 min-w-0">
-                        <span className="text-gray-500">Lucro</span>
-                        <p className="font-bold text-green-600 dark:text-green-400 text-sm truncate">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          Lucro
+                        </span>
+                        <div className="font-semibold text-emerald-600 dark:text-emerald-400">
                           {formatarMoeda(v.lucro)}
-                        </p>
+                        </div>
                       </div>
-                      <div className="bg-white dark:bg-gray-800 rounded-lg p-2 min-w-0">
-                        <span className="text-gray-500">Margem</span>
-                        <p
-                          className={`font-bold text-sm ${
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          Margem
+                        </span>
+                        <div
+                          className={`font-semibold ${
                             margem >= 30
                               ? 'text-green-600 dark:text-green-400'
                               : margem >= 15
@@ -475,14 +595,12 @@ export default function RelatoriosPage() {
                           }`}
                         >
                           {v.tem_custo ? margem.toFixed(1) + '%' : '~'}
-                        </p>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Barra */}
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div
-                        className="bg-green-500 h-1.5 rounded-full transition-all"
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
                         style={{ width: `${porcentagem}%` }}
                       />
                     </div>
@@ -495,34 +613,35 @@ export default function RelatoriosPage() {
       </div>
 
       {/* ══════════ MOVIMENTAÇÃO DIÁRIA ══════════ */}
-      <div className="card p-3 md:p-6 min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between mb-4 min-w-0">
-          <h3 className="font-bold text-sm md:text-base text-gray-900 dark:text-white">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-4 md:p-6 border border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             Movimentação diária
-          </h3>
+          </h2>
           <button
             onClick={handleExportarMovimentos}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs md:text-sm font-medium transition"
           >
-            <Download className="w-3.5 h-3.5" /> Exportar
+            <Download className="w-4 h-4" />
+            Exportar
           </button>
         </div>
 
         {movimentosPorDiaArray.length === 0 ? (
-          <p className="text-center text-gray-400 py-8 text-sm">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             Sem movimentos no período
-          </p>
+          </div>
         ) : (
           <>
             {/* Desktop: Tabela */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full">
                 <thead>
-                  <tr className="border-b dark:border-gray-700 text-left">
-                    <th className="pb-2 text-gray-500 font-medium">Data</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Entradas</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Saídas</th>
-                    <th className="pb-2 text-gray-500 font-medium text-right">Saldo</th>
+                  <tr className="border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="text-left py-2 font-medium">Data</th>
+                    <th className="text-right py-2 font-medium">Entradas</th>
+                    <th className="text-right py-2 font-medium">Saídas</th>
+                    <th className="text-right py-2 font-medium">Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -531,19 +650,19 @@ export default function RelatoriosPage() {
                     return (
                       <tr
                         key={mov.data}
-                        className="border-b dark:border-gray-800"
+                        className="border-b dark:border-gray-800 text-sm"
                       >
-                        <td className="py-2.5 text-gray-800 dark:text-gray-200">
+                        <td className="py-3 text-gray-900 dark:text-white font-medium">
                           {mov.data}
                         </td>
-                        <td className="py-2.5 text-right text-green-600 dark:text-green-400 font-medium">
+                        <td className="py-3 text-right text-green-600 dark:text-green-400 font-semibold">
                           +{mov.entradas}
                         </td>
-                        <td className="py-2.5 text-right text-red-600 dark:text-red-400 font-medium">
+                        <td className="py-3 text-right text-red-600 dark:text-red-400 font-semibold">
                           -{mov.saidas}
                         </td>
                         <td
-                          className={`py-2.5 text-right font-bold ${
+                          className={`py-3 text-right font-bold ${
                             saldo >= 0
                               ? 'text-green-600 dark:text-green-400'
                               : 'text-red-600 dark:text-red-400'
@@ -560,36 +679,34 @@ export default function RelatoriosPage() {
             </div>
 
             {/* Mobile: Cards */}
-            <div className="md:hidden space-y-2 min-w-0">
+            <div className="md:hidden space-y-2">
               {movimentosPorDiaArray.map((mov) => {
                 const saldo = mov.entradas - mov.saidas
                 return (
                   <div
                     key={mov.data}
-                    className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-700 min-w-0"
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium text-xs text-gray-900 dark:text-white">
-                        {mov.data}
-                      </p>
-                      <div className="flex gap-3 mt-1 text-[11px]">
-                        <span className="text-green-600 dark:text-green-400 font-medium">
-                          ↑ +{mov.entradas}
-                        </span>
-                        <span className="text-red-600 dark:text-red-400 font-medium">
-                          ↓ -{mov.saidas}
-                        </span>
-                      </div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      {mov.data}
                     </div>
-                    <div
-                      className={`text-base font-bold flex-shrink-0 ${
-                        saldo >= 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}
-                    >
-                      {saldo >= 0 ? '+' : ''}
-                      {saldo}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-green-600 dark:text-green-400 font-semibold">
+                        ↑ +{mov.entradas}
+                      </span>
+                      <span className="text-red-600 dark:text-red-400 font-semibold">
+                        ↓ -{mov.saidas}
+                      </span>
+                      <span
+                        className={`font-bold ${
+                          saldo >= 0
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}
+                      >
+                        {saldo >= 0 ? '+' : ''}
+                        {saldo}
+                      </span>
                     </div>
                   </div>
                 )

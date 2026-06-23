@@ -1,8 +1,11 @@
 'use client'
 
 import { useRef } from 'react'
-import { Printer, Share2, X } from 'lucide-react'
+import Link from 'next/link'
+import { Printer, Share2, X, Crown } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
+import { usePlano } from '@/hooks/usePlano'
+
 
 export interface ItemCupom {
   nome: string
@@ -33,7 +36,7 @@ interface CupomProps {
 
 export default function CupomImpressao({ dados, onFechar }: CupomProps) {
   const cupomRef = useRef<HTMLDivElement>(null)
-
+  const { temCupomWhatsApp } = usePlano()
   const nomeLoja = dados.nome_negocio || 'Meu Mercado'
   const dataFormatada = dados.data.toLocaleDateString('pt-BR')
   const horaFormatada = dados.data.toLocaleTimeString('pt-BR', {
@@ -105,13 +108,27 @@ export default function CupomImpressao({ dados, onFechar }: CupomProps) {
                 <Printer size={16} />
                 Imprimir
               </button>
-              <button
-                onClick={handleWhatsApp}
-                className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition"
-              >
-                <Share2 size={16} />
-                WhatsApp
-              </button>
+
+              {/* 🔒 BLOQUEIO: WhatsApp só Profissional+ */}
+              {temCupomWhatsApp ? (
+                <button
+                  onClick={handleWhatsApp}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition"
+                >
+                  <Share2 size={16} />
+                  WhatsApp
+                </button>
+              ) : (
+                <Link
+                  href="/assinar"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-green-500/30 transition"
+                  title="Disponível no plano Profissional"
+                >
+                  <Crown size={16} />
+                  WhatsApp PRO
+                </Link>
+              )}
+
               {onFechar && (
                 <button
                   onClick={onFechar}
