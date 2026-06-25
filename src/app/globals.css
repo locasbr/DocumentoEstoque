@@ -14,6 +14,10 @@ body {
   @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-50 transition-colors duration-300;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   COMPONENTES BASE (já existentes - mantidos)
+   ═══════════════════════════════════════════════════════════════ */
+
 @layer components {
   .btn-primary {
     @apply px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-green-600 dark:hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
@@ -56,7 +60,10 @@ body {
   }
 }
 
-/* Animação de entrada para cards */
+/* ═══════════════════════════════════════════════════════════════
+   ANIMAÇÕES BÁSICAS (já existentes - mantidas)
+   ═══════════════════════════════════════════════════════════════ */
+
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -66,3 +73,189 @@ body {
 .animate-fade-in-up:nth-child(2) { animation-delay: 80ms; }
 .animate-fade-in-up:nth-child(3) { animation-delay: 160ms; }
 .animate-fade-in-up:nth-child(4) { animation-delay: 240ms; }
+
+/* ═══════════════════════════════════════════════════════════════
+   🆕 ANIMAÇÕES DA LANDING PAGE TOP TOP TOP
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ──────── BLOB ANIMADO (orbs no hero e CTA) ──────── */
+@keyframes blob {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(40px, -60px) scale(1.15);
+  }
+  66% {
+    transform: translate(-30px, 30px) scale(0.9);
+  }
+}
+.animate-blob {
+  animation: blob 12s ease-in-out infinite;
+}
+
+/* ──────── FLOAT (partículas sparkle no hero) ──────── */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+  }
+}
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ──────── FADE IN UP (h1, h2, etc) ──────── */
+@keyframes fadeInUpHero {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fadeInUp {
+  animation: fadeInUpHero 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+/* ──────── FADE IN DOWN (badge "NOVO: IA") ──────── */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fadeInDown {
+  animation: fadeInDown 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+/* ──────── FADE IN SIMPLES (conteúdo das tabs IA) ──────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* ──────── SLIDE DOWN (menu mobile) ──────── */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out forwards;
+}
+
+/* ──────── GRADIENT ANIMADO (texto "mercadinhos") ──────── */
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 4s ease infinite;
+}
+
+/* ──────── BOUNCE SLOW (foguete no CTA final) ──────── */
+@keyframes bounceSlow {
+  0%, 100% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(-15px);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+.animate-bounce-slow {
+  animation: bounceSlow 3s infinite;
+}
+
+/* ──────── DELAYS DE ANIMAÇÃO ──────── */
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+.animation-delay-400 {
+  animation-delay: 400ms;
+}
+.animation-delay-600 {
+  animation-delay: 600ms;
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACESSIBILIDADE: respeita "reduzir movimento" do usuário
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blob,
+  .animate-float,
+  .animate-fadeInUp,
+  .animate-fadeInDown,
+  .animate-fadeIn,
+  .animate-slideDown,
+  .animate-gradient,
+  .animate-bounce-slow,
+  .animate-fade-in-up {
+    animation: none !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR CUSTOMIZADA (toque premium)
+   ═══════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* ───── Pulse once (chama atenção ao gerar senha) ───── */
+@keyframes pulseOnce {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 20px 40px -10px rgba(245, 158, 11, 0.5);
+  }
+}
+
+.animate-pulse-once {
+  animation: pulseOnce 1.5s ease-in-out 2;
+}

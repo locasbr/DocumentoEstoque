@@ -9,13 +9,15 @@ import {
 
 const FAQ_ITEMS = [
   {
-    categoria: 'Primeiros Passos',
-    perguntas: [
-      { p: 'Como cadastrar meu primeiro produto?', r: 'Va em Produtos, clique em Novo Produto. Preencha nome, SKU (ou use a camera para ler o codigo de barras), preco de venda e quantidade inicial. Clique em Salvar Produto e pronto!' },
-      { p: 'Como funciona o periodo de teste?', r: 'Voce tem 15 dias gratis com acesso completo a todas as funcionalidades. Nao precisa de cartao de credito. Apos o periodo, basta assinar o plano de R$ 79,90/mes para continuar usando.' },
-      { p: 'Posso usar no celular?', r: 'Sim! O EstoqueSystem e 100% responsivo. O PDV, leitor de codigo de barras e todas as funcionalidades funcionam perfeitamente no celular e tablet.' },
-    ]
-  },
+  categoria: 'Primeiros Passos',
+  perguntas: [
+    { p: 'Como cadastrar meu primeiro produto?', r: 'Vá em Produtos, clique em Novo Produto. Preencha nome, SKU (ou use a câmera para ler o código de barras), preço de venda e quantidade inicial. Clique em Salvar Produto e pronto! Você também pode importar vários produtos de uma vez via CSV (planos Profissional e Negócio).' },
+    { p: 'Como funciona o período de teste?', r: 'Você tem 15 dias grátis com acesso completo a TODAS as funcionalidades de TODOS os planos, incluindo as features de IA. Não precisa de cartão de crédito. Após o período, basta escolher um plano (Iniciante R$ 39,90/mês, Profissional R$ 79,90/mês ou Negócio R$ 149,90/mês) para continuar usando.' },
+    { p: 'Quais são os planos disponíveis?', r: 'Iniciante (R$ 39,90/mês) — até 100 produtos, ideal pra quem tá começando. Profissional (R$ 79,90/mês) — produtos ilimitados, clientes/fiado, IA de análise de vendas. Negócio (R$ 149,90/mês) — tudo do Profissional + IA pra cadastro automático e sugestão de preço.' },
+    { p: 'Posso mudar de plano depois?', r: 'Sim! Você pode fazer upgrade ou downgrade a qualquer momento na página de Perfil. A cobrança é ajustada proporcionalmente.' },
+    { p: 'Posso usar no celular?', r: 'Sim! O EstoqueSystem é 100% responsivo. O PDV, leitor de código de barras e todas as funcionalidades funcionam perfeitamente no celular e tablet.' },
+  ]
+},
   {
     categoria: 'PDV e Vendas',
     perguntas: [

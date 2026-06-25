@@ -70,16 +70,43 @@ export function usePlano() {
   const [totalProdutos, setTotalProdutos] = useState(0)
 
   const recarregar = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) {
       setLoading(false)
       return
     }
 
+    // ════════════════════════════════════════════════════
+    // 🔍 PASSO 1: Descobre QUEM é o dono
+    // ════════════════════════════════════════════════════
+    // Se o user é dono → ele mesmo
+    // Se é funcionário → busca o dono_id na tabela membros
+    let donoId = user.id
+
+    try {
+      const { data: membro } = await supabase
+        .from('membros')
+        .select('dono_id, nivel')
+        .eq('user_id', user.id)
+        .single()
+
+      if (membro && membro.nivel === 'funcionario') {
+        donoId = membro.dono_id
+      }
+    } catch (err) {
+      // Se não tem row em membros, é dono do próprio negócio (signup direto)
+      // donoId continua sendo user.id
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🔍 PASSO 2: Busca o plano DO DONO
+    // ════════════════════════════════════════════════════
     const { data: perfil } = await supabase
       .from('perfis')
       .select('tipo_plano, is_admin')
-      .eq('id', user.id)
+      .eq('id', donoId)
       .single()
 
     if (perfil) {
@@ -87,12 +114,16 @@ export function usePlano() {
       setIsAdmin(perfil.is_admin === true)
     }
 
+    // ════════════════════════════════════════════════════
+    // 🔍 PASSO 3: Conta produtos DO DONO
+    // ════════════════════════════════════════════════════
     const { count } = await supabase
       .from('produtos')
       .select('*', { count: 'exact', head: true })
-      .eq('usuario_id', user.id)
+      .eq('usuario_id', donoId)
 
     if (count !== null) setTotalProdutos(count)
+
     setLoading(false)
   }, [])
 
@@ -110,26 +141,22 @@ export function usePlano() {
     limites,
     totalProdutos,
     recarregar,
-
     // Helpers de limite
     podeAdicionarProduto: isAdmin || totalProdutos < limites.produtos,
-
     // Helpers de features (Profissional + Negócio)
     temFiado: limites.temFiado,
     temValidade: limites.temValidade,
     temRelatoriosAvancados: limites.temRelatoriosAvancados,
     temExportarCSV: limites.temExportarCSV,
     temCupomWhatsApp: limites.temCupomWhatsApp,
-
     // Helpers de IA (exclusivo Negócio)
     temIA: limites.temIA,
     temIACadastroAutomatico: limites.temIACadastroAutomatico,
     temIASugestaoPreco: limites.temIASugestaoPreco,
     temIAAnaliseMensal: limites.temIAAnaliseMensal,
-
     // Plano atual
     isIniciante: tipoPlano === 'iniciante' && !isAdmin,
     isProfissional: tipoPlano === 'profissional' && !isAdmin,
     isNegocio: tipoPlano === 'negocio' || isAdmin,
   }
-}
+} 

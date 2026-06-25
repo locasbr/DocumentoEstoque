@@ -1,9 +1,9 @@
 // src/app/dashboard/pdv/page.tsx
-"use client"
+'use client'
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Produto } from '@/lib/types'
@@ -25,6 +25,15 @@ import {
   QrCode,
   Camera,
   Usb,
+  Keyboard,
+  TrendingUp,
+  Receipt,
+  Loader2,
+  Percent,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Tag,
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
@@ -34,6 +43,20 @@ interface ItemCarrinho {
   preco_unitario: number
 }
 
+interface VendaRecente {
+  numero_venda: string
+  total: number
+  forma_pagamento: string
+  itens: any[]
+  hora: string
+}
+
+interface StatsDia {
+  totalVendas: number
+  faturamento: number
+  ticketMedio: number
+}
+
 const FORMAS_PAGAMENTO = [
   { label: 'Dinheiro', icon: Banknote, value: 'Dinheiro' },
   { label: 'Pix', icon: QrCode, value: 'Pix' },
@@ -41,13 +64,32 @@ const FORMAS_PAGAMENTO = [
   { label: 'Crédito', icon: CreditCard, value: 'Cartão Crédito' },
 ]
 
+const SOM_BIPE_KEY = 'pdv_som_ativo'
+
 export default function PDVPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [filtro, setFiltro] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [processando, setProcessando] = useState(false)
+
+  // 🆕 Stats do dia
+  const [statsDia, setStatsDia] = useState<StatsDia>({
+    totalVendas: 0,
+    faturamento: 0,
+    ticketMedio: 0,
+  })
+
+  // 🆕 Vendas recentes (últimas 3)
+  const [vendasRecentes, setVendasRecentes] = useState<VendaRecente[]>([])
+
+  // 🆕 Modal de atalhos
+  const [mostrarAtalhos, setMostrarAtalhos] = useState(false)
+
+  // 🆕 Som
+  const [somAtivo, setSomAtivo] = useState(true)
 
   // Pagamento
   const [modalPagamento, setModalPagamento] = useState(false)
@@ -71,8 +113,8 @@ export default function PDVPage() {
   const [cadastroCategoria, setCadastroCategoria] = useState('')
   const [cadastroPreco, setCadastroPreco] = useState('')
   const [cadastroQuantidade, setCadastroQuantidade] = useState('1')
+  const [salvandoProdutoRapido, setSalvandoProdutoRapido] = useState(false)
 
-  // ✨ Sugestão de preço da IA
   const [precoSugeridoIA, setPrecoSugeridoIA] = useState<{
     min: number
     max: number
@@ -80,12 +122,54 @@ export default function PDVPage() {
 
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const buscaInputRef = useRef<HTMLInputElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const { addNotification } = useNotification()
   const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
-
-  // ✨ Hook da IA
   const { completarComIA, carregando: carregandoIA } = useIAProduto()
+
+  // ══════════════════════════════════════════════════
+  // 🔊 SOM DE BIPE
+  // ══════════════════════════════════════════════════
+
+  useEffect(() => {
+    const salvo = localStorage.getItem(SOM_BIPE_KEY)
+    if (salvo !== null) setSomAtivo(salvo === 'true')
+  }, [])
+
+  const tocarBipe = useCallback(() => {
+    if (!somAtivo) return
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext ||
+          (window as any).webkitAudioContext)()
+      }
+      const ctx = audioContextRef.current
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      oscillator.connect(gain)
+      gain.connect(ctx.destination)
+      oscillator.frequency.value = 1200
+      gain.gain.setValueAtTime(0.15, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
+      oscillator.start(ctx.currentTime)
+      oscillator.stop(ctx.currentTime + 0.1)
+    } catch {
+      // Falha silenciosa se navegador não suportar
+    }
+  }, [somAtivo])
+
+  const toggleSom = () => {
+    const novo = !somAtivo
+    setSomAtivo(novo)
+    localStorage.setItem(SOM_BIPE_KEY, novo.toString())
+    addNotification(
+      novo ? '🔊 Som ativado' : '🔇 Som desativado',
+      'info',
+      1500
+    )
+  }
 
   // ══════════════════════════════════════════════════
   // FETCH PRODUTOS
@@ -93,6 +177,7 @@ export default function PDVPage() {
 
   useEffect(() => {
     fetchProdutos()
+    fetchStatsDia()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -114,12 +199,49 @@ export default function PDVPage() {
     }
   }
 
+  // 🆕 Busca stats do dia
+  const fetchStatsDia = async () => {
+    try {
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+
+      const { data: vendasHoje } = await supabase
+        .from('movimentos_estoque')
+        .select('quantidade, motivo, produto:produto_id(preco_venda)')
+        .eq('tipo_movimento', 'saida')
+        .gte('criado_em', hoje.toISOString())
+
+      if (vendasHoje) {
+        const motivosVendas = new Set<string>()
+        let faturamento = 0
+
+        vendasHoje.forEach((v: any) => {
+          const precoVenda = v.produto?.preco_venda || 0
+          faturamento += v.quantidade * precoVenda
+
+          // Conta vendas únicas pelo motivo (que é a numero_venda)
+          if (v.motivo?.startsWith('PDV')) {
+            motivosVendas.add(v.motivo)
+          }
+        })
+
+        const totalVendas = motivosVendas.size
+        const ticketMedio = totalVendas > 0 ? faturamento / totalVendas : 0
+
+        setStatsDia({ totalVendas, faturamento, ticketMedio })
+      }
+    } catch (err) {
+      console.error('Erro ao buscar stats do dia:', err)
+    }
+  }
+
   // ══════════════════════════════════════════════════
   // CARRINHO
   // ══════════════════════════════════════════════════
 
   const adicionarAoCarrinho = useCallback(
     (produto: Produto) => {
+      tocarBipe()
       setCarrinho((prev) => {
         const itemExistente = prev.find((i) => i.produto_id === produto.id)
         if (itemExistente) {
@@ -147,7 +269,7 @@ export default function PDVPage() {
         }
       })
     },
-    [addNotification]
+    [addNotification, tocarBipe]
   )
 
   const removerDoCarrinho = (produto_id: string) => {
@@ -190,7 +312,6 @@ export default function PDVPage() {
         setDadosProdutoAPI(resultadoAPI)
         setModalCadastroRapido(true)
       } else {
-        // ✨ MUDANÇA: mesmo se não encontrar, abre o modal com IA disponível
         setSkuParaCadastro(codigoBarras)
         setDadosProdutoAPI({
           encontrado: false,
@@ -212,7 +333,7 @@ export default function PDVPage() {
   )
 
   // ══════════════════════════════════════════════════
-  // LEITOR USB (pistola)
+  // LEITOR USB
   // ══════════════════════════════════════════════════
 
   useEffect(() => {
@@ -263,7 +384,119 @@ export default function PDVPage() {
   }, [handleCodigoBarrasLido])
 
   // ══════════════════════════════════════════════════
-  // CADASTRO RÁPIDO — preenche campos com dados da API
+  // 🆕 ATALHOS DE TECLADO PROFISSIONAIS
+  // ══════════════════════════════════════════════════
+
+  const abrirPagamento = useCallback(() => {
+    if (carrinho.length === 0) {
+      addNotification('Carrinho vazio', 'warning')
+      return
+    }
+    const subtotal = carrinho.reduce(
+      (acc, i) => acc + i.quantidade * i.preco_unitario,
+      0
+    )
+    const descontoVal = parseFloat(desconto) || 0
+    const total = Math.max(0, subtotal - descontoVal)
+    setValorRecebido(total.toFixed(2))
+    setModalPagamento(true)
+  }, [carrinho, desconto, addNotification])
+
+  useEffect(() => {
+    const handleHotkeys = (e: KeyboardEvent) => {
+      // Ignora se algum modal tá aberto (exceto Esc)
+      const modaisAbertos =
+        modalPagamento || modalCadastroRapido || scannerAberto || cupomAberto
+
+      // ESC: Fecha modais ou limpa carrinho
+      if (e.key === 'Escape') {
+        if (mostrarAtalhos) {
+          setMostrarAtalhos(false)
+          return
+        }
+        if (modaisAbertos) return // deixa o modal lidar
+        if (carrinho.length > 0) {
+          e.preventDefault()
+          if (confirm('Limpar carrinho?')) {
+            setCarrinho([])
+            addNotification('🗑️ Carrinho limpo', 'info', 1500)
+          }
+        }
+        return
+      }
+
+      // Se modal aberto, não dispara mais atalhos
+      if (modaisAbertos || mostrarAtalhos) return
+
+      // F1: Ajuda
+      if (e.key === 'F1') {
+        e.preventDefault()
+        setMostrarAtalhos(true)
+        return
+      }
+
+      // F2: Foco na busca
+      if (e.key === 'F2') {
+        e.preventDefault()
+        buscaInputRef.current?.focus()
+        buscaInputRef.current?.select()
+        return
+      }
+
+      // F4: Foco no desconto
+      if (e.key === 'F4') {
+        e.preventDefault()
+        if (carrinho.length === 0) {
+          addNotification('Carrinho vazio', 'warning')
+          return
+        }
+        const descontoInput = document.getElementById(
+          'desconto-input'
+        ) as HTMLInputElement
+        descontoInput?.focus()
+        descontoInput?.select()
+        return
+      }
+
+      // F8: Finalizar venda
+      if (e.key === 'F8') {
+        e.preventDefault()
+        abrirPagamento()
+        return
+      }
+
+      // F10: Remover último item do carrinho
+      if (e.key === 'F10') {
+        e.preventDefault()
+        if (carrinho.length > 0) {
+          const ultimoItem = carrinho[carrinho.length - 1]
+          const produto = produtos.find((p) => p.id === ultimoItem.produto_id)
+          removerDoCarrinho(ultimoItem.produto_id)
+          addNotification(
+            `❌ Removido: ${produto?.nome || 'item'}`,
+            'info',
+            2000
+          )
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleHotkeys)
+    return () => window.removeEventListener('keydown', handleHotkeys)
+  }, [
+    carrinho,
+    modalPagamento,
+    modalCadastroRapido,
+    scannerAberto,
+    cupomAberto,
+    mostrarAtalhos,
+    addNotification,
+    produtos,
+    abrirPagamento,
+  ])
+
+  // ══════════════════════════════════════════════════
+  // CADASTRO RÁPIDO
   // ══════════════════════════════════════════════════
 
   useEffect(() => {
@@ -275,16 +508,11 @@ export default function PDVPage() {
     }
   }, [dadosProdutoAPI])
 
-  // ✨ Reseta sugestão IA ao fechar modal
   useEffect(() => {
     if (!modalCadastroRapido) {
       setPrecoSugeridoIA(null)
     }
   }, [modalCadastroRapido])
-
-  // ══════════════════════════════════════════════════
-  // ✨ HANDLER DA IA
-  // ══════════════════════════════════════════════════
 
   const handleCompletarComIA = async () => {
     const dados = await completarComIA({
@@ -300,14 +528,12 @@ export default function PDVPage() {
       setCadastroDescricao(dados.descricao)
       setCadastroCategoria(dados.categoria)
 
-      // Sugestão de preço
       if (dados.preco_sugerido_min && dados.preco_sugerido_max) {
         setPrecoSugeridoIA({
           min: dados.preco_sugerido_min,
           max: dados.preco_sugerido_max,
         })
 
-        // Se preço tá vazio, preenche com a média
         if (!cadastroPreco) {
           const precoMedio =
             (dados.preco_sugerido_min + dados.preco_sugerido_max) / 2
@@ -317,11 +543,9 @@ export default function PDVPage() {
     }
   }
 
-  // ══════════════════════════════════════════════════
-  // SALVAR PRODUTO RÁPIDO
-  // ══════════════════════════════════════════════════
-
   const salvarProdutoRapido = async () => {
+    if (salvandoProdutoRapido) return
+
     if (
       !cadastroNome.trim() ||
       !cadastroPreco ||
@@ -331,6 +555,7 @@ export default function PDVPage() {
       return
     }
 
+    setSalvandoProdutoRapido(true)
     const preco = parseFloat(cadastroPreco)
     const quantidade = parseInt(cadastroQuantidade) || 0
 
@@ -357,14 +582,20 @@ export default function PDVPage() {
         .select()
         .single()
 
-      if (insertError) throw insertError
+      if (insertError) {
+        if (insertError.message?.includes('Limite de 100 produtos')) {
+          addNotification(
+            '⚠️ Limite do plano Iniciante atingido. Faça upgrade!',
+            'error',
+            6000
+          )
+          return
+        }
+        throw insertError
+      }
 
-      addNotification(
-        `✅ Produto "${cadastroNome}" cadastrado com sucesso!`,
-        'success'
-      )
+      addNotification(`✅ "${cadastroNome}" cadastrado!`, 'success')
       setModalCadastroRapido(false)
-
       await fetchProdutos()
 
       if (novoProduto) {
@@ -372,6 +603,8 @@ export default function PDVPage() {
       }
     } catch (err: any) {
       addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
+    } finally {
+      setSalvandoProdutoRapido(false)
     }
   }
 
@@ -391,18 +624,18 @@ export default function PDVPage() {
       ? parseFloat(valorRecebido) - totalPagar
       : 0
 
-  // ══════════════════════════════════════════════════
-  // PAGAMENTO
-  // ══════════════════════════════════════════════════
+  // 🆕 Categorias únicas pra filtro
+  const categorias = useMemo(() => {
+    const set = new Set<string>()
+    produtos.forEach((p) => {
+      if (p.categoria) set.add(p.categoria)
+    })
+    return Array.from(set).sort()
+  }, [produtos])
 
-  const abrirPagamento = () => {
-    if (carrinho.length === 0) {
-      addNotification('Carrinho vazio', 'warning')
-      return
-    }
-    setValorRecebido(totalPagar.toFixed(2))
-    setModalPagamento(true)
-  }
+  // ══════════════════════════════════════════════════
+  // VENDA
+  // ══════════════════════════════════════════════════
 
   const processarVenda = async () => {
     setProcessando(true)
@@ -454,6 +687,19 @@ export default function PDVPage() {
         valor_recebido: parseFloat(valorRecebido) || undefined,
       })
 
+      // 🆕 Adiciona às vendas recentes
+      const novaVenda: VendaRecente = {
+        numero_venda: resultado.numero_venda,
+        total: resultado.total,
+        forma_pagamento: resultado.forma_pagamento,
+        itens: resultado.itens,
+        hora: new Date().toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      }
+      setVendasRecentes((prev) => [novaVenda, ...prev].slice(0, 3))
+
       addNotification(
         `💰 Venda ${resultado.numero_venda}: ${formatarMoeda(resultado.total)}`,
         'success',
@@ -464,7 +710,10 @@ export default function PDVPage() {
       setDesconto('')
       setValorRecebido('')
       setModalPagamento(false)
-      setTimeout(fetchProdutos, 800)
+      setTimeout(() => {
+        fetchProdutos()
+        fetchStatsDia()
+      }, 800)
     } catch (err) {
       setError('Erro inesperado ao processar venda. Nenhum item foi alterado.')
       console.error(err)
@@ -473,112 +722,43 @@ export default function PDVPage() {
     }
   }
 
+  // 🆕 Reimprimir cupom de venda recente
+  const reimprimirCupom = async (venda: VendaRecente) => {
+    await gerarCupom({
+      itens: venda.itens,
+      desconto: 0,
+      forma_pagamento: venda.forma_pagamento,
+    })
+  }
+
   // ══════════════════════════════════════════════════
   // FILTRO
   // ══════════════════════════════════════════════════
 
-  const produtosFiltrados = produtos.filter(
-    (p) =>
+  const produtosFiltrados = produtos.filter((p) => {
+    const matchFiltro =
       p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
       p.sku.toLowerCase().includes(filtro.toLowerCase()) ||
       p.categoria?.toLowerCase().includes(filtro.toLowerCase())
-  )
+    const matchCategoria =
+      !categoriaFiltro || p.categoria === categoriaFiltro
+    return matchFiltro && matchCategoria
+  })
 
   if (loading)
     return (
       <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-        Carregando...
+        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+        Carregando PDV...
       </div>
     )
-
-  // ══════════════════════════════════════════════════
-  // COMPONENTES INTERNOS
-  // ══════════════════════════════════════════════════
-
-  const ProdutoCard = ({ produto }: { produto: Produto }) => {
-    const item = carrinho.find((i) => i.produto_id === produto.id)
-    return (
-      <button
-        onClick={() => adicionarAoCarrinho(produto)}
-        className={`p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
-          item
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-        }`}
-      >
-        <div className="flex items-start justify-between w-full">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate dark:text-white">
-              {produto.nome}
-            </p>
-            <p className="text-green-600 dark:text-green-400 font-bold text-base mt-1">
-              {formatarMoeda(produto.preco_venda)}
-            </p>
-          </div>
-          {item && (
-            <span className="bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
-              {item.quantidade}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-gray-400 mt-auto pt-1">
-          {produto.quantidade_atual} em estoque
-        </p>
-      </button>
-    )
-  }
-
-  const ItemCarrinhoCard = ({ item }: { item: ItemCarrinho }) => {
-    const produto = produtos.find((p) => p.id === item.produto_id)
-    return (
-      <div className="flex items-center justify-between py-2 border-b dark:border-gray-700">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate dark:text-white">
-            {produto?.nome}
-          </p>
-          <button
-            onClick={() => removerDoCarrinho(item.produto_id)}
-            className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded p-0.5"
-          >
-            <X size={14} />
-          </button>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() =>
-              atualizarQuantidade(item.produto_id, item.quantidade - 1)
-            }
-            className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-          >
-            <Minus size={14} />
-          </button>
-          <span className="w-8 text-center font-bold text-sm">
-            {item.quantidade}
-          </span>
-          <button
-            onClick={() =>
-              atualizarQuantidade(item.produto_id, item.quantidade + 1)
-            }
-            className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-          >
-            <Plus size={14} />
-          </button>
-        </div>
-        <p className="w-20 text-right font-semibold text-sm dark:text-white">
-          {formatarMoeda(item.quantidade * item.preco_unitario)}
-        </p>
-      </div>
-    )
-  }
 
   // ══════════════════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════════════════
 
   return (
-    <div
-      className={`p-4 md:p-6 ${carrinho.length > 0 ? 'pb-60 md:pb-6' : ''}`}
-    >
+    <div className={`p-4 md:p-6 ${carrinho.length > 0 ? 'pb-60 md:pb-6' : ''}`}>
       {/* ── INDICADOR USB ── */}
       {usbDetectado && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
@@ -586,56 +766,214 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ HEADER RESPONSIVO ══════════ */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            PDV
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Ponto de Venda • Leitor USB ativo
-          </p>
+      {/* ══════════ HEADER PRO COM STATS ══════════ */}
+      <div className="mb-4 space-y-3">
+        {/* Linha 1: Título + ações */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              PDV
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1">
+                <Usb size={12} /> USB ativo
+              </span>
+              <span>·</span>
+              <button
+                onClick={() => setMostrarAtalhos(true)}
+                className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <Keyboard size={12} /> Atalhos (F1)
+              </button>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Som on/off */}
+            <button
+              onClick={toggleSom}
+              className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
+              title={somAtivo ? 'Desativar som' : 'Ativar som'}
+            >
+              {somAtivo ? (
+                <Volume2 size={16} className="text-gray-700 dark:text-gray-300" />
+              ) : (
+                <VolumeX size={16} className="text-gray-400" />
+              )}
+            </button>
+
+            {/* Scanner câmera */}
+            <button
+              onClick={() => setScannerAberto(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold rounded-lg transition text-sm"
+            >
+              <Camera size={16} />
+              <span className="hidden sm:inline">Câmera</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => setScannerAberto(true)}
-          className="hidden sm:flex btn-primary items-center gap-2 px-4"
-        >
-          <Camera size={18} /> Ler código
-        </button>
-        <button
-          onClick={() => setScannerAberto(true)}
-          className="sm:hidden btn-primary px-3 py-2"
-        >
-          <Camera size={18} />
-        </button>
+
+        {/* Linha 2: Stats do dia */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-green-700 dark:text-green-400 font-semibold uppercase">
+              <TrendingUp size={10} />
+              Vendas hoje
+            </div>
+            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white truncate">
+              {formatarMoeda(statsDia.faturamento)}
+            </p>
+          </div>
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-blue-700 dark:text-blue-400 font-semibold uppercase">
+              <Receipt size={10} />
+              Nº vendas
+            </div>
+            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white">
+              {statsDia.totalVendas}
+            </p>
+          </div>
+          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-purple-700 dark:text-purple-400 font-semibold uppercase">
+              <Percent size={10} />
+              Ticket médio
+            </div>
+            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white truncate">
+              {formatarMoeda(statsDia.ticketMedio)}
+            </p>
+          </div>
+        </div>
+
+        {/* Linha 3: Vendas recentes (se houver) */}
+        {vendasRecentes.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase whitespace-nowrap">
+              Últimas:
+            </span>
+            {vendasRecentes.map((v) => (
+              <button
+                key={v.numero_venda}
+                onClick={() => reimprimirCupom(v)}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 rounded-md text-xs whitespace-nowrap transition"
+                title="Reimprimir cupom"
+              >
+                <Receipt size={10} className="text-gray-400" />
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {formatarMoeda(v.total)}
+                </span>
+                <span className="text-gray-400">· {v.hora}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && <Alert message={error} type="error" />}
 
-      <input
-        type="text"
-        placeholder="Buscar produto por nome, SKU ou categoria..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-        className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full mb-4"
-        autoFocus
-      />
+      {/* ══════════ BUSCA + CATEGORIAS ══════════ */}
+      <div className="mb-4 space-y-3">
+        <input
+          ref={buscaInputRef}
+          type="text"
+          placeholder="Buscar produto por nome, SKU ou categoria... (F2)"
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+          autoFocus
+        />
 
-      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-        <div className="flex-1">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
-            {produtosFiltrados.map((p) => (
-              <ProdutoCard key={p.id} produto={p} />
+        {/* Pills de categorias */}
+        {categorias.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setCategoriaFiltro(null)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
+                !categoriaFiltro
+                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              Todos
+            </button>
+            {categorias.map((cat) => (
+              <button
+                key={cat}
+                onClick={() =>
+                  setCategoriaFiltro(categoriaFiltro === cat ? null : cat)
+                }
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
+                  categoriaFiltro === cat
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Tag size={10} />
+                {cat}
+              </button>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* ══════════ GRID PRODUTOS + CARRINHO ══════════ */}
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+        <div className="flex-1">
+          {produtosFiltrados.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
+              <p className="font-medium">Nenhum produto encontrado</p>
+              <p className="text-sm mt-1">
+                Tente ajustar os filtros ou ler um código de barras
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+              {produtosFiltrados.map((produto) => {
+                const item = carrinho.find((i) => i.produto_id === produto.id)
+                return (
+                  <button
+                    key={produto.id}
+                    onClick={() => adicionarAoCarrinho(produto)}
+                    className={`p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
+                      item
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between w-full">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate dark:text-white">
+                          {produto.nome}
+                        </p>
+                        <p className="text-green-600 dark:text-green-400 font-bold text-base mt-1">
+                          {formatarMoeda(produto.preco_venda)}
+                        </p>
+                      </div>
+                      {item && (
+                        <span className="bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
+                          {item.quantidade}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-auto pt-1">
+                      {produto.quantidade_atual} em estoque
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
+        {/* CARRINHO DESKTOP */}
         <div className="hidden md:block w-72 lg:w-80 flex-shrink-0">
-          <div className="sticky top-20 card p-4 space-y-3">
+          <div className="sticky top-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg dark:text-white">Carrinho</h3>
               {carrinho.length > 0 && (
-                <span className="badge-info text-xs">{totalItens} un</span>
+                <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full font-bold">
+                  {totalItens} un
+                </span>
               )}
             </div>
 
@@ -643,24 +981,81 @@ export default function PDVPage() {
               <div className="text-center py-8 text-gray-400">
                 <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Carrinho vazio</p>
+                <p className="text-xs mt-2 text-gray-500">
+                  Escaneie ou clique nos produtos
+                </p>
               </div>
             ) : (
-              carrinho.map((i) => (
-                <ItemCarrinhoCard key={i.produto_id} item={i} />
-              ))
+              <div className="max-h-96 overflow-y-auto -mx-4 px-4">
+                {carrinho.map((item) => {
+                  const produto = produtos.find(
+                    (p) => p.id === item.produto_id
+                  )
+                  return (
+                    <div
+                      key={item.produto_id}
+                      className="flex items-center justify-between py-2 border-b dark:border-gray-700"
+                    >
+                      <div className="flex-1 min-w-0 mr-2">
+                        <p className="text-sm font-medium truncate dark:text-white">
+                          {produto?.nome}
+                        </p>
+                        <button
+                          onClick={() => removerDoCarrinho(item.produto_id)}
+                          className="text-red-500 hover:text-red-700 text-xs"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            atualizarQuantidade(
+                              item.produto_id,
+                              item.quantidade - 1
+                            )
+                          }
+                          className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="w-8 text-center font-bold text-sm">
+                          {item.quantidade}
+                        </span>
+                        <button
+                          onClick={() =>
+                            atualizarQuantidade(
+                              item.produto_id,
+                              item.quantidade + 1
+                            )
+                          }
+                          className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <p className="w-20 text-right font-semibold text-sm dark:text-white">
+                        {formatarMoeda(item.quantidade * item.preco_unitario)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
             )}
 
             {carrinho.length > 0 && (
               <>
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
-                      Desconto (R$)
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      Desconto (F4)
                     </span>
                     <input
+                      id="desconto-input"
                       type="number"
                       value={desconto}
                       onChange={(e) => setDesconto(e.target.value)}
+                      placeholder="0.00"
                       className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
                     />
                   </div>
@@ -681,22 +1076,32 @@ export default function PDVPage() {
                 </div>
                 <button
                   onClick={abrirPagamento}
-                  className="btn-primary w-full py-3 font-bold"
+                  className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-bold rounded-lg transition flex items-center justify-center gap-2"
                 >
                   Finalizar Venda
+                  <kbd className="text-[10px] px-1.5 py-0.5 bg-white/20 rounded font-mono">
+                    F8
+                  </kbd>
                 </button>
                 <button
-                  onClick={() => setCarrinho([])}
-                  className="btn-secondary w-full py-2 text-sm"
+                  onClick={() => {
+                    if (confirm('Limpar carrinho?')) setCarrinho([])
+                  }}
+                  className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center justify-center gap-2"
                 >
+                  <RotateCcw size={14} />
                   Limpar carrinho
+                  <kbd className="text-[9px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono">
+                    Esc
+                  </kbd>
                 </button>
               </>
             )}
           </div>
         </div>
       </div>
-{/* ══════════ CARRINHO MOBILE ══════════ */}
+
+      {/* ══════════ CARRINHO MOBILE ══════════ */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
           <div className="max-h-40 overflow-y-auto px-3 pt-3 space-y-2">
@@ -762,17 +1167,78 @@ export default function PDVPage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setCarrinho([])}
-                className="btn-secondary py-2.5 px-4 text-sm"
+                onClick={() => {
+                  if (confirm('Limpar carrinho?')) setCarrinho([])
+                }}
+                className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-sm"
               >
                 Limpar
               </button>
               <button
                 onClick={abrirPagamento}
-                className="btn-primary flex-1 py-2.5 font-bold"
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-lg"
               >
-                Vender
+                Vender · {formatarMoeda(totalPagar)}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ MODAL DE ATALHOS ══════════ */}
+      {mostrarAtalhos && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setMostrarAtalhos(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Keyboard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-lg font-bold dark:text-white">
+                  Atalhos do PDV
+                </h3>
+              </div>
+              <button
+                onClick={() => setMostrarAtalhos(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {[
+                { tecla: 'F1', acao: 'Mostrar esta ajuda' },
+                { tecla: 'F2', acao: 'Buscar produto' },
+                { tecla: 'F4', acao: 'Aplicar desconto' },
+                { tecla: 'F8', acao: 'Finalizar venda' },
+                { tecla: 'F10', acao: 'Remover último item' },
+                { tecla: 'Esc', acao: 'Fechar modal / Limpar carrinho' },
+                { tecla: 'Enter', acao: 'Confirmar leitor USB' },
+              ].map(({ tecla, acao }) => (
+                <div
+                  key={tecla}
+                  className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                >
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {acao}
+                  </span>
+                  <kbd className="px-2.5 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono font-bold text-gray-700 dark:text-gray-300 shadow-sm">
+                    {tecla}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                💡 <strong>Dica:</strong> Conecte um leitor USB de código de barras
+                e ele funciona automaticamente. Só apontar e bipar!
+              </p>
             </div>
           </div>
         </div>
@@ -781,7 +1247,7 @@ export default function PDVPage() {
       {/* ══════════ MODAL DE PAGAMENTO ══════════ */}
       {modalPagamento && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold dark:text-white">
                 Finalizar Venda
@@ -858,17 +1324,22 @@ export default function PDVPage() {
             <button
               onClick={processarVenda}
               disabled={processando}
-              className="btn-primary w-full py-4 font-bold text-lg disabled:opacity-50"
+              className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-lg transition"
             >
-              {processando
-                ? 'Processando...'
-                : `Confirmar • ${formatarMoeda(totalPagar)}`}
+              {processando ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Processando...
+                </span>
+              ) : (
+                `Confirmar · ${formatarMoeda(totalPagar)}`
+              )}
             </button>
           </div>
         </div>
       )}
 
-     {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
+      {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
       {modalCadastroRapido && dadosProdutoAPI && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
@@ -884,30 +1355,29 @@ export default function PDVPage() {
               </button>
             </div>
 
-            {/* ✨ BOTÃO IA — Completar dados automaticamente */}
-<div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
-  <div className="flex items-start gap-2 mb-3">
-    <span className="text-lg">💡</span>
-    <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-      <strong>Como usar:</strong> Digite o <strong>nome do produto</strong> no campo abaixo
-      (ex: &quot;coca lata 350&quot;) e clique no botão. A IA completa categoria, descrição
-      e sugere preço.
-    </p>
-  </div>
-  <BotaoIA
-    onClick={handleCompletarComIA}
-    carregando={carregandoIA}
-    label="✨ Completar com IA"
-    className="w-full justify-center"
-  />
-  {!cadastroNome.trim() && (
-    <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-2 font-medium">
-      ⚠️ Digite o nome do produto primeiro
-    </p>
-  )}
-</div>
+            <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
+              <div className="flex items-start gap-2 mb-3">
+                <span className="text-lg">💡</span>
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  <strong>Como usar:</strong> Digite o <strong>nome do produto</strong> no campo abaixo
+                  (ex: &quot;coca lata 350&quot;) e clique no botão. A IA completa categoria, descrição
+                  e sugere preço.
+                </p>
+              </div>
+              <BotaoIA
+                onClick={handleCompletarComIA}
+                carregando={carregandoIA}
+                label="✨ Completar com IA"
+                className="w-full justify-center"
+              />
+              {!cadastroNome.trim() && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-2 font-medium">
+                  ⚠️ Digite o nome do produto primeiro
+                </p>
+              )}
+            </div>
 
-            {dadosProdutoAPI.encontrado !== false && (
+            {dadosProdutoAPI.encontrado === true && (
               <p className="text-sm text-green-600 dark:text-green-400 mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
                 ✅ Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
               </p>
@@ -924,9 +1394,7 @@ export default function PDVPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Nome *
-                </label>
+                <label className="text-xs font-medium text-gray-500">Nome *</label>
                 <input
                   value={cadastroNome}
                   onChange={(e) => setCadastroNome(e.target.value)}
@@ -935,9 +1403,7 @@ export default function PDVPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Marca
-                </label>
+                <label className="text-xs font-medium text-gray-500">Marca</label>
                 <input
                   value={cadastroMarca}
                   onChange={(e) => setCadastroMarca(e.target.value)}
@@ -979,7 +1445,6 @@ export default function PDVPage() {
                   className="input-field w-full"
                   placeholder="0.00"
                 />
-                {/* ✨ Sugestão de preço da IA */}
                 {precoSugeridoIA && (
                   <div className="mt-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
                     <p className="text-xs text-purple-700 dark:text-purple-300">
@@ -1022,13 +1487,22 @@ export default function PDVPage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={salvarProdutoRapido}
-                className="btn-primary flex-1"
+                disabled={salvandoProdutoRapido}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition"
               >
-                Salvar e usar
+                {salvandoProdutoRapido ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Salvando...
+                  </span>
+                ) : (
+                  'Salvar e usar'
+                )}
               </button>
               <button
                 onClick={() => setModalCadastroRapido(false)}
-                className="btn-secondary"
+                disabled={salvandoProdutoRapido}
+                className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-semibold disabled:opacity-50"
               >
                 Cancelar
               </button>

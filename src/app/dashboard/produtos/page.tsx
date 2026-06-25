@@ -7,7 +7,7 @@ import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
 import { useNotification } from '@/contexts/NotificationContext'
 import { SkeletonGrid } from '@/components/skeleton-loaders'
-import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
 const POR_PAGINA = 20
@@ -102,18 +102,39 @@ export default function ProdutosPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
-          <p className="text-sm text-gray-500">
-            {totalProdutos} produto(s) cadastrado(s)
-          </p>
-        </div>
-        <Link href="/dashboard/produtos/novo" className="btn-primary">
-          <Plus size={18} className="inline mr-1" /> Novo Produto
-        </Link>
-      </div>
+     {/* Header */}
+<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+  <div>
+    <h2 className="text-2xl font-bold dark:text-white">Produtos</h2>
+    <p className="text-sm text-gray-500">
+      {totalProdutos} produto(s) cadastrado(s)
+    </p>
+  </div>
 
+  {/* Botões de ação */}
+  <div className="flex flex-col sm:flex-row gap-2">
+    {/* 🆕 BOTÃO IMPORTAR CSV */}
+    <Link
+      href="/dashboard/produtos/importar"
+      className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 font-semibold rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-500 transition group"
+    >
+      <FileSpreadsheet size={18} className="group-hover:scale-110 transition-transform" />
+      <span>Importar CSV</span>
+      <span className="hidden sm:inline text-xs px-1.5 py-0.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold">
+        NOVO
+      </span>
+    </Link>
+
+    {/* Botão Novo Produto */}
+    <Link
+      href="/dashboard/produtos/novo"
+      className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-semibold rounded-lg transition"
+    >
+      <Plus size={18} />
+      Novo Produto
+    </Link>
+  </div>
+</div>
       {success && <Alert message={success} type="success" />}
 
       <input

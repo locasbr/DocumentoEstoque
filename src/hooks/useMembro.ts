@@ -27,11 +27,14 @@ export function useMembro(): UseMembro {
   const [membro, setMembro] = useState<Membro | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  // 🆕 Flag que distingue "não tem row" de "deu erro na query"
+  const [semMembrosRow, setSemMembrosRow] = useState(false)
 
   useEffect(() => {
     const fetchMembro = async () => {
       try {
         setIsLoading(true)
+
         const { data: session } = await supabase.auth.getSession()
 
         if (!session?.session?.user?.id) {
@@ -47,17 +50,31 @@ export function useMembro(): UseMembro {
           .single()
 
         if (queryError) {
-          // Se não encontrou membro, trata como dono (para compatibilidade)
-          console.warn('Membro não encontrado:', queryError)
-          setMembro(null)
+          // ✅ PGRST116 = "no rows found" — legítimo!
+          // User é dono do próprio negócio (signup novo, nunca foi convidado)
+          if (queryError.code === 'PGRST116') {
+            setMembro(null)
+            setSemMembrosRow(true) // confirma que NÃO TEM row (é dono)
+            setError(null)
+          } else {
+            // ❌ Outros erros (network, RLS, timeout) — NÃO assume isDono
+            console.error('Erro ao buscar membro:', queryError)
+            setMembro(null)
+            setSemMembrosRow(false) // deu erro real, NÃO confirma nada
+            setError(new Error(queryError.message))
+          }
           setIsLoading(false)
           return
         }
 
+        // Sucesso: encontrou row de membro (dono ou funcionario)
         setMembro(data)
+        setSemMembrosRow(false)
         setError(null)
       } catch (err) {
+        console.error('Erro inesperado no fetchMembro:', err)
         setError(err instanceof Error ? err : new Error('Erro ao buscar membro'))
+        setSemMembrosRow(false)
       } finally {
         setIsLoading(false)
       }
@@ -72,7 +89,11 @@ export function useMembro(): UseMembro {
     donoId: membro?.dono_id ?? null,
     isLoading,
     error,
-    isDono: membro?.nivel === 'dono' || membro === null,
+    // 🔒 isDono SÓ é true se:
+    //    1. Tem row e nivel === 'dono', OU
+    //    2. Confirmou que NÃO TEM row (PGRST116)
+    // Se deu erro de rede/RLS/timeout, isDono = FALSE (defensivo!)
+    isDono: membro?.nivel === 'dono' || semMembrosRow,
     isFuncionario: membro?.nivel === 'funcionario',
   }
 }

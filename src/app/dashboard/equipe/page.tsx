@@ -1,6 +1,5 @@
 'use client'
-
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
@@ -27,6 +26,7 @@ export default function EquipePage() {
   const [isInviting, setIsInviting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState('')
+const senhaBoxRef = useRef<HTMLDivElement>(null)
 
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
 
@@ -61,65 +61,76 @@ export default function EquipePage() {
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
-  
+  const handleInviteNewMember = async (e: React.FormEvent) => {
+    e.preventDefault()
 
- const handleInviteNewMember = async (e: React.FormEvent) => {
-  e.preventDefault()
-
-  if (!newEmail.trim()) {
-    addNotification('Email é obrigatório', 'warning')
-    return
-  }
-
-  if (!newEmail.includes('@')) {
-    addNotification('Email inválido', 'warning')
-    return
-  }
-
-  try {
-    setIsInviting(true)
-
-    // Chama a API Route (servidor) — NÃO afeta a sessão do dono
-    const response = await fetch('/api/equipe/convidar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: newEmail,
-        donoId: donoId,
-      }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      if (response.status === 409) {
-        addNotification('Este funcionário já foi convidado', 'warning')
-      } else {
-        addNotification(data.error || 'Erro ao convidar', 'error')
-      }
+    if (!newEmail.trim()) {
+      addNotification('Email é obrigatório', 'warning')
       return
     }
 
-    // Sucesso!
-    setGeneratedPassword(data.tempPassword)
-    addNotification(
-      `Funcionário convidado com sucesso! Senha: ${data.tempPassword}`,
-      'success'
-    )
-    setNewEmail('')
-    fetchMembros()
-  } catch (error) {
-    console.error('Erro ao convidar funcionário:', error)
-    addNotification('Erro ao convidar funcionário', 'error')
-  } finally {
-    setIsInviting(false)
+    if (!newEmail.includes('@')) {
+      addNotification('Email inválido', 'warning')
+      return
+    }
+
+    try {
+      setIsInviting(true)
+
+      // Chama a API Route (servidor) — NÃO afeta a sessão do dono
+      const response = await fetch('/api/equipe/convidar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newEmail,
+          donoId: donoId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          addNotification('Este funcionário já foi convidado', 'warning')
+        } else {
+          addNotification(data.error || 'Erro ao convidar', 'error')
+        }
+        return
+      }
+
+     // Sucesso!
+setGeneratedPassword(data.tempPassword)
+addNotification(
+  '✅ Funcionário convidado! Copie a senha abaixo.',
+  'success',
+  8000 // 8 segundos pra dar tempo de ler
+)
+setNewEmail('')
+fetchMembros()
+
+// 🔒 Scroll suave pro box da senha (UX melhor)
+setTimeout(() => {
+  senhaBoxRef.current?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+}, 100)
+    } catch (error) {
+      console.error('Erro ao convidar funcionário:', error)
+      addNotification('Erro ao convidar funcionário', 'error')
+    } finally {
+      setIsInviting(false)
+    }
   }
-}
 
   const toggleStatus = async (memberId: string, currentStatus: string) => {
     try {
       const newStatus =
-        currentStatus === 'ativo' ? 'inativo' : currentStatus === 'inativo' ? 'ativo' : 'ativo'
+        currentStatus === 'ativo'
+          ? 'inativo'
+          : currentStatus === 'inativo'
+          ? 'ativo'
+          : 'ativo'
 
       const { error } = await supabase
         .from('membros')
@@ -128,7 +139,10 @@ export default function EquipePage() {
 
       if (error) throw error
 
-      addNotification(`Funcionário ${newStatus === 'ativo' ? 'ativado' : 'desativado'}`, 'success')
+      addNotification(
+        `Funcionário ${newStatus === 'ativo' ? 'ativado' : 'desativado'}`,
+        'success'
+      )
       fetchMembros()
     } catch (error) {
       console.error('Erro ao atualizar status:', error)
@@ -192,7 +206,9 @@ export default function EquipePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Gerenciar Equipe</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          Gerenciar Equipe
+        </h1>
         <p className="text-gray-600 dark:text-gray-400">
           Convide funcionários e controle suas permissões
         </p>
@@ -224,181 +240,237 @@ export default function EquipePage() {
           </div>
 
           {generatedPassword && (
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                Senha temporária gerada:
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={generatedPassword}
-                  readOnly
-                  className="input-field flex-1 font-mono text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="p-2 hover:bg-blue-100 dark:hover:bg-blue-800 rounded transition"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(generatedPassword)
-                    addNotification('Senha copiada!', 'success')
-                  }}
-                  className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition text-sm"
-                >
-                  Copiar
-                </button>
-              </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                ⚠️ Compartilhe esta senha com segurança. O funcionário deve alterá-la no primeiro login.
-              </p>
-            </div>
-          )}
+  <div
+    ref={senhaBoxRef}
+    className="relative p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl shadow-lg animate-pulse-once"
+  >
+    {/* Header de atenção */}
+    <div className="flex items-start gap-3 mb-4">
+      <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+        <span className="text-xl">🔑</span>
+      </div>
+      <div className="flex-1">
+        <p className="font-bold text-amber-900 dark:text-amber-100 text-base">
+          Senha temporária gerada
+        </p>
+        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+          Copie agora — esta senha não será mostrada novamente!
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => setGeneratedPassword('')}
+        className="text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 text-sm font-medium"
+        title="Já copiei, fechar"
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* Input da senha + ações */}
+    <div className="flex items-center gap-2 mb-3">
+      <input
+        type={showPassword ? 'text' : 'password'}
+        value={generatedPassword}
+        readOnly
+        className="input-field flex-1 font-mono text-base font-bold tracking-wider bg-white dark:bg-gray-900 border-amber-300 dark:border-amber-700"
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="p-2.5 bg-white dark:bg-gray-900 hover:bg-amber-100 dark:hover:bg-amber-800 rounded transition border border-amber-200 dark:border-amber-700"
+        title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+      >
+        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard.writeText(generatedPassword)
+          addNotification('✅ Senha copiada!', 'success', 2000)
+        }}
+        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg hover:shadow-amber-500/30 text-white font-bold rounded transition text-sm whitespace-nowrap"
+      >
+        📋 Copiar
+      </button>
+    </div>
+
+    {/* Avisos importantes */}
+    <div className="space-y-1.5">
+      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+        <span>⚠️</span>
+        <span>
+          <strong>Compartilhe pelo WhatsApp ou pessoalmente</strong> — nunca por email
+        </span>
+      </div>
+      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+        <span>🔒</span>
+        <span>
+          O funcionário deve <strong>alterar essa senha no primeiro login</strong>
+        </span>
+      </div>
+      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+        <span>⏱️</span>
+        <span>
+          Esta senha <strong>não será exibida novamente</strong> — copie agora
+        </span>
+      </div>
+    </div>
+  </div>
+)}
         </form>
       </div>
 
       {/* Members List */}
       <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">
           Funcionários ({membros.length})
-        </h2>
+        </h3>
 
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Carregando...</div>
         ) : membros.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div className="text-center py-8 text-gray-500">
             Nenhum funcionário convidado ainda
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <h3 className="text-lg font-semibold mb-4">
-  Funcionários ({membros.length})
-</h3>
+          <>
+            {/* ══════════ DESKTOP: Tabela ══════════ */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Email
+                    </th>
+                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Nível
+                    </th>
+                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Status
+                    </th>
+                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Data
+                    </th>
+                    <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {membros.map((membro) => (
+                    <tr
+                      key={membro.id}
+                      className="border-b border-gray-100 dark:border-gray-800"
+                    >
+                      <td className="py-3 px-2 text-sm text-gray-900 dark:text-gray-100">
+                        {membro.email}
+                      </td>
+                      <td className="py-3 px-2 text-sm">
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                          {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-sm">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(
+                            membro.status
+                          )}`}
+                        >
+                          {getStatusLabel(membro.status)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-sm text-gray-600 dark:text-gray-400">
+                        {formatarData(membro.created_at)}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        {membro.nivel !== 'dono' && (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() =>
+                                toggleStatus(membro.id, membro.status)
+                              }
+                              className={`px-3 py-1 rounded text-xs font-medium transition ${
+                                membro.status === 'ativo'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
+                                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
+                              }`}
+                            >
+                              {membro.status === 'ativo'
+                                ? 'Desativar'
+                                : 'Ativar'}
+                            </button>
+                            <button
+                              onClick={() => deleteMember(membro.id)}
+                              className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                              title="Remover funcionário"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-{isLoading ? (
-  <div className="text-center py-8">Carregando...</div>
-) : membros.length === 0 ? (
-  <div className="text-center py-8 text-gray-500">
-    Nenhum funcionário convidado ainda
-  </div>
-) : (
-  <>
-    {/* ══════════ DESKTOP: Tabela ══════════ */}
-    <div className="hidden md:block overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b dark:border-gray-700">
-            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Email</th>
-            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Nível</th>
-            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
-            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
-            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {membros.map((membro) => (
-            <tr key={membro.id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-              <td className="py-3 px-4">
-                <span className="font-medium">{membro.email}</span>
-              </td>
-              <td className="py-3 px-4">
-                <span className={`badge ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
-                  {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <span className={`badge ${getStatusBadge(membro.status)}`}>
-                  {getStatusLabel(membro.status)}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-sm text-gray-500">
-                {formatarData(membro.created_at)}
-              </td>
-              <td className="py-3 px-4 text-right">
-                {membro.nivel !== 'dono' && (
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => toggleStatus(membro.id, membro.status)}
-                      className={`px-3 py-1 rounded text-xs font-medium transition ${
-                        membro.status === 'ativo'
-                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
-                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
-                      }`}
-                    >
-                      {membro.status === 'ativo' ? 'Desativar' : 'Ativar'}
-                    </button>
-                    <button
-                      onClick={() => deleteMember(membro.id)}
-                      className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                      title="Remover funcionário"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+            {/* ══════════ MOBILE: Cards ══════════ */}
+            <div className="md:hidden space-y-3">
+              {membros.map((membro) => (
+                <div
+                  key={membro.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                        {membro.email}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {formatarData(membro.created_at)}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
 
-    {/* ══════════ MOBILE: Cards ══════════ */}
-    <div className="md:hidden space-y-3">
-      {membros.map((membro) => (
-        <div
-          key={membro.id}
-          className="card p-4 border dark:border-gray-700 rounded-xl"
-        >
-          {/* Header: email + badges */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm truncate">{membro.email}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {formatarData(membro.created_at)}
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1 ml-2">
-              <span className={`badge text-xs ${membro.nivel === 'dono' ? 'badge-info' : 'badge-warning'}`}>
-                {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-              </span>
-              <span className={`badge text-xs ${getStatusBadge(membro.status)}`}>
-                {getStatusLabel(membro.status)}
-              </span>
-            </div>
-          </div>
+                  <div className="flex gap-2 mb-3">
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                      {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
+                    </span>
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(
+                        membro.status
+                      )}`}
+                    >
+                      {getStatusLabel(membro.status)}
+                    </span>
+                  </div>
 
-          {/* Ações */}
-          {membro.nivel !== 'dono' && (
-            <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700">
-              <button
-                onClick={() => toggleStatus(membro.id, membro.status)}
-                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
-                  membro.status === 'ativo'
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                }`}
-              >
-                {membro.status === 'ativo' ? '⏸ Desativar' : '▶ Ativar'}
-              </button>
-              <button
-                onClick={() => deleteMember(membro.id)}
-                className="py-2 px-4 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-              >
-                <Trash2 size={14} />
-              </button>
+                  {membro.nivel !== 'dono' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleStatus(membro.id, membro.status)}
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                          membro.status === 'ativo'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        }`}
+                      >
+                        {membro.status === 'ativo' ? '⏸ Desativar' : '▶ Ativar'}
+                      </button>
+                      <button
+                        onClick={() => deleteMember(membro.id)}
+                        className="py-2 px-4 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-      ))}
-    </div>
-  </>
-)}
-          </div>
+          </>
         )}
       </div>
     </div>
