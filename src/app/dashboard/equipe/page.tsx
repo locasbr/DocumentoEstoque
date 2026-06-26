@@ -2,9 +2,11 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
+import { usePlano } from '@/hooks/usePlano'
 import { formatarData } from '@/lib/utils'
 import {
   Plus,
@@ -14,6 +16,11 @@ import {
   UserPlus,
   KeyRound,
   Loader2,
+  Users,
+  Crown,
+  AlertTriangle,
+  Sparkles,
+  Zap,
 } from 'lucide-react'
 
 interface Membro {
@@ -28,6 +35,7 @@ interface Membro {
 
 export default function EquipePage() {
   const { membro: usuarioAtual, isDono, isLoading: loadingMembro } = useMembro()
+  const { tipoPlano, limites, isAdmin, loading: loadingPlano } = usePlano()
   const { addNotification } = useNotification()
 
   const [membros, setMembros] = useState<Membro[]>([])
@@ -41,6 +49,31 @@ export default function EquipePage() {
   const senhaBoxRef = useRef<HTMLDivElement>(null)
 
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
+
+  // ════════════════════════════════════════════════════
+  // 🔢 CÁLCULOS DE USO DO PLANO
+  // ════════════════════════════════════════════════════
+  // Conta apenas membros ativos + pendentes (inativos não contam)
+  const membrosContagem = membros.filter(
+    (m) => m.status === 'ativo' || m.status === 'pendente'
+  ).length
+  
+  // ✅ +1 pq o dono também conta no limite do plano
+  const usuariosUsados = membrosContagem + 1
+  const usuariosRestantes = Math.max(0, limites.usuarios - usuariosUsados)
+  const limiteAtingido = !isAdmin && usuariosUsados >= limites.usuarios
+  const percentualUso = isAdmin
+    ? 0
+    : Math.min(100, (usuariosUsados / limites.usuarios) * 100)
+  const quasePerto = !isAdmin && usuariosRestantes === 1 && !limiteAtingido
+
+  // Nome bonito do plano pra UI
+  const nomesPlanos: Record<string, string> = {
+    iniciante: 'Iniciante',
+    profissional: 'Profissional',
+    negocio: 'Negócio',
+  }
+  const nomePlano = nomesPlanos[tipoPlano] || 'Profissional'
 
   // ════════════════════════════════════════════════════
   // 📡 Buscar lista de membros
@@ -66,10 +99,12 @@ export default function EquipePage() {
 
   useEffect(() => {
     if (loadingMembro) return
+
     if (!isDono) {
       addNotification('Apenas donos podem acessar esta página', 'error')
       return
     }
+
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
@@ -86,6 +121,16 @@ export default function EquipePage() {
   // ════════════════════════════════════════════════════
   const handleInviteNewMember = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // 🔒 BLOQUEIO no frontend (defesa em camadas — backend tbm bloqueia)
+    if (limiteAtingido) {
+      addNotification(
+        `Limite de ${limites.usuarios} usuário(s) atingido. Faça upgrade!`,
+        'warning',
+        5000
+      )
+      return
+    }
 
     if (!newEmail.trim()) {
       addNotification('Email é obrigatório', 'warning')
@@ -111,7 +156,6 @@ export default function EquipePage() {
       }
 
       // ✅ Envia o token no header Authorization
-      // ❌ NÃO envia mais donoId no body!
       const response = await fetch('/api/equipe/convidar', {
         method: 'POST',
         headers: {
@@ -129,10 +173,19 @@ export default function EquipePage() {
         if (response.status === 401) {
           addNotification('Sessão expirada. Faça login novamente.', 'error')
         } else if (response.status === 403) {
-          addNotification(
-            data.error || 'Sem permissão pra essa ação',
-            'error'
-          )
+          // 🆕 Trata o erro de limite de plano com CTA pra upgrade
+          if (data.motivo === 'limite_plano') {
+            addNotification(
+              `⚠️ ${data.error}`,
+              'warning',
+              6000
+            )
+          } else {
+            addNotification(
+              data.error || 'Sem permissão pra essa ação',
+              'error'
+            )
+          }
         } else if (response.status === 409) {
           addNotification('Este funcionário já foi convidado', 'warning')
         } else {
@@ -177,6 +230,16 @@ export default function EquipePage() {
           : currentStatus === 'inativo'
           ? 'ativo'
           : 'ativo'
+
+      // 🔒 Se está tentando ATIVAR e já tá no limite → bloqueia
+      if (newStatus === 'ativo' && limiteAtingido) {
+        addNotification(
+          `Limite de ${limites.usuarios} usuário(s) ativos atingido. Desative outro ou faça upgrade.`,
+          'warning',
+          5000
+        )
+        return
+      }
 
       const { error } = await supabase
         .from('membros')
@@ -300,9 +363,9 @@ export default function EquipePage() {
   }
 
   // ════════════════════════════════════════════════════
-  // 🚫 BLOQUEIO: não autenticado ou não é dono
+  // 🚫 BLOQUEIO: loading
   // ════════════════════════════════════════════════════
-  if (loadingMembro) {
+  if (loadingMembro || loadingPlano) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
@@ -335,6 +398,168 @@ export default function EquipePage() {
         </p>
       </div>
 
+      {/* ══════════ 🆕 BANNER DE USO DO PLANO ══════════ */}
+      {!isAdmin && (
+        <div
+          className={`card p-5 border-2 ${
+            limiteAtingido
+              ? 'border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800'
+              : quasePerto
+                ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800'
+                : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800'
+          }`}
+        >
+          <div className="flex items-start gap-4 flex-wrap">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                limiteAtingido
+                  ? 'bg-red-100 dark:bg-red-900/30'
+                  : quasePerto
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-blue-100 dark:bg-blue-900/30'
+              }`}
+            >
+              <Users
+                className={`w-6 h-6 ${
+                  limiteAtingido
+                    ? 'text-red-600 dark:text-red-400'
+                    : quasePerto
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-blue-600 dark:text-blue-400'
+                }`}
+              />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <h3 className="font-bold text-gray-900 dark:text-white">
+                  Plano {nomePlano} — {usuariosUsados} de {limites.usuarios} usuário(s)
+                </h3>
+                {limiteAtingido && (
+                  <span className="text-xs font-bold px-2 py-0.5 bg-red-600 text-white rounded-full">
+                    LIMITE ATINGIDO
+                  </span>
+                )}
+                {quasePerto && (
+                  <span className="text-xs font-bold px-2 py-0.5 bg-amber-500 text-white rounded-full">
+                    ÚLTIMO SLOT
+                  </span>
+                )}
+              </div>
+
+              {/* Barra de progresso */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    limiteAtingido
+                      ? 'bg-red-500'
+                      : quasePerto
+                        ? 'bg-amber-500'
+                        : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${percentualUso}%` }}
+                />
+              </div>
+
+              <p
+                className={`text-sm ${
+                  limiteAtingido
+                    ? 'text-red-700 dark:text-red-300'
+                    : quasePerto
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {limiteAtingido ? (
+                  <>
+                    ⚠️ Você atingiu o limite do plano {nomePlano}. Faça upgrade
+                    pra adicionar mais funcionários.
+                  </>
+                ) : quasePerto ? (
+                  <>
+                    ⚡ Falta apenas 1 slot. Considere fazer upgrade pra crescer
+                    sem se preocupar.
+                  </>
+                ) : (
+                  <>
+                    Você ainda pode adicionar{' '}
+                    <strong>{usuariosRestantes} funcionário(s)</strong> nesse
+                    plano.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* Botão de upgrade */}
+            {(limiteAtingido || quasePerto) && tipoPlano !== 'negocio' && (
+              <Link
+                href="/assinar"
+                className={`flex items-center gap-2 px-4 py-2.5 text-white font-bold rounded-xl whitespace-nowrap transition shadow-lg ${
+                  tipoPlano === 'iniciante'
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-green-500/30'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-purple-500/30'
+                }`}
+              >
+                {tipoPlano === 'iniciante' ? (
+                  <>
+                    <Sparkles size={16} />
+                    Upgrade Profissional
+                  </>
+                ) : (
+                  <>
+                    <Crown size={16} />
+                    Upgrade Negócio
+                  </>
+                )}
+              </Link>
+            )}
+          </div>
+
+          {/* 🆕 Detalhes do que cada plano oferece (se atingiu limite) */}
+          {limiteAtingido && tipoPlano !== 'negocio' && (
+            <div className="mt-4 pt-4 border-t border-red-200 dark:border-red-800">
+              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
+                💡 Veja o que muda no upgrade:
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                {tipoPlano === 'iniciante' && (
+                  <>
+                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                      <Zap size={14} />
+                      <span>Profissional: até <strong>3 usuários</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                      <Crown size={14} />
+                      <span>Negócio: até <strong>10 usuários</strong></span>
+                    </div>
+                  </>
+                )}
+                {tipoPlano === 'profissional' && (
+                  <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                    <Crown size={14} />
+                    <span>
+                      Negócio: até <strong>10 usuários</strong> + IA completa
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🛡️ Badge de Admin (se for admin) */}
+      {isAdmin && (
+        <div className="card p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-300 dark:border-yellow-700">
+          <div className="flex items-center gap-3">
+            <Crown className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+              🛡️ Você é admin — sem limite de usuários
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Invite Form */}
       <div className="card">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -348,17 +573,44 @@ export default function EquipePage() {
               placeholder="Email do funcionário"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
-              className="input-field flex-1"
-              disabled={isInviting}
+              className="input-field flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isInviting || limiteAtingido}
             />
             <button
               type="submit"
-              disabled={isInviting}
-              className="btn-primary flex items-center gap-2 whitespace-nowrap"
+              disabled={isInviting || limiteAtingido}
+              className={`btn-primary flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+                limiteAtingido
+                  ? '!bg-gray-400 hover:!bg-gray-400'
+                  : ''
+              }`}
+              title={
+                limiteAtingido
+                  ? `Limite de ${limites.usuarios} usuário(s) atingido`
+                  : ''
+              }
             >
-              <Plus size={18} /> {isInviting ? 'Enviando...' : 'Convidar'}
+              {limiteAtingido ? (
+                <>
+                  <AlertTriangle size={18} />
+                  Limite atingido
+                </>
+              ) : (
+                <>
+                  <Plus size={18} />
+                  {isInviting ? 'Enviando...' : 'Convidar'}
+                </>
+              )}
             </button>
           </div>
+
+          {/* 🆕 Aviso pequeno embaixo do form quando bloqueado */}
+          {limiteAtingido && (
+            <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+              <AlertTriangle size={12} />
+              Faça upgrade do plano pra adicionar mais funcionários.
+            </p>
+          )}
 
           {generatedPassword && (
             <div
@@ -529,11 +781,19 @@ export default function EquipePage() {
                               onClick={() =>
                                 toggleStatus(membro.id, membro.status)
                               }
-                              className={`px-3 py-1 rounded text-xs font-medium transition ${
+                              disabled={
+                                membro.status === 'inativo' && limiteAtingido
+                              }
+                              className={`px-3 py-1 rounded text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed ${
                                 membro.status === 'ativo'
                                   ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
                                   : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
                               }`}
+                              title={
+                                membro.status === 'inativo' && limiteAtingido
+                                  ? 'Limite atingido — desative outro pra ativar este'
+                                  : ''
+                              }
                             >
                               {membro.status === 'ativo'
                                 ? 'Desativar'
@@ -572,6 +832,7 @@ export default function EquipePage() {
                       </div>
                     </div>
                   </div>
+
                   <div className="flex gap-2 mb-3">
                     <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                       {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
@@ -601,7 +862,10 @@ export default function EquipePage() {
                       </button>
                       <button
                         onClick={() => toggleStatus(membro.id, membro.status)}
-                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                        disabled={
+                          membro.status === 'inativo' && limiteAtingido
+                        }
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
                           membro.status === 'ativo'
                             ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
                             : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'

@@ -3,6 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 
+// ════════════════════════════════════════════════════
+// 🔒 LIMITES DE USUÁRIOS POR PLANO
+// (igual ao usePlano.ts pra manter consistência)
+// ════════════════════════════════════════════════════
+const LIMITES_USUARIOS: Record<string, number> = {
+  iniciante: 1,
+  profissional: 3,
+  negocio: 10,
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ════════════════════════════════════════════════════
@@ -96,11 +106,11 @@ export async function POST(req: NextRequest) {
     }
 
     // ════════════════════════════════════════════════════
-    // ✅ Verifica se o perfil do dono existe
+    // ✅ Verifica se o perfil do dono existe + pega plano
     // ════════════════════════════════════════════════════
     const { data: perfil } = await supabaseAdmin
       .from('perfis')
-      .select('id')
+      .select('id, tipo_plano, plano, is_admin')
       .eq('id', donoId)
       .single()
 
@@ -109,6 +119,45 @@ export async function POST(req: NextRequest) {
         { error: 'Perfil não encontrado' },
         { status: 404 }
       )
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🔒 NOVO: VERIFICA LIMITE DE USUÁRIOS POR PLANO
+    // ════════════════════════════════════════════════════
+    // Admin tem acesso ilimitado (pra testes)
+    if (!perfil.is_admin) {
+      const tipoPlano = perfil.tipo_plano || 'profissional'
+      const limite = LIMITES_USUARIOS[tipoPlano] || 1
+
+      // Conta quantos membros (ativos + pendentes) já existem
+      const { count: totalFuncionarios } = await supabaseAdmin
+        .from('membros')
+        .select('*', { count: 'exact', head: true })
+        .eq('dono_id', donoId)
+        .in('status', ['ativo', 'pendente'])
+
+      // ✅ +1 pq o dono também conta como usuário do plano
+      const totalAtual = (totalFuncionarios || 0) + 1
+
+      if (totalAtual >= limite) {
+        const nomesPlanos: Record<string, string> = {
+          iniciante: 'Iniciante',
+          profissional: 'Profissional',
+          negocio: 'Negócio',
+        }
+
+        return NextResponse.json(
+          {
+            error: `Limite de ${limite} usuário(s) atingido no plano ${nomesPlanos[tipoPlano] || tipoPlano}. Faça upgrade pra adicionar mais funcionários.`,
+            motivo: 'limite_plano',
+            limite,
+            atual: totalAtual,
+            tipo_plano: tipoPlano,
+            upgrade: true,
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // ════════════════════════════════════════════════════
@@ -130,7 +179,6 @@ export async function POST(req: NextRequest) {
 
     // ════════════════════════════════════════════════════
     // 🔐 Gera senha temporária SEGURA usando crypto
-    // (não usa mais Math.random())
     // ════════════════════════════════════════════════════
     const tempPassword = gerarSenhaSegura(12)
 
