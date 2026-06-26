@@ -807,7 +807,7 @@ export default function LandingPage() {
                     { texto: 'Leitor de código de barras', bold: false },
                     { texto: 'Alertas de estoque baixo', bold: false },
                     { texto: 'Relatórios básicos', bold: false },
-                    { texto: 'Suporte por email', bold: false },
+                    { texto: 'Suporte por WhatsApp', bold: false },
                   ].map(({ texto, bold }) => (
                     <li key={texto} className="flex items-start gap-2">
                       <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -898,6 +898,10 @@ export default function LandingPage() {
                       { texto: 'Até 10 usuários', bold: false, ia: false, soon: false },
                       { texto: 'IA pra cadastro automático', bold: true, ia: true, soon: false },
                       { texto: 'IA pra sugestão de preço', bold: true, ia: true, soon: false },
+                      { texto: 'IA pra análise mensal (incluída)', bold: false, ia: true, soon: false },
+                      { texto: 'Atendimento direto com o desenvolvedor', bold: true, ia: false, soon: false },
+                      { texto: 'Resposta em até 1h (horário comercial)', bold: false, ia: false, soon: false },
+                      { texto: 'Sugestões de features priorizadas', bold: false, ia: false, soon: false },
                       { texto: 'Catálogo público da loja', bold: false, ia: false, soon: true },
                       { texto: 'Suporte VIP por WhatsApp', bold: true, ia: false, soon: false },
                     ].map(({ texto, bold, ia, soon }) => (
