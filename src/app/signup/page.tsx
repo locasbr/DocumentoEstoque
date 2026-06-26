@@ -135,6 +135,7 @@ export default function Signup() {
         setSuccess('Conta criada com sucesso! Redirecionando...')
         setTimeout(() => {
           router.push('/dashboard')
+          
         }, 1500)
       }
     } catch (err) {
