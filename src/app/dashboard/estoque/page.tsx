@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { MovimentoEstoque, Produto } from '@/lib/types'
@@ -9,26 +9,114 @@ import {
   ArrowDown,
   ArrowUp,
   ShoppingCart,
-  TrendingUp,
   Download,
   AlertTriangle,
   Crown,
+  Search,
+  X,
+  Package,
+  DollarSign,
+  Calendar,
+  Filter,
+  Boxes,
+  ArrowRight,
+  PackageX,
+  Eye,
+  RotateCw,
 } from 'lucide-react'
-import { formatarData } from '@/lib/utils'
+import { formatarMoeda } from '@/lib/utils'
 import { useNotification } from '@/contexts/NotificationContext'
 import { exportMovimentosDiariosCSV } from '@/lib/export-utils'
 import { SkeletonTable } from '@/components/skeleton-loaders'
 import { usePlano } from '@/hooks/usePlano'
 
+type TipoFiltro = 'todos' | 'entrada' | 'saida'
+type PeriodoFiltro = 'hoje' | '7d' | '30d' | 'todos'
+
+// ════════════════════════════════════════════════════
+// 🎨 KPI CARD PRO
+// ════════════════════════════════════════════════════
+function KPICardPro({
+  label,
+  valor,
+  sublabel,
+  icon: Icon,
+  cor,
+  destaque,
+}: {
+  label: string
+  valor: string | number
+  sublabel?: string
+  icon: typeof Boxes
+  cor: 'green' | 'red' | 'yellow' | 'blue' | 'emerald'
+  destaque?: boolean
+}) {
+  const cores = {
+    green: {
+      bg: 'bg-green-100 dark:bg-green-900/30',
+      text: 'text-green-600 dark:text-green-400',
+      border: 'border-green-200 dark:border-green-800',
+    },
+    red: {
+      bg: 'bg-red-100 dark:bg-red-900/30',
+      text: 'text-red-600 dark:text-red-400',
+      border: 'border-red-200 dark:border-red-800',
+    },
+    yellow: {
+      bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+      text: 'text-yellow-600 dark:text-yellow-400',
+      border: 'border-yellow-200 dark:border-yellow-800',
+    },
+    blue: {
+      bg: 'bg-blue-100 dark:bg-blue-900/30',
+      text: 'text-blue-600 dark:text-blue-400',
+      border: 'border-blue-200 dark:border-blue-800',
+    },
+    emerald: {
+      bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      border: 'border-emerald-200 dark:border-emerald-800',
+    },
+  }
+  const c = cores[cor]
+
+  return (
+    <div
+      className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
+        destaque ? c.border : 'border-gray-200 dark:border-gray-800'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className={`w-9 h-9 rounded-lg ${c.bg} flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 ${c.text}`} />
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5 truncate">{label}</p>
+      <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white truncate">
+        {valor}
+      </p>
+      {sublabel && (
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">
+          {sublabel}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════
+// 🎯 PÁGINA PRINCIPAL
+// ════════════════════════════════════════════════════
 export default function EstoquePage() {
   const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
-  const [tipoFiltro, setTipoFiltro] = useState<'todos' | 'entrada' | 'saida'>('todos')
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
+  const [periodoFiltro, setPeriodoFiltro] = useState<PeriodoFiltro>('todos')
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [criticosVisivel, setCriticosVisivel] = useState(true)
   const { addNotification } = useNotification()
 
-  // 🔒 BLOQUEIO POR PLANO
   const { temExportarCSV } = usePlano()
 
   const fetchData = useCallback(async () => {
@@ -39,9 +127,7 @@ export default function EstoquePage() {
           .select('*, produtos(*)')
           .order('criado_em', { ascending: false })
           .limit(500),
-        supabase
-          .from('produtos')
-          .select('*'),
+        supabase.from('produtos').select('*'),
       ])
 
       if (!movimentosRes.error && movimentosRes.data) {
@@ -50,15 +136,6 @@ export default function EstoquePage() {
 
       if (!produtosRes.error && produtosRes.data) {
         setProdutos(produtosRes.data)
-        // Notificar sobre produtos com estoque crítico
-        const criticos = produtosRes.data.filter((p: Produto) => p.quantidade_atual === 0)
-        if (criticos.length > 0) {
-          addNotification(
-            `⚠️ ${criticos.length} produto(s) com ESTOQUE ZERADO!`,
-            'warning',
-            0
-          )
-        }
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -72,35 +149,130 @@ export default function EstoquePage() {
     fetchData()
   }, [fetchData])
 
-  // Calcular estatísticas do dia
-  const hoje = new Date().toDateString()
-  const movimentosHoje = movimentos.filter(
-    (m) => new Date(m.criado_em).toDateString() === hoje
-  )
-  const entradasHoje = movimentosHoje
-    .filter((m) => m.tipo_movimento === 'entrada')
-    .reduce((acc, m) => acc + m.quantidade, 0)
-  const saidasHoje = movimentosHoje
-    .filter((m) => m.tipo_movimento === 'saida')
-    .reduce((acc, m) => acc + m.quantidade, 0)
-  const produtosBaixoEstoque = produtos.filter(
-    (p) => p.quantidade_atual < p.quantidade_minima
-  )
-  const produtosCriticos = produtos.filter(p => p.quantidade_atual === 0)
-
-  const movimentosFiltrados = movimentos
-    .filter(
-      (m) =>
-        m.produto?.nome.toLowerCase().includes(filtro.toLowerCase()) ||
-        m.motivo?.toLowerCase().includes(filtro.toLowerCase())
+  // ────────────────────────────────────────────────
+  // 📊 ESTATÍSTICAS
+  // ────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const hoje = new Date().toDateString()
+    const movimentosHoje = movimentos.filter(
+      (m) => new Date(m.criado_em).toDateString() === hoje
     )
-    .filter((m) => {
-      if (tipoFiltro === 'todos') return true
-      return m.tipo_movimento === tipoFiltro
+
+    const entradasHoje = movimentosHoje
+      .filter((m) => m.tipo_movimento === 'entrada')
+      .reduce((acc, m) => acc + m.quantidade, 0)
+
+    const saidasHoje = movimentosHoje
+      .filter((m) => m.tipo_movimento === 'saida')
+      .reduce((acc, m) => acc + m.quantidade, 0)
+
+    // 🆕 Faturamento de saídas hoje (valor real!)
+    const faturamentoHoje = movimentosHoje
+      .filter((m) => m.tipo_movimento === 'saida')
+      .reduce(
+        (acc, m) => acc + m.quantidade * (m.produto?.preco_venda || 0),
+        0
+      )
+
+    const produtosBaixoEstoque = produtos.filter(
+      (p) => p.quantidade_atual < p.quantidade_minima && p.quantidade_atual > 0
+    )
+    const produtosCriticos = produtos.filter((p) => p.quantidade_atual === 0)
+
+    // 🆕 Valor total em estoque
+    const valorEstoque = produtos.reduce(
+      (acc, p) => acc + p.quantidade_atual * (p.preco_venda || 0),
+      0
+    )
+
+    return {
+      entradasHoje,
+      saidasHoje,
+      faturamentoHoje,
+      produtosBaixoEstoque,
+      produtosCriticos,
+      valorEstoque,
+      totalProdutos: produtos.length,
+    }
+  }, [movimentos, produtos])
+
+  // ────────────────────────────────────────────────
+  // 🔍 FILTROS APLICADOS
+  // ────────────────────────────────────────────────
+  const movimentosFiltrados = useMemo(() => {
+    let resultado = movimentos
+
+    // Filtro por período
+    if (periodoFiltro !== 'todos') {
+      const agora = new Date()
+      const dataLimite = new Date()
+      if (periodoFiltro === 'hoje') {
+        dataLimite.setHours(0, 0, 0, 0)
+      } else if (periodoFiltro === '7d') {
+        dataLimite.setDate(agora.getDate() - 7)
+      } else if (periodoFiltro === '30d') {
+        dataLimite.setDate(agora.getDate() - 30)
+      }
+      resultado = resultado.filter(
+        (m) => new Date(m.criado_em) >= dataLimite
+      )
+    }
+
+    // Filtro por tipo
+    if (tipoFiltro !== 'todos') {
+      resultado = resultado.filter((m) => m.tipo_movimento === tipoFiltro)
+    }
+
+    // Busca (nome OU sku OU motivo)
+    if (filtro.trim()) {
+      const termo = filtro.toLowerCase()
+      resultado = resultado.filter(
+        (m) =>
+          m.produto?.nome?.toLowerCase().includes(termo) ||
+          m.produto?.sku?.toLowerCase().includes(termo) ||
+          m.motivo?.toLowerCase().includes(termo)
+      )
+    }
+
+    return resultado
+  }, [movimentos, filtro, tipoFiltro, periodoFiltro])
+
+  // 🆕 Agrupa movimentos por data (visual estilo Linear/Notion)
+  const movimentosAgrupados = useMemo(() => {
+    const grupos: Record<string, MovimentoEstoque[]> = {}
+
+    movimentosFiltrados.forEach((m) => {
+      const data = new Date(m.criado_em)
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+      const ontem = new Date(hoje)
+      ontem.setDate(ontem.getDate() - 1)
+
+      let chave: string
+      if (data >= hoje) {
+        chave = 'Hoje'
+      } else if (data >= ontem) {
+        chave = 'Ontem'
+      } else {
+        chave = data.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: 'long',
+          year:
+            data.getFullYear() !== hoje.getFullYear() ? 'numeric' : undefined,
+        })
+      }
+
+      if (!grupos[chave]) grupos[chave] = []
+      grupos[chave].push(m)
     })
 
+    return grupos
+  }, [movimentosFiltrados])
+
+  // ────────────────────────────────────────────────
+  // 🎬 AÇÕES
+  // ────────────────────────────────────────────────
   const handleExportarMovimentos = () => {
-    // 🔒 Segurança extra contra burla via console
     if (!temExportarCSV) {
       addNotification(
         'Exportação CSV disponível no plano Profissional',
@@ -114,12 +286,18 @@ export default function EstoquePage() {
     const movimentosPorDia = [
       {
         data: dataStr,
-        entradas: entradasHoje,
-        saidas: saidasHoje,
-      }
+        entradas: stats.entradasHoje,
+        saidas: stats.saidasHoje,
+      },
     ]
     exportMovimentosDiariosCSV(movimentosPorDia, 'hoje')
-    addNotification('Movimentos exportados com sucesso!', 'success', 3000)
+    addNotification('Movimentos exportados!', 'success', 3000)
+  }
+
+  const handleAtualizar = () => {
+    setLoading(true)
+    fetchData()
+    addNotification('Dados atualizados ✓', 'success', 1500)
   }
 
   if (loading) {
@@ -128,216 +306,435 @@ export default function EstoquePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Estoque</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Gerenciar movimentação de produtos</p>
+      {/* ══════════ HEADER PRO ══════════ */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="hidden sm:flex w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
+            <Boxes className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+              Estoque
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Acompanhe entradas, saídas e movimentação em tempo real
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/estoque/movimento" className="btn-primary">
-            <Plus size={20} className="inline mr-2" />
-            <span className="hidden sm:inline">Novo</span> Movimento
-          </Link>
-          <Link href="/dashboard/pdv" className="btn-secondary">
-            <ShoppingCart size={20} className="inline mr-2" />
+
+        <div className="flex flex-wrap gap-2 items-center">
+          <button
+            onClick={handleAtualizar}
+            className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
+            title="Atualizar"
+          >
+            <RotateCw className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          </button>
+
+          <Link
+            href="/dashboard/pdv"
+            className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition text-sm"
+          >
+            <ShoppingCart className="w-4 h-4" />
             <span className="hidden sm:inline">PDV</span>
           </Link>
 
-          {/* 🔒 BLOQUEIO: Exportar só Profissional+ */}
           {temExportarCSV ? (
             <button
               onClick={handleExportarMovimentos}
-              className="btn-outline"
+              className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition text-sm"
             >
-              <Download size={20} className="inline mr-2" />
+              <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar</span>
             </button>
           ) : (
             <Link
               href="/assinar"
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg hover:shadow-green-500/30 transition font-medium"
+              className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/30 transition font-semibold text-sm"
               title="Disponível no plano Profissional"
             >
-              <Crown size={20} />
+              <Crown className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar PRO</span>
             </Link>
           )}
+
+          <Link
+            href="/dashboard/estoque/movimento"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold rounded-lg transition text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Novo</span>
+            Movimento
+          </Link>
         </div>
       </div>
 
-      {/* Alertas Críticos */}
-      {produtosCriticos.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg p-4 flex gap-3">
-          <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={24} />
-          <div>
-            <h3 className="font-bold text-red-900 dark:text-red-100">ATENÇÃO: Estoque Zerado!</h3>
-            <p className="text-sm text-red-800 dark:text-red-200 mt-1">
-              {produtosCriticos.map(p => p.nome).join(', ')}
-            </p>
+      {/* ══════════ ALERTA CRÍTICOS (DISMISSÍVEL) ══════════ */}
+      {stats.produtosCriticos.length > 0 && criticosVisivel && (
+        <div className="relative bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 animate-slideDown">
+          <div className="flex items-start gap-3 pr-8">
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/50 flex items-center justify-center flex-shrink-0">
+              <PackageX className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="font-bold text-red-900 dark:text-red-100">
+                  Estoque Zerado
+                </h3>
+                <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 text-xs font-bold rounded-full">
+                  {stats.produtosCriticos.length}{' '}
+                  {stats.produtosCriticos.length === 1 ? 'produto' : 'produtos'}
+                </span>
+              </div>
+              <p className="text-sm text-red-800 dark:text-red-200 mb-3 break-words">
+                {stats.produtosCriticos.slice(0, 5).map((p) => p.nome).join(', ')}
+                {stats.produtosCriticos.length > 5 &&
+                  ` e mais ${stats.produtosCriticos.length - 5}...`}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/dashboard/produtos"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-300 hover:underline"
+                >
+                  Ver produtos <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+            </div>
           </div>
+          <button
+            onClick={() => setCriticosVisivel(false)}
+            className="absolute top-3 right-3 text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">Entradas Hoje</p>
-              <p className="text-2xl md:text-3xl font-bold text-green-600 dark:text-green-400">{entradasHoje}</p>
-            </div>
-            <ArrowDown className="text-green-400 dark:text-green-500 flex-shrink-0" size={24} />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">Saídas Hoje</p>
-              <p className="text-2xl md:text-3xl font-bold text-red-600 dark:text-red-400">{saidasHoje}</p>
-            </div>
-            <ArrowUp className="text-red-400 dark:text-red-500 flex-shrink-0" size={24} />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">Baixo Estoque</p>
-              <p className="text-2xl md:text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                {produtosBaixoEstoque.length}
-              </p>
-            </div>
-            <TrendingUp className="text-yellow-400 dark:text-yellow-500 flex-shrink-0" size={24} />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">Total Produtos</p>
-              <p className="text-2xl md:text-3xl font-bold text-blue-600 dark:text-blue-400">{produtos.length}</p>
-            </div>
-            <ShoppingCart className="text-blue-400 dark:text-blue-500 flex-shrink-0" size={24} />
-          </div>
-        </div>
+      {/* ══════════ KPIs ══════════ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KPICardPro
+          label="Faturamento hoje"
+          valor={formatarMoeda(stats.faturamentoHoje)}
+          icon={DollarSign}
+          cor="emerald"
+          destaque={stats.faturamentoHoje > 0}
+        />
+        <KPICardPro
+          label="Entradas hoje"
+          valor={stats.entradasHoje}
+          sublabel="unidades"
+          icon={ArrowDown}
+          cor="green"
+        />
+        <KPICardPro
+          label="Saídas hoje"
+          valor={stats.saidasHoje}
+          sublabel="unidades"
+          icon={ArrowUp}
+          cor="red"
+        />
+        <KPICardPro
+          label="Valor em estoque"
+          valor={formatarMoeda(stats.valorEstoque)}
+          icon={Package}
+          cor="blue"
+        />
+        <KPICardPro
+          label="Baixo estoque"
+          valor={stats.produtosBaixoEstoque.length}
+          icon={AlertTriangle}
+          cor="yellow"
+          destaque={stats.produtosBaixoEstoque.length > 0}
+        />
+        <KPICardPro
+          label="Total produtos"
+          valor={stats.totalProdutos}
+          icon={Boxes}
+          cor="blue"
+        />
       </div>
 
-      {/* Alertas de Produtos Baixo Estoque */}
-      {produtosBaixoEstoque.length > 0 && produtosBaixoEstoque.length !== produtosCriticos.length && (
-        <div className="card bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-800">
-          <div className="flex items-start gap-3">
-            <div className="text-2xl flex-shrink-0">⚠️</div>
-            <div className="flex-1">
-              <h3 className="font-bold text-yellow-900 dark:text-yellow-100">Produtos com Baixo Estoque</h3>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1 break-words">
-                {produtosBaixoEstoque.map((p) => p.nome).join(', ')}
-              </p>
-            </div>
-          </div>
+      {/* ══════════ AVISO BAIXO ESTOQUE (mais discreto) ══════════ */}
+      {stats.produtosBaixoEstoque.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 flex items-center gap-3">
+          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+          <p className="text-sm text-yellow-800 dark:text-yellow-200 flex-1 min-w-0 truncate">
+            <strong>{stats.produtosBaixoEstoque.length}</strong> produto(s) com baixo
+            estoque:{' '}
+            <span className="text-yellow-700 dark:text-yellow-300">
+              {stats.produtosBaixoEstoque.slice(0, 3).map((p) => p.nome).join(', ')}
+              {stats.produtosBaixoEstoque.length > 3 && '...'}
+            </span>
+          </p>
+          <Link
+            href="/dashboard/alertas"
+            className="text-xs font-semibold text-yellow-700 dark:text-yellow-300 hover:underline whitespace-nowrap flex items-center gap-1"
+          >
+            Ver alertas <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
       )}
 
-      {/* Filtros e Lista de Movimentos */}
-      <div className="card">
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">Histórico de Movimentos</h2>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-3">
+      {/* ══════════ TOOLBAR DE FILTROS ══════════ */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Busca */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por produto ou motivo..."
+              placeholder="Buscar por produto, SKU ou motivo..."
               value={filtro}
               onChange={(e) => setFiltro(e.target.value)}
-              className="input-field flex-1"
+              className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             />
-            <div className="flex gap-2 flex-wrap md:flex-nowrap">
-              {(['todos', 'entrada', 'saida'] as const).map((tipo) => (
-                <button
-                  key={tipo}
-                  onClick={() => setTipoFiltro(tipo)}
-                  className={`px-3 md:px-4 py-2 rounded font-medium transition whitespace-nowrap text-sm md:text-base ${
-                    tipoFiltro === tipo
-                      ? tipo === 'entrada'
-                        ? 'bg-green-600 dark:bg-green-700 text-white'
-                        : tipo === 'saida'
-                        ? 'bg-red-600 dark:bg-red-700 text-white'
-                        : 'bg-blue-600 dark:bg-blue-700 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  {tipo === 'todos' ? 'Todos' : tipo === 'entrada' ? 'Entradas' : 'Saídas'}
-                </button>
-              ))}
-            </div>
+            {filtro && (
+              <button
+                onClick={() => setFiltro('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
-          {movimentosFiltrados.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-              Nenhum movimento encontrado
+          {/* Filtro de período */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+            {[
+              { id: 'hoje' as const, label: 'Hoje' },
+              { id: '7d' as const, label: '7 dias' },
+              { id: '30d' as const, label: '30 dias' },
+              { id: 'todos' as const, label: 'Todos' },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setPeriodoFiltro(id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition ${
+                  periodoFiltro === id
+                    ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Filtro de tipo */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+            {(
+              [
+                { id: 'todos' as const, label: 'Todos', cor: 'gray' },
+                { id: 'entrada' as const, label: 'Entradas', cor: 'green' },
+                { id: 'saida' as const, label: 'Saídas', cor: 'red' },
+              ] as const
+            ).map(({ id, label, cor }) => (
+              <button
+                key={id}
+                onClick={() => setTipoFiltro(id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition flex items-center gap-1 ${
+                  tipoFiltro === id
+                    ? cor === 'green'
+                      ? 'bg-green-600 text-white shadow-sm'
+                      : cor === 'red'
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {id === 'entrada' && <ArrowDown className="w-3 h-3" />}
+                {id === 'saida' && <ArrowUp className="w-3 h-3" />}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Contador de resultados */}
+        {(filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos') && (
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <Filter className="w-3 h-3 text-gray-400" />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {movimentosFiltrados.length} resultado(s)
+            </span>
+            <button
+              onClick={() => {
+                setFiltro('')
+                setTipoFiltro('todos')
+                setPeriodoFiltro('todos')
+              }}
+              className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline ml-auto"
+            >
+              Limpar filtros
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ══════════ LISTA AGRUPADA ══════════ */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <h2 className="font-bold text-gray-900 dark:text-white text-sm">
+              Histórico de Movimentos
+            </h2>
+            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full font-semibold">
+              {movimentosFiltrados.length}
+            </span>
+          </div>
+        </div>
+
+        {movimentosFiltrados.length === 0 ? (
+          <div className="text-center py-16 px-4">
+            <div className="inline-flex w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 items-center justify-center mb-4">
+              <Boxes className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="font-bold text-gray-900 dark:text-white mb-1">
+              {filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos'
+                ? 'Nenhum movimento encontrado'
+                : 'Nenhum movimento ainda'}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-4">
+              {filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos'
+                ? 'Tente ajustar os filtros pra ver mais resultados.'
+                : 'Registre uma entrada ou faça uma venda no PDV pra começar.'}
             </p>
-          ) : (
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
-              {movimentosFiltrados.map((movimento) => (
-                <div
-                  key={movimento.id}
-                  className={`p-3 md:p-4 rounded-lg border-l-4 transition ${
-                    movimento.tipo_movimento === 'entrada'
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-500 dark:border-green-700'
-                      : 'bg-red-50 dark:bg-red-900/20 border-red-500 dark:border-red-700'
-                  }`}
-                >
-                  <div className="flex items-start md:items-center justify-between gap-2 md:gap-4 flex-col md:flex-row">
-                    <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-                      <div
-                        className={`p-2 rounded-lg flex-shrink-0 ${
-                          movimento.tipo_movimento === 'entrada'
-                            ? 'bg-green-200 dark:bg-green-800'
-                            : 'bg-red-200 dark:bg-red-800'
-                        }`}
-                      >
-                        {movimento.tipo_movimento === 'entrada' ? (
-                          <ArrowDown
-                            className="text-green-700 dark:text-green-300"
-                            size={18}
-                          />
-                        ) : (
-                          <ArrowUp className="text-red-700 dark:text-red-300" size={18} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 dark:text-gray-50 truncate">
-                          {movimento.produto?.nome}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                          {movimento.motivo || 'Sem motivo'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`font-bold text-lg ${
-                        movimento.tipo_movimento === 'entrada'
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {movimento.tipo_movimento === 'entrada'
-                          ? '+' + movimento.quantidade
-                          : '-' + movimento.quantidade}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        {formatarData(movimento.criado_em)}
-                      </p>
-                    </div>
+            {!filtro && tipoFiltro === 'todos' && periodoFiltro === 'todos' && (
+              <Link
+                href="/dashboard/estoque/movimento"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition"
+              >
+                <Plus className="w-4 h-4" />
+                Registrar primeiro movimento
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="max-h-[600px] overflow-y-auto">
+            {Object.entries(movimentosAgrupados).map(([data, movs]) => (
+              <div key={data}>
+                {/* Header do grupo */}
+                <div className="sticky top-0 z-10 px-5 py-2 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      {data}
+                    </h3>
+                    <span className="text-xs text-gray-400">
+                      {movs.length} movimento{movs.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+
+                {/* Movimentos do grupo */}
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {movs.map((movimento) => {
+                    const isEntrada = movimento.tipo_movimento === 'entrada'
+                    const valor =
+                      movimento.quantidade *
+                      (movimento.produto?.preco_venda || 0)
+
+                    return (
+                      <div
+                        key={movimento.id}
+                        className="group flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                      >
+                        {/* Ícone */}
+                        <div
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                            isEntrada
+                              ? 'bg-green-100 dark:bg-green-900/30'
+                              : 'bg-red-100 dark:bg-red-900/30'
+                          }`}
+                        >
+                          {isEntrada ? (
+                            <ArrowDown className="w-4 h-4 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <ArrowUp className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          )}
+                        </div>
+
+                        {/* Info do produto */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
+                              {movimento.produto?.nome || 'Produto removido'}
+                            </p>
+                            {movimento.produto?.sku && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded font-mono">
+                                {movimento.produto.sku}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                            {movimento.motivo || (
+                              <span className="italic">Sem motivo informado</span>
+                            )}{' '}
+                            ·{' '}
+                            {new Date(movimento.criado_em).toLocaleTimeString(
+                              'pt-BR',
+                              {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }
+                            )}
+                          </p>
+                        </div>
+
+                        {/* Quantidade + valor */}
+                        <div className="text-right flex-shrink-0">
+                          <p
+                            className={`font-bold text-base ${
+                              isEntrada
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}
+                          >
+                            {isEntrada ? '+' : '-'}
+                            {movimento.quantidade}
+                          </p>
+                          {!isEntrada && valor > 0 && (
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                              {formatarMoeda(valor)}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Ação rápida */}
+{movimento.produto?.id && (
+  <Link
+    href={`/dashboard/produtos/${movimento.produto.id}`}
+    className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition"
+    title="Ver produto"
+  >
+    <Eye className="w-3.5 h-3.5" />
+  </Link>
+)}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <style jsx>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+      `}</style>
     </div>
   )
 }

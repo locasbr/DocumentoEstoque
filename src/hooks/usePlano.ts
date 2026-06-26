@@ -35,18 +35,18 @@ const LIMITES: Record<TipoPlano, LimitesPlano> = {
     temIAAnaliseMensal: false,
   },
   profissional: {
-    produtos: 999999,
-    usuarios: 3,
-    temFiado: true,
-    temValidade: true,
-    temRelatoriosAvancados: true,
-    temExportarCSV: true,
-    temCupomWhatsApp: true,
-    temIA: false,
-    temIACadastroAutomatico: false,
-    temIASugestaoPreco: false,
-    temIAAnaliseMensal: false,
-  },
+  produtos: 999999,
+  usuarios: 3,
+  temFiado: true,
+  temValidade: true,
+  temRelatoriosAvancados: true,
+  temExportarCSV: true,
+  temCupomWhatsApp: true,
+  temIA: true,                       // ✅ Liga IA básica
+  temIACadastroAutomatico: false,    // Mantém bloqueado (só Negócio)
+  temIASugestaoPreco: false,         // Mantém bloqueado (só Negócio)
+  temIAAnaliseMensal: true,          // ✅ Libera análise mensal
+},
   negocio: {
     produtos: 999999,
     usuarios: 10,

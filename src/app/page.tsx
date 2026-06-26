@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   Package, BarChart3, ShoppingCart, AlertCircle, Users, QrCode,
   CheckCircle, ArrowRight, XCircle, Smartphone, Menu, X, Calendar,
@@ -577,7 +576,21 @@ export default function LandingPage() {
                     <span className="text-xs text-gray-400 bg-gray-700/50 px-3 py-1 rounded">estoquesystem.com.br/dashboard</span>
                   </div>
                 </div>
-                <Image src={`/demo-${demoAtiva}.png`} alt={`Demo ${demoAtiva}`} width={1200} height={700} className="w-full" priority />
+                
+                  <video
+                    key={demoAtiva}
+                    src={`/videos/demo-${demoAtiva}.mp4`}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="w-full block"
+                    aria-label={`Demo ${demoAtiva}`}
+                  >
+                    Seu navegador não suporta vídeo HTML5.
+                  </video>
+
               </div>
             </div>
           </FadeInSection>
@@ -883,7 +896,6 @@ export default function LandingPage() {
                     {[
                       { texto: 'Tudo do Profissional', bold: true, ia: false, soon: false },
                       { texto: 'Até 10 usuários', bold: false, ia: false, soon: false },
-                      { texto: 'Histórico estendido (24 meses)', bold: false, ia: false, soon: false },
                       { texto: 'IA pra cadastro automático', bold: true, ia: true, soon: false },
                       { texto: 'IA pra sugestão de preço', bold: true, ia: true, soon: false },
                       { texto: 'Catálogo público da loja', bold: false, ia: false, soon: true },

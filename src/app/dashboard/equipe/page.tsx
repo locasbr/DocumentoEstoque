@@ -1,10 +1,20 @@
+// src/app/dashboard/equipe/page.tsx
 'use client'
+
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
 import { formatarData } from '@/lib/utils'
-import { Plus, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
+import {
+  Plus,
+  Eye,
+  EyeOff,
+  Trash2,
+  UserPlus,
+  KeyRound,
+  Loader2,
+} from 'lucide-react'
 
 interface Membro {
   id: string
@@ -26,11 +36,15 @@ export default function EquipePage() {
   const [isInviting, setIsInviting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState('')
-const senhaBoxRef = useRef<HTMLDivElement>(null)
+  const [resetandoSenhaId, setResetandoSenhaId] = useState<string | null>(null)
+
+  const senhaBoxRef = useRef<HTMLDivElement>(null)
 
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
 
-  // Buscar lista de membros
+  // ════════════════════════════════════════════════════
+  // 📡 Buscar lista de membros
+  // ════════════════════════════════════════════════════
   const fetchMembros = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -52,15 +66,24 @@ const senhaBoxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (loadingMembro) return
-
     if (!isDono) {
       addNotification('Apenas donos podem acessar esta página', 'error')
       return
     }
-
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
+  // ════════════════════════════════════════════════════
+  // ✅ Validação de email com regex
+  // ════════════════════════════════════════════════════
+  const validarEmail = (email: string): boolean => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return regex.test(email)
+  }
+
+  // ════════════════════════════════════════════════════
+  // 🆕 Convidar funcionário (com JWT no header)
+  // ════════════════════════════════════════════════════
   const handleInviteNewMember = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -69,7 +92,7 @@ const senhaBoxRef = useRef<HTMLDivElement>(null)
       return
     }
 
-    if (!newEmail.includes('@')) {
+    if (!validarEmail(newEmail)) {
       addNotification('Email inválido', 'warning')
       return
     }
@@ -77,20 +100,40 @@ const senhaBoxRef = useRef<HTMLDivElement>(null)
     try {
       setIsInviting(true)
 
-      // Chama a API Route (servidor) — NÃO afeta a sessão do dono
+      // 🔒 SEGURANÇA: Pega o token JWT da sessão
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addNotification('Sessão expirada. Faça login novamente.', 'error')
+        return
+      }
+
+      // ✅ Envia o token no header Authorization
+      // ❌ NÃO envia mais donoId no body!
       const response = await fetch('/api/equipe/convidar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           email: newEmail,
-          donoId: donoId,
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        if (response.status === 409) {
+        if (response.status === 401) {
+          addNotification('Sessão expirada. Faça login novamente.', 'error')
+        } else if (response.status === 403) {
+          addNotification(
+            data.error || 'Sem permissão pra essa ação',
+            'error'
+          )
+        } else if (response.status === 409) {
           addNotification('Este funcionário já foi convidado', 'warning')
         } else {
           addNotification(data.error || 'Erro ao convidar', 'error')
@@ -98,23 +141,23 @@ const senhaBoxRef = useRef<HTMLDivElement>(null)
         return
       }
 
-     // Sucesso!
-setGeneratedPassword(data.tempPassword)
-addNotification(
-  '✅ Funcionário convidado! Copie a senha abaixo.',
-  'success',
-  8000 // 8 segundos pra dar tempo de ler
-)
-setNewEmail('')
-fetchMembros()
+      // ✅ Sucesso!
+      setGeneratedPassword(data.tempPassword)
+      addNotification(
+        '✅ Funcionário convidado! Copie a senha abaixo.',
+        'success',
+        8000
+      )
+      setNewEmail('')
+      fetchMembros()
 
-// 🔒 Scroll suave pro box da senha (UX melhor)
-setTimeout(() => {
-  senhaBoxRef.current?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center',
-  })
-}, 100)
+      // 🔒 Scroll suave pro box da senha
+      setTimeout(() => {
+        senhaBoxRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }, 100)
     } catch (error) {
       console.error('Erro ao convidar funcionário:', error)
       addNotification('Erro ao convidar funcionário', 'error')
@@ -123,6 +166,9 @@ setTimeout(() => {
     }
   }
 
+  // ════════════════════════════════════════════════════
+  // 🔄 Alternar status (ativo/inativo)
+  // ════════════════════════════════════════════════════
   const toggleStatus = async (memberId: string, currentStatus: string) => {
     try {
       const newStatus =
@@ -150,11 +196,17 @@ setTimeout(() => {
     }
   }
 
+  // ════════════════════════════════════════════════════
+  // 🗑️ Remover funcionário
+  // ════════════════════════════════════════════════════
   const deleteMember = async (memberId: string) => {
     if (!confirm('Tem certeza que deseja remover este funcionário?')) return
 
     try {
-      const { error } = await supabase.from('membros').delete().eq('id', memberId)
+      const { error } = await supabase
+        .from('membros')
+        .delete()
+        .eq('id', memberId)
 
       if (error) throw error
 
@@ -166,6 +218,69 @@ setTimeout(() => {
     }
   }
 
+  // ════════════════════════════════════════════════════
+  // 🆕 RESETAR SENHA do funcionário
+  // ════════════════════════════════════════════════════
+  const resetarSenha = async (memberId: string, email: string) => {
+    if (
+      !confirm(
+        `Gerar nova senha temporária pra ${email}? A senha antiga deixará de funcionar.`
+      )
+    )
+      return
+
+    try {
+      setResetandoSenhaId(memberId)
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addNotification('Sessão expirada', 'error')
+        return
+      }
+
+      const response = await fetch('/api/equipe/resetar-senha', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ memberId }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        addNotification(data.error || 'Erro ao resetar senha', 'error')
+        return
+      }
+
+      setGeneratedPassword(data.tempPassword)
+      addNotification(
+        '🔑 Nova senha gerada! Copie e envie ao funcionário.',
+        'success',
+        8000
+      )
+
+      setTimeout(() => {
+        senhaBoxRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }, 100)
+    } catch (error) {
+      console.error('Erro ao resetar senha:', error)
+      addNotification('Erro ao resetar senha', 'error')
+    } finally {
+      setResetandoSenhaId(null)
+    }
+  }
+
+  // ════════════════════════════════════════════════════
+  // 🎨 Helpers de estilo
+  // ════════════════════════════════════════════════════
   const getStatusBadge = (status: string) => {
     const badges = {
       ativo: 'badge-success',
@@ -184,6 +299,9 @@ setTimeout(() => {
     return labels[status as keyof typeof labels] || status
   }
 
+  // ════════════════════════════════════════════════════
+  // 🚫 BLOQUEIO: não autenticado ou não é dono
+  // ════════════════════════════════════════════════════
   if (loadingMembro) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -202,6 +320,9 @@ setTimeout(() => {
     )
   }
 
+  // ════════════════════════════════════════════════════
+  // 🎨 RENDER
+  // ════════════════════════════════════════════════════
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -240,84 +361,87 @@ setTimeout(() => {
           </div>
 
           {generatedPassword && (
-  <div
-    ref={senhaBoxRef}
-    className="relative p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl shadow-lg animate-pulse-once"
-  >
-    {/* Header de atenção */}
-    <div className="flex items-start gap-3 mb-4">
-      <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-        <span className="text-xl">🔑</span>
-      </div>
-      <div className="flex-1">
-        <p className="font-bold text-amber-900 dark:text-amber-100 text-base">
-          Senha temporária gerada
-        </p>
-        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-          Copie agora — esta senha não será mostrada novamente!
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => setGeneratedPassword('')}
-        className="text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 text-sm font-medium"
-        title="Já copiei, fechar"
-      >
-        ✕
-      </button>
-    </div>
+            <div
+              ref={senhaBoxRef}
+              className="relative p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl shadow-lg animate-pulse-once"
+            >
+              {/* Header de atenção */}
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <span className="text-xl">🔑</span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-amber-900 dark:text-amber-100 text-base">
+                    Senha temporária gerada
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    Copie agora — esta senha não será mostrada novamente!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGeneratedPassword('')}
+                  className="text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 text-sm font-medium"
+                  title="Já copiei, fechar"
+                >
+                  ✕
+                </button>
+              </div>
 
-    {/* Input da senha + ações */}
-    <div className="flex items-center gap-2 mb-3">
-      <input
-        type={showPassword ? 'text' : 'password'}
-        value={generatedPassword}
-        readOnly
-        className="input-field flex-1 font-mono text-base font-bold tracking-wider bg-white dark:bg-gray-900 border-amber-300 dark:border-amber-700"
-      />
-      <button
-        type="button"
-        onClick={() => setShowPassword(!showPassword)}
-        className="p-2.5 bg-white dark:bg-gray-900 hover:bg-amber-100 dark:hover:bg-amber-800 rounded transition border border-amber-200 dark:border-amber-700"
-        title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-      >
-        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard.writeText(generatedPassword)
-          addNotification('✅ Senha copiada!', 'success', 2000)
-        }}
-        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg hover:shadow-amber-500/30 text-white font-bold rounded transition text-sm whitespace-nowrap"
-      >
-        📋 Copiar
-      </button>
-    </div>
+              {/* Input da senha + ações */}
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={generatedPassword}
+                  readOnly
+                  className="input-field flex-1 font-mono text-base font-bold tracking-wider bg-white dark:bg-gray-900 border-amber-300 dark:border-amber-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="p-2.5 bg-white dark:bg-gray-900 hover:bg-amber-100 dark:hover:bg-amber-800 rounded transition border border-amber-200 dark:border-amber-700"
+                  title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedPassword)
+                    addNotification('✅ Senha copiada!', 'success', 2000)
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg hover:shadow-amber-500/30 text-white font-bold rounded transition text-sm whitespace-nowrap"
+                >
+                  📋 Copiar
+                </button>
+              </div>
 
-    {/* Avisos importantes */}
-    <div className="space-y-1.5">
-      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-        <span>⚠️</span>
-        <span>
-          <strong>Compartilhe pelo WhatsApp ou pessoalmente</strong> — nunca por email
-        </span>
-      </div>
-      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-        <span>🔒</span>
-        <span>
-          O funcionário deve <strong>alterar essa senha no primeiro login</strong>
-        </span>
-      </div>
-      <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-        <span>⏱️</span>
-        <span>
-          Esta senha <strong>não será exibida novamente</strong> — copie agora
-        </span>
-      </div>
-    </div>
-  </div>
-)}
+              {/* Avisos importantes */}
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+                  <span>⚠️</span>
+                  <span>
+                    <strong>Compartilhe pelo WhatsApp ou pessoalmente</strong>{' '}
+                    — nunca por email
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+                  <span>🔒</span>
+                  <span>
+                    O funcionário deve{' '}
+                    <strong>alterar essa senha no primeiro login</strong>
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+                  <span>⏱️</span>
+                  <span>
+                    Esta senha <strong>não será exibida novamente</strong> —
+                    copie agora
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </div>
 
@@ -388,6 +512,21 @@ setTimeout(() => {
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={() =>
+                                resetarSenha(membro.id, membro.email)
+                              }
+                              disabled={resetandoSenhaId === membro.id}
+                              className="px-3 py-1 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 disabled:opacity-50 transition flex items-center gap-1"
+                              title="Resetar senha"
+                            >
+                              {resetandoSenhaId === membro.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <KeyRound className="w-3.5 h-3.5" />
+                              )}
+                              Senha
+                            </button>
+                            <button
+                              onClick={() =>
                                 toggleStatus(membro.id, membro.status)
                               }
                               className={`px-3 py-1 rounded text-xs font-medium transition ${
@@ -433,7 +572,6 @@ setTimeout(() => {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex gap-2 mb-3">
                     <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                       {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
@@ -448,7 +586,19 @@ setTimeout(() => {
                   </div>
 
                   {membro.nivel !== 'dono' && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => resetarSenha(membro.id, membro.email)}
+                        disabled={resetandoSenhaId === membro.id}
+                        className="flex-1 py-2 rounded-lg text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        {resetandoSenhaId === membro.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <KeyRound className="w-3.5 h-3.5" />
+                        )}
+                        Resetar
+                      </button>
                       <button
                         onClick={() => toggleStatus(membro.id, membro.status)}
                         className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${

@@ -34,6 +34,11 @@ import {
   Volume2,
   VolumeX,
   Tag,
+  CheckCircle2,
+  ArrowRight,
+  Maximize2,
+  Minimize2,
+  Star,
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
@@ -75,21 +80,33 @@ export default function PDVPage() {
   const [error, setError] = useState('')
   const [processando, setProcessando] = useState(false)
 
-  // 🆕 Stats do dia
   const [statsDia, setStatsDia] = useState<StatsDia>({
     totalVendas: 0,
     faturamento: 0,
     ticketMedio: 0,
   })
 
-  // 🆕 Vendas recentes (últimas 3)
   const [vendasRecentes, setVendasRecentes] = useState<VendaRecente[]>([])
 
-  // 🆕 Modal de atalhos
-  const [mostrarAtalhos, setMostrarAtalhos] = useState(false)
+  // 🆕 Top vendidos do dia
+  const [topVendidos, setTopVendidos] = useState<Produto[]>([])
 
-  // 🆕 Som
+  const [mostrarAtalhos, setMostrarAtalhos] = useState(false)
   const [somAtivo, setSomAtivo] = useState(true)
+
+  // 🆕 Fullscreen
+  const [fullscreen, setFullscreen] = useState(false)
+
+  // 🆕 Animação +1 ao adicionar
+  const [animacaoAdd, setAnimacaoAdd] = useState<{ id: string; key: number } | null>(null)
+
+  // 🆕 Tela de sucesso GIGANTE pós-venda
+  const [telaSucesso, setTelaSucesso] = useState<{
+    total: number
+    recebido: number
+    troco: number
+    formaPagamento: string
+  } | null>(null)
 
   // Pagamento
   const [modalPagamento, setModalPagamento] = useState(false)
@@ -103,10 +120,8 @@ export default function PDVPage() {
   const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
   const [skuParaCadastro, setSkuParaCadastro] = useState('')
 
-  // USB Scanner
   const [usbDetectado, setUsbDetectado] = useState(false)
 
-  // Estado do cadastro rápido
   const [cadastroNome, setCadastroNome] = useState('')
   const [cadastroMarca, setCadastroMarca] = useState('')
   const [cadastroDescricao, setCadastroDescricao] = useState('')
@@ -156,7 +171,7 @@ export default function PDVPage() {
       oscillator.start(ctx.currentTime)
       oscillator.stop(ctx.currentTime + 0.1)
     } catch {
-      // Falha silenciosa se navegador não suportar
+      // Falha silenciosa
     }
   }, [somAtivo])
 
@@ -172,12 +187,36 @@ export default function PDVPage() {
   }
 
   // ══════════════════════════════════════════════════
-  // FETCH PRODUTOS
+  // 🆕 FULLSCREEN
+  // ══════════════════════════════════════════════════
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+      setFullscreen(true)
+    } else {
+      document.exitFullscreen()
+      setFullscreen(false)
+    }
+  }
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  // ══════════════════════════════════════════════════
+  // FETCH PRODUTOS + STATS + TOP VENDIDOS
   // ══════════════════════════════════════════════════
 
   useEffect(() => {
     fetchProdutos()
     fetchStatsDia()
+    fetchTopVendidos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -199,7 +238,6 @@ export default function PDVPage() {
     }
   }
 
-  // 🆕 Busca stats do dia
   const fetchStatsDia = async () => {
     try {
       const hoje = new Date()
@@ -219,7 +257,6 @@ export default function PDVPage() {
           const precoVenda = v.produto?.preco_venda || 0
           faturamento += v.quantidade * precoVenda
 
-          // Conta vendas únicas pelo motivo (que é a numero_venda)
           if (v.motivo?.startsWith('PDV')) {
             motivosVendas.add(v.motivo)
           }
@@ -235,6 +272,41 @@ export default function PDVPage() {
     }
   }
 
+  // 🆕 Top 6 produtos mais vendidos hoje
+  const fetchTopVendidos = async () => {
+    try {
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+
+      const { data } = await supabase
+        .from('movimentos_estoque')
+        .select('produto_id, quantidade, produto:produto_id(*)')
+        .eq('tipo_movimento', 'saida')
+        .gte('criado_em', hoje.toISOString())
+
+      if (data) {
+        const contagem: Record<string, { produto: Produto; qtd: number }> = {}
+        data.forEach((m: any) => {
+          if (!m.produto) return
+          if (!contagem[m.produto_id]) {
+            contagem[m.produto_id] = { produto: m.produto, qtd: 0 }
+          }
+          contagem[m.produto_id].qtd += m.quantidade
+        })
+
+        const top = Object.values(contagem)
+          .sort((a, b) => b.qtd - a.qtd)
+          .slice(0, 6)
+          .map((c) => c.produto)
+          .filter((p) => p.quantidade_atual > 0)
+
+        setTopVendidos(top)
+      }
+    } catch (err) {
+      console.error('Erro top vendidos:', err)
+    }
+  }
+
   // ══════════════════════════════════════════════════
   // CARRINHO
   // ══════════════════════════════════════════════════
@@ -242,6 +314,9 @@ export default function PDVPage() {
   const adicionarAoCarrinho = useCallback(
     (produto: Produto) => {
       tocarBipe()
+      // 🆕 Trigger animação +1
+      setAnimacaoAdd({ id: produto.id, key: Date.now() })
+
       setCarrinho((prev) => {
         const itemExistente = prev.find((i) => i.produto_id === produto.id)
         if (itemExistente) {
@@ -292,7 +367,7 @@ export default function PDVPage() {
   }
 
   // ══════════════════════════════════════════════════
-  // CÓDIGO DE BARRAS (câmera + USB)
+  // CÓDIGO DE BARRAS
   // ══════════════════════════════════════════════════
 
   const handleCodigoBarrasLido = useCallback(
@@ -384,7 +459,7 @@ export default function PDVPage() {
   }, [handleCodigoBarrasLido])
 
   // ══════════════════════════════════════════════════
-  // 🆕 ATALHOS DE TECLADO PROFISSIONAIS
+  // ATALHOS
   // ══════════════════════════════════════════════════
 
   const abrirPagamento = useCallback(() => {
@@ -404,17 +479,23 @@ export default function PDVPage() {
 
   useEffect(() => {
     const handleHotkeys = (e: KeyboardEvent) => {
-      // Ignora se algum modal tá aberto (exceto Esc)
       const modaisAbertos =
-        modalPagamento || modalCadastroRapido || scannerAberto || cupomAberto
+        modalPagamento ||
+        modalCadastroRapido ||
+        scannerAberto ||
+        cupomAberto ||
+        !!telaSucesso
 
-      // ESC: Fecha modais ou limpa carrinho
       if (e.key === 'Escape') {
         if (mostrarAtalhos) {
           setMostrarAtalhos(false)
           return
         }
-        if (modaisAbertos) return // deixa o modal lidar
+        if (telaSucesso) {
+          setTelaSucesso(null)
+          return
+        }
+        if (modaisAbertos) return
         if (carrinho.length > 0) {
           e.preventDefault()
           if (confirm('Limpar carrinho?')) {
@@ -425,17 +506,14 @@ export default function PDVPage() {
         return
       }
 
-      // Se modal aberto, não dispara mais atalhos
       if (modaisAbertos || mostrarAtalhos) return
 
-      // F1: Ajuda
       if (e.key === 'F1') {
         e.preventDefault()
         setMostrarAtalhos(true)
         return
       }
 
-      // F2: Foco na busca
       if (e.key === 'F2') {
         e.preventDefault()
         buscaInputRef.current?.focus()
@@ -443,7 +521,6 @@ export default function PDVPage() {
         return
       }
 
-      // F4: Foco no desconto
       if (e.key === 'F4') {
         e.preventDefault()
         if (carrinho.length === 0) {
@@ -458,14 +535,12 @@ export default function PDVPage() {
         return
       }
 
-      // F8: Finalizar venda
       if (e.key === 'F8') {
         e.preventDefault()
         abrirPagamento()
         return
       }
 
-      // F10: Remover último item do carrinho
       if (e.key === 'F10') {
         e.preventDefault()
         if (carrinho.length > 0) {
@@ -493,7 +568,16 @@ export default function PDVPage() {
     addNotification,
     produtos,
     abrirPagamento,
+    telaSucesso,
   ])
+
+  // 🆕 Auto-fecha tela de sucesso em 8 segundos
+  useEffect(() => {
+    if (telaSucesso) {
+      const timer = setTimeout(() => setTelaSucesso(null), 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [telaSucesso])
 
   // ══════════════════════════════════════════════════
   // CADASTRO RÁPIDO
@@ -624,7 +708,6 @@ export default function PDVPage() {
       ? parseFloat(valorRecebido) - totalPagar
       : 0
 
-  // 🆕 Categorias únicas pra filtro
   const categorias = useMemo(() => {
     const set = new Set<string>()
     produtos.forEach((p) => {
@@ -687,7 +770,6 @@ export default function PDVPage() {
         valor_recebido: parseFloat(valorRecebido) || undefined,
       })
 
-      // 🆕 Adiciona às vendas recentes
       const novaVenda: VendaRecente = {
         numero_venda: resultado.numero_venda,
         total: resultado.total,
@@ -706,6 +788,19 @@ export default function PDVPage() {
         4000
       )
 
+      // 🆕 Tela de sucesso GIGANTE com troco
+      const recebido = parseFloat(valorRecebido) || resultado.total
+      const troco =
+        formaPagamento === 'Dinheiro'
+          ? Math.max(0, recebido - resultado.total)
+          : 0
+      setTelaSucesso({
+        total: resultado.total,
+        recebido,
+        troco,
+        formaPagamento: resultado.forma_pagamento,
+      })
+
       setCarrinho([])
       setDesconto('')
       setValorRecebido('')
@@ -713,6 +808,7 @@ export default function PDVPage() {
       setTimeout(() => {
         fetchProdutos()
         fetchStatsDia()
+        fetchTopVendidos()
       }, 800)
     } catch (err) {
       setError('Erro inesperado ao processar venda. Nenhum item foi alterado.')
@@ -722,7 +818,6 @@ export default function PDVPage() {
     }
   }
 
-  // 🆕 Reimprimir cupom de venda recente
   const reimprimirCupom = async (venda: VendaRecente) => {
     await gerarCupom({
       itens: venda.itens,
@@ -731,17 +826,12 @@ export default function PDVPage() {
     })
   }
 
-  // ══════════════════════════════════════════════════
-  // FILTRO
-  // ══════════════════════════════════════════════════
-
   const produtosFiltrados = produtos.filter((p) => {
     const matchFiltro =
       p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
       p.sku.toLowerCase().includes(filtro.toLowerCase()) ||
       p.categoria?.toLowerCase().includes(filtro.toLowerCase())
-    const matchCategoria =
-      !categoriaFiltro || p.categoria === categoriaFiltro
+    const matchCategoria = !categoriaFiltro || p.categoria === categoriaFiltro
     return matchFiltro && matchCategoria
   })
 
@@ -753,22 +843,16 @@ export default function PDVPage() {
       </div>
     )
 
-  // ══════════════════════════════════════════════════
-  // RENDER
-  // ══════════════════════════════════════════════════
-
   return (
     <div className={`p-4 md:p-6 ${carrinho.length > 0 ? 'pb-60 md:pb-6' : ''}`}>
-      {/* ── INDICADOR USB ── */}
       {usbDetectado && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
           <Usb size={18} /> Código lido via leitor USB!
         </div>
       )}
 
-      {/* ══════════ HEADER PRO COM STATS ══════════ */}
+      {/* HEADER */}
       <div className="mb-4 space-y-3">
-        {/* Linha 1: Título + ações */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -789,7 +873,19 @@ export default function PDVPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Som on/off */}
+            {/* 🆕 Fullscreen */}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
+              title={fullscreen ? 'Sair tela cheia' : 'Tela cheia'}
+            >
+              {fullscreen ? (
+                <Minimize2 size={16} className="text-gray-700 dark:text-gray-300" />
+              ) : (
+                <Maximize2 size={16} className="text-gray-700 dark:text-gray-300" />
+              )}
+            </button>
+
             <button
               onClick={toggleSom}
               className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
@@ -802,7 +898,6 @@ export default function PDVPage() {
               )}
             </button>
 
-            {/* Scanner câmera */}
             <button
               onClick={() => setScannerAberto(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold rounded-lg transition text-sm"
@@ -813,7 +908,7 @@ export default function PDVPage() {
           </div>
         </div>
 
-        {/* Linha 2: Stats do dia */}
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
             <div className="flex items-center gap-1.5 text-[10px] text-green-700 dark:text-green-400 font-semibold uppercase">
@@ -844,7 +939,6 @@ export default function PDVPage() {
           </div>
         </div>
 
-        {/* Linha 3: Vendas recentes (se houver) */}
         {vendasRecentes.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase whitespace-nowrap">
@@ -870,7 +964,43 @@ export default function PDVPage() {
 
       {error && <Alert message={error} type="error" />}
 
-      {/* ══════════ BUSCA + CATEGORIAS ══════════ */}
+      {/* 🆕 TOP VENDIDOS DO DIA */}
+      {topVendidos.length > 0 && !filtro && !categoriaFiltro && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Mais vendidos hoje
+            </h3>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {topVendidos.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => adicionarAoCarrinho(p)}
+                className="relative p-2 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg hover:scale-105 active:scale-95 transition text-left"
+              >
+                <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                  {p.nome}
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-400 font-bold">
+                  {formatarMoeda(p.preco_venda)}
+                </p>
+                {animacaoAdd?.id === p.id && (
+                  <span
+                    key={animacaoAdd.key}
+                    className="absolute -top-1 right-2 text-green-500 font-extrabold text-2xl pointer-events-none animate-floatUp"
+                  >
+                    +1
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* BUSCA */}
       <div className="mb-4 space-y-3">
         <input
           ref={buscaInputRef}
@@ -882,7 +1012,6 @@ export default function PDVPage() {
           autoFocus
         />
 
-        {/* Pills de categorias */}
         {categorias.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             <button
@@ -915,7 +1044,7 @@ export default function PDVPage() {
         )}
       </div>
 
-      {/* ══════════ GRID PRODUTOS + CARRINHO ══════════ */}
+      {/* GRID PRODUTOS + CARRINHO */}
       <div className="flex flex-col md:flex-row gap-4 md:gap-6">
         <div className="flex-1">
           {produtosFiltrados.length === 0 ? (
@@ -934,7 +1063,7 @@ export default function PDVPage() {
                   <button
                     key={produto.id}
                     onClick={() => adicionarAoCarrinho(produto)}
-                    className={`p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
+                    className={`relative p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
                       item
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
                         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
@@ -958,6 +1087,16 @@ export default function PDVPage() {
                     <p className="text-xs text-gray-400 mt-auto pt-1">
                       {produto.quantidade_atual} em estoque
                     </p>
+
+                    {/* 🆕 Animação +1 */}
+                    {animacaoAdd?.id === produto.id && (
+                      <span
+                        key={animacaoAdd.key}
+                        className="absolute -top-1 right-2 text-green-500 font-extrabold text-2xl pointer-events-none animate-floatUp"
+                      >
+                        +1
+                      </span>
+                    )}
                   </button>
                 )
               })}
@@ -1101,7 +1240,7 @@ export default function PDVPage() {
         </div>
       </div>
 
-      {/* ══════════ CARRINHO MOBILE ══════════ */}
+      {/* CARRINHO MOBILE */}
       {carrinho.length > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
           <div className="max-h-40 overflow-y-auto px-3 pt-3 space-y-2">
@@ -1185,7 +1324,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ MODAL DE ATALHOS ══════════ */}
+      {/* MODAL DE ATALHOS */}
       {mostrarAtalhos && (
         <div
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
@@ -1244,7 +1383,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ MODAL DE PAGAMENTO ══════════ */}
+      {/* MODAL DE PAGAMENTO */}
       {modalPagamento && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -1298,7 +1437,7 @@ export default function PDVPage() {
             </div>
 
             {formaPagamento === 'Dinheiro' && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-sm font-medium dark:text-gray-300">
                   Valor recebido (R$)
                 </label>
@@ -1308,6 +1447,51 @@ export default function PDVPage() {
                   onChange={(e) => setValorRecebido(e.target.value)}
                   className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
                 />
+
+                {/* 🆕 BOTÕES DE CÉDULAS RÁPIDAS */}
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider mb-2">
+                    Cliente pagou com
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setValorRecebido(totalPagar.toFixed(2))}
+                      className="py-3 bg-gradient-to-br from-green-500 to-emerald-600 hover:shadow-md text-white text-sm font-bold rounded-xl transition"
+                    >
+                      Valor exato
+                    </button>
+                    {(() => {
+  const sugestoes = new Set<number>()
+  ;[5, 10, 20, 50, 100, 200].forEach((cedula) => {
+    const arredondado = Math.ceil(totalPagar / cedula) * cedula
+    const sugestao = cedula >= totalPagar ? cedula : arredondado
+    if (sugestao > totalPagar) sugestoes.add(sugestao)
+  })
+  return Array.from(sugestoes)
+    .sort((a, b) => a - b)
+    .slice(0, 6)
+    .map((sugestao) => {
+      const isAtivo = parseFloat(valorRecebido) === sugestao
+      return (
+        <button
+          key={sugestao}
+          type="button"
+          onClick={() => setValorRecebido(sugestao.toFixed(2))}
+          className={`py-3 text-sm font-bold rounded-xl border-2 transition ${
+            isAtivo
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          R$ {sugestao.toFixed(0)}
+        </button>
+      )
+    })
+})()}
+                  </div>
+                </div>
+
                 {trocoVal > 0 && (
                   <div className="flex justify-between items-center bg-green-50 dark:bg-green-900/20 p-3 rounded-xl">
                     <span className="text-green-700 dark:text-green-400 font-medium">
@@ -1339,7 +1523,7 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ MODAL DE CADASTRO RÁPIDO ══════════ */}
+      {/* MODAL DE CADASTRO RÁPIDO */}
       {modalCadastroRapido && dadosProdutoAPI && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
@@ -1511,7 +1695,62 @@ export default function PDVPage() {
         </div>
       )}
 
-      {/* ══════════ SCANNER ══════════ */}
+      {/* 🆕 TELA DE SUCESSO GIGANTE PÓS-VENDA */}
+      {telaSucesso && (
+        <div className="fixed inset-0 z-50 bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="text-center text-white max-w-2xl w-full">
+            <div className="inline-flex w-24 h-24 rounded-full bg-white/20 backdrop-blur-sm items-center justify-center mb-6 animate-bounce">
+              <CheckCircle2 className="w-14 h-14" />
+            </div>
+
+            <h2 className="text-3xl md:text-4xl font-bold mb-2">
+              Venda realizada! 🎉
+            </h2>
+            <p className="text-green-100 mb-8">{telaSucesso.formaPagamento}</p>
+
+            {/* Total cobrado */}
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 mb-4">
+              <p className="text-sm text-green-100 uppercase font-bold tracking-wider mb-1">
+                Total cobrado
+              </p>
+              <p className="text-5xl md:text-6xl font-extrabold">
+                {formatarMoeda(telaSucesso.total)}
+              </p>
+            </div>
+
+            {/* TROCO GIGANTE (só se for dinheiro) */}
+            {telaSucesso.troco > 0 && (
+              <div className="bg-white text-green-600 rounded-3xl p-8 mb-6 shadow-2xl">
+                <p className="text-sm text-green-500 uppercase font-bold tracking-wider mb-2">
+                  💰 Devolver de troco
+                </p>
+                <p className="text-7xl md:text-8xl font-extrabold leading-none">
+                  {formatarMoeda(telaSucesso.troco)}
+                </p>
+                <p className="text-sm text-gray-500 mt-3">
+                  Cliente pagou {formatarMoeda(telaSucesso.recebido)}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button
+                onClick={() => setTelaSucesso(null)}
+                className="px-8 py-3 bg-white text-green-700 font-bold rounded-full hover:shadow-xl transition flex items-center gap-2"
+              >
+                Próxima venda
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-green-100 mt-6">
+              Tela fecha em 8 segundos (ou aperte Esc)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* SCANNER */}
       {scannerAberto && (
         <BarcodeScanner
           onDetected={handleCodigoBarrasLido}
@@ -1519,10 +1758,41 @@ export default function PDVPage() {
         />
       )}
 
-      {/* ══════════ CUPOM ══════════ */}
+      {/* CUPOM */}
       {cupomAberto && dadosCupom && (
         <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
       )}
+
+      {/* 🆕 ANIMAÇÕES CSS */}
+      <style jsx>{`
+        @keyframes floatUp {
+          0% {
+            opacity: 0;
+            transform: translateY(0);
+          }
+          20% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-30px);
+          }
+        }
+        .animate-floatUp {
+          animation: floatUp 0.8s ease-out forwards;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

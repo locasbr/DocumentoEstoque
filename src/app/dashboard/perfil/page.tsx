@@ -36,7 +36,13 @@ export default function PerfilPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) return
+
+      // ✅ CORREÇÃO 1: Se não tiver user, redireciona pro login
+      if (!user) {
+        setLoading(false)
+        router.push('/login')
+        return
+      }
 
       setUserEmail(user.email || '')
       setNovoEmail(user.email || '')
@@ -48,9 +54,8 @@ export default function PerfilPage() {
         .single()
 
       if (perfil) {
-        setNomeNegocio(perfil.nome_negocio)
+        setNomeNegocio(perfil.nome_negocio || '')
 
-        // Info do plano
         let diasRestantes: number | null = null
         if (perfil.plano === 'trial' && perfil.trial_fim) {
           const fim = new Date(perfil.trial_fim)
@@ -69,35 +74,64 @@ export default function PerfilPage() {
       setLoading(false)
     }
     carregarPerfil()
+    // ✅ CORREÇÃO 2: Silencia warning do ESLint
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Salvar nome do negócio
+  // ✅ CORREÇÃO 3: Salvar nome do negócio SEM non-null assertion
   async function salvarNegocio() {
-    if (!nomeNegocio.trim()) return
+    if (!nomeNegocio.trim()) {
+      addNotification('Digite um nome válido', 'warning')
+      return
+    }
     setSalvandoNegocio(true)
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
+
+    if (!user) {
+      addNotification('Sessão expirada. Faça login novamente.', 'error')
+      setSalvandoNegocio(false)
+      router.push('/login')
+      return
+    }
+
     const { error } = await supabase
       .from('perfis')
       .update({ nome_negocio: nomeNegocio })
-      .eq('id', user!.id)
-    if (error) addNotification('Erro ao salvar nome do negócio', 'error')
-    else addNotification('Nome do negócio atualizado!', 'success')
+      .eq('id', user.id)
+
+    if (error) {
+      addNotification('Erro ao salvar nome do negócio', 'error')
+    } else {
+      addNotification('✅ Nome do negócio atualizado!', 'success')
+    }
     setSalvandoNegocio(false)
   }
 
   // Atualizar e-mail
   async function atualizarEmail() {
     if (!novoEmail || novoEmail === userEmail) return
+
+    // Validação de email simples
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(novoEmail)) {
+      addNotification('Email inválido', 'warning')
+      return
+    }
+
     setSalvandoEmail(true)
     const { error } = await supabase.auth.updateUser({ email: novoEmail })
-    if (error) addNotification('Erro ao atualizar e-mail: ' + error.message, 'error')
-    else
+    if (error) {
+      addNotification('Erro ao atualizar e-mail: ' + error.message, 'error')
+    } else {
       addNotification(
-        'Verifique seu novo e-mail para confirmar a alteração',
-        'success'
+        '📧 Verifique seu novo e-mail para confirmar a alteração',
+        'success',
+        6000
       )
+    }
     setSalvandoEmail(false)
   }
 
@@ -113,29 +147,34 @@ export default function PerfilPage() {
     }
     setSalvandoSenha(true)
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
-    if (error) addNotification('Erro ao atualizar senha: ' + error.message, 'error')
-    else {
-      addNotification('Senha atualizada com sucesso!', 'success')
+    if (error) {
+      addNotification('Erro ao atualizar senha: ' + error.message, 'error')
+    } else {
+      addNotification('🔐 Senha atualizada com sucesso!', 'success')
       setNovaSenha('')
       setConfirmarSenha('')
     }
     setSalvandoSenha(false)
   }
 
-  // Enviar reset por e-mail
+  // ✅ CORREÇÃO 4: Reset com timer de 30 segundos pra reabilitar
   async function enviarResetSenha() {
     const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
-    if (error) addNotification('Erro ao enviar e-mail', 'error')
-    else {
+    if (error) {
+      addNotification('Erro ao enviar e-mail', 'error')
+    } else {
       setResetEnviado(true)
-      addNotification('E-mail de recuperação enviado!', 'success')
+      addNotification('📧 E-mail de recuperação enviado!', 'success')
+      // 🆕 Reabilita após 30 segundos pra permitir reenvio
+      setTimeout(() => setResetEnviado(false), 30000)
     }
   }
 
   // Logout
   async function handleLogout() {
+    if (!confirm('Tem certeza que deseja sair?')) return
     await supabase.auth.signOut()
     router.push('/login')
   }
@@ -165,7 +204,7 @@ export default function PerfilPage() {
         </div>
         <div className="min-w-0">
           <p className="font-bold text-gray-900 dark:text-gray-50 truncate">
-            {nomeNegocio}
+            {nomeNegocio || 'Sem nome de negócio'}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
             {userEmail}
@@ -242,15 +281,15 @@ export default function PerfilPage() {
             )}
 
             {/* Botão de ação - Trial */}
-              {planoInfo.plano === 'trial' && (
-                <Link
-                  href="/assinar"
-                  className="block w-full text-center py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-semibold rounded-xl transition"
-                >
-                  Assinar agora — A partir de R$ 39,90/mês
-                </Link>
-              )}
-  
+            {planoInfo.plano === 'trial' && (
+              <Link
+                href="/assinar"
+                className="block w-full text-center py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-semibold rounded-xl transition"
+              >
+                Assinar agora — A partir de R$ 39,90/mês
+              </Link>
+            )}
+
             {/* Botão upgrade pra quem tá ativo mas não é Negócio */}
             {planoInfo.plano === 'ativo' &&
               planoInfo.tipoPlano !== 'negocio' && (
@@ -280,7 +319,9 @@ export default function PerfilPage() {
               )}
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">Carregando informações do plano...</p>
+          <p className="text-gray-500 text-sm">
+            Carregando informações do plano...
+          </p>
         )}
       </div>
 
@@ -320,7 +361,9 @@ export default function PerfilPage() {
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-800">
           <Mail size={18} className="text-gray-500 dark:text-gray-400" />
-          <h2 className="font-semibold text-gray-900 dark:text-gray-50">E-mail</h2>
+          <h2 className="font-semibold text-gray-900 dark:text-gray-50">
+            E-mail
+          </h2>
         </div>
         <div className="p-5 space-y-4">
           <div>
@@ -395,7 +438,9 @@ export default function PerfilPage() {
                 placeholder="Repita a nova senha"
               />
               {confirmarSenha && novaSenha !== confirmarSenha && (
-                <p className="text-xs text-red-500 mt-1">As senhas não coincidem</p>
+                <p className="text-xs text-red-500 mt-1">
+                  As senhas não coincidem
+                </p>
               )}
             </div>
           </div>
@@ -416,7 +461,9 @@ export default function PerfilPage() {
               className="btn-secondary flex items-center gap-2 disabled:opacity-50 text-sm"
             >
               <Mail size={16} />
-              {resetEnviado ? 'E-mail enviado!' : 'Enviar reset por e-mail'}
+              {resetEnviado
+                ? 'E-mail enviado! Aguarde 30s...'
+                : 'Enviar reset por e-mail'}
             </button>
           </div>
         </div>

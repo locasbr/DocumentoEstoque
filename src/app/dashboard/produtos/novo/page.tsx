@@ -9,9 +9,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { uploadProductImage } from '@/lib/image-utils'
 import Alert from '@/components/alerts'
-import ImageUploader from '@/components/image-uploader'
 import BarcodeScanner from '@/components/barcode-scanner'
 import { useNotification } from '@/contexts/NotificationContext'
 import { ArrowLeft, Camera, Calendar, AlertTriangle, Lock, Zap } from 'lucide-react'
@@ -34,7 +32,6 @@ export default function NovoProdutoPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [imagemUpload, setImagemUpload] = useState(false)
   const [scannerAberto, setScannerAberto] = useState(false)
   const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
   const [barcodeDetectado, setBarcodeDetectado] = useState('')
@@ -78,7 +75,7 @@ const handleSelecionarPreco = (preco: number) => {
     preco_custo: 0,
     preco_venda: 0,
     data_validade: '',
-    imagem_url: '',
+    
   })
 
   // 🔒 LOADING DO PLANO
@@ -136,27 +133,7 @@ const handleSelecionarPreco = (preco: number) => {
     addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
   }
 
-  const handleImageSelected = async (file: File) => {
-    try {
-      setImagemUpload(true)
-      const tempId = `temp-${Date.now()}`
-      const result = await uploadProductImage(file, tempId)
-      if (!result) {
-        addNotification('Erro ao enviar imagem', 'error')
-        return
-      }
-      setFormData((prev) => ({
-        ...prev,
-        imagem_url: result.path,
-      }))
-      addNotification('Imagem enviada com sucesso!', 'success', 2000)
-    } catch (err) {
-      addNotification('Erro ao enviar imagem', 'error')
-      console.error(err)
-    } finally {
-      setImagemUpload(false)
-    }
-  }
+  
 
   const getValidadeInfo = () => {
     if (!formData.data_validade) return null
@@ -288,15 +265,7 @@ const handleSelecionarPreco = (preco: number) => {
 
       <div className="card max-w-2xl dark:bg-gray-900 dark:border-gray-800">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Seção de Imagem */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
-              Imagem do Produto
-            </label>
-            <ImageUploader onImageSelected={handleImageSelected} />
-          </div>
-
-          <hr className="dark:border-gray-700" />
+          
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -539,7 +508,7 @@ const handleSelecionarPreco = (preco: number) => {
           )}
 
           <div className="flex flex-col sm:flex-row gap-4">
-            <button type="submit" disabled={loading || imagemUpload} className="btn-primary">
+            <button type="submit" disabled={loading} className="btn-primary">
               {loading ? 'Salvando...' : 'Salvar Produto'}
             </button>
             <Link href="/dashboard/produtos" className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800">
