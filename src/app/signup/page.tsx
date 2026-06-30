@@ -16,7 +16,7 @@ export default function Signup() {
   const [nomeCompleto, setNomeCompleto] = useState('')
   const [nomeNegocio, setNomeNegocio] = useState('')
 
-  // 🆕 CAMPOS NOVOS
+  // CAMPOS NOVOS
   const [whatsapp, setWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [estado, setEstado] = useState('RJ')
@@ -25,7 +25,7 @@ export default function Signup() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // 🆕 Formata WhatsApp automaticamente: (22) 99999-9999
+  // Formata WhatsApp automaticamente: (22) 99999-9999
   const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let valor = e.target.value.replace(/\D/g, '')
     if (valor.length > 11) valor = valor.slice(0, 11)
@@ -49,7 +49,66 @@ export default function Signup() {
     setSuccess('')
 
     // ════════════════════════════════════════════════════
-    // 🛡️ CAMADA 1: Validação forte de email
+    // 🛡️ VALIDAÇÃO 1: Nome completo
+    // ════════════════════════════════════════════════════
+    const nomeLimpo = nomeCompleto.trim()
+    if (nomeLimpo.length < 3) {
+      setError('Digite seu nome completo (mínimo 3 caracteres)')
+      return
+    }
+    if (!nomeLimpo.includes(' ')) {
+      setError('Digite nome E sobrenome (ex: João Silva)')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 2: Nome do negócio
+    // ════════════════════════════════════════════════════
+    const negocioLimpo = nomeNegocio.trim()
+    if (negocioLimpo.length < 2) {
+      setError('Digite o nome do seu negócio (mínimo 2 caracteres)')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 3: WhatsApp
+    // ════════════════════════════════════════════════════
+    const whatsappNumeros = whatsapp.replace(/\D/g, '')
+    if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
+      setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
+      return
+    }
+    // Bloqueia números obviamente falsos (todos iguais)
+    if (/^(\d)\1+$/.test(whatsappNumeros)) {
+      setError('Digite um WhatsApp válido')
+      return
+    }
+    // Bloqueia DDDs inválidos (só 11-99)
+    const ddd = parseInt(whatsappNumeros.substring(0, 2))
+    if (ddd < 11 || ddd > 99) {
+      setError('DDD inválido. Use um DDD brasileiro válido')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 4: Cidade
+    // ════════════════════════════════════════════════════
+    const cidadeLimpa = cidade.trim()
+    if (cidadeLimpa.length < 2) {
+      setError('Digite a cidade do seu negócio')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 5: UF
+    // ════════════════════════════════════════════════════
+    if (!estado || estado.length !== 2) {
+      setError('Selecione um estado válido')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 6: Email (forte)
     // ════════════════════════════════════════════════════
     const validacaoEmail = validarEmail(email)
     if (!validacaoEmail.valido) {
@@ -61,21 +120,27 @@ export default function Signup() {
       return
     }
 
-    // Validações de senha
-    if (password !== confirmPassword) {
-      setError('As senhas não coincidem')
-      return
-    }
-
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 7: Senha
+    // ════════════════════════════════════════════════════
     if (password.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres')
       return
     }
-
-    // Validação WhatsApp
-    const whatsappNumeros = whatsapp.replace(/\D/g, '')
-    if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
-      setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem')
+      return
+    }
+    // Bloqueia senhas muito comuns
+    const senhasComuns = [
+      '123456', '1234567', '12345678', '123456789', '1234567890',
+      'senha123', 'senha1234', 'senha12345',
+      'qwerty', 'qwerty123', 'abc123', 'abc1234',
+      'password', 'password123', 'admin123', 'admin1234',
+      '111111', '222222', '000000',
+    ]
+    if (senhasComuns.includes(password.toLowerCase())) {
+      setError('Essa senha é muito comum. Use uma mais segura')
       return
     }
 
@@ -106,7 +171,7 @@ export default function Signup() {
       const emailNormalizado = email.trim().toLowerCase()
       const prefixoEmail = emailNormalizado.split('@')[0]
 
-      // Só verifica prefixos de 4+ chars (evita falso positivo em prefixos curtos como "lu", "ana")
+      // Só verifica prefixos de 4+ chars (evita falso positivo)
       if (prefixoEmail.length >= 4) {
         const { data: emailsSimilares } = await supabase
           .from('perfis_completos')
@@ -132,10 +197,10 @@ export default function Signup() {
         password,
         options: {
           data: {
-            nome_completo: nomeCompleto,
-            nome_negocio: nomeNegocio,
+            nome_completo: nomeLimpo,
+            nome_negocio: negocioLimpo,
             telefone: whatsappNumeros,
-            cidade: cidade,
+            cidade: cidadeLimpa,
             estado: estado,
           },
           emailRedirectTo: `${window.location.origin}/auth/confirmado`,
@@ -145,6 +210,10 @@ export default function Signup() {
       if (signUpError) {
         if (signUpError.message.includes('already registered')) {
           setError('Este email já está cadastrado. Tente fazer login.')
+        } else if (signUpError.message.includes('WhatsApp já está cadastrado')) {
+          setError(
+            'Este WhatsApp já tem uma conta no EstoqueSystem. Faça login ou use "Esqueci a senha".'
+          )
         } else {
           setError(signUpError.message)
         }
@@ -152,39 +221,37 @@ export default function Signup() {
       }
 
       if (data.user) {
-  // 🛡️ UPSERT + retry — garante que o telefone SEMPRE seja salvo
-  let tentativas = 0
-  let salvouTelefone = false
+        // 🛡️ UPSERT + retry — garante que o telefone SEMPRE seja salvo
+        let tentativas = 0
+        let salvouTelefone = false
 
-  while (tentativas < 3 && !salvouTelefone) {
-    tentativas++
-    
-    const { error: upsertError } = await supabase
-      .from('perfis')
-      .upsert(
-        {
-          id: data.user.id,
-          telefone: whatsappNumeros,
-          cidade: cidade || null,
-          estado: estado || null,
-          nome_negocio: nomeNegocio,
-        },
-        { onConflict: 'id' }
-      )
+        while (tentativas < 3 && !salvouTelefone) {
+          tentativas++
 
-    if (!upsertError) {
-      salvouTelefone = true
-    } else {
-      console.error(`Tentativa ${tentativas} falhou:`, upsertError)
-      // Espera 500ms antes de tentar de novo (pode ser race condition do trigger)
-      await new Promise(resolve => setTimeout(resolve, 500))
-    }
-  }
+          const { error: upsertError } = await supabase
+            .from('perfis')
+            .upsert(
+              {
+                id: data.user.id,
+                telefone: whatsappNumeros,
+                cidade: cidadeLimpa,
+                estado: estado,
+                nome_negocio: negocioLimpo,
+              },
+              { onConflict: 'id' }
+            )
 
-  if (!salvouTelefone) {
-    console.error('⚠️ Falha ao salvar telefone após 3 tentativas')
-    // Não bloqueia o cadastro, mas loga o erro
-  }
+          if (!upsertError) {
+            salvouTelefone = true
+          } else {
+            console.error(`Tentativa ${tentativas} falhou:`, upsertError)
+            await new Promise((resolve) => setTimeout(resolve, 500))
+          }
+        }
+
+        if (!salvouTelefone) {
+          console.error('⚠️ Falha ao salvar telefone após 3 tentativas')
+        }
 
         // Envia email de boas-vindas
         fetch('/api/email/boas-vindas', {
@@ -192,7 +259,7 @@ export default function Signup() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: emailNormalizado,
-            nome: nomeCompleto,
+            nome: nomeLimpo,
           }),
         }).catch(console.error)
 
@@ -338,8 +405,9 @@ export default function Signup() {
                   value={nomeCompleto}
                   onChange={(e) => setNomeCompleto(e.target.value)}
                   required
+                  minLength={3}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                  placeholder="Seu nome"
+                  placeholder="Ex: João Silva"
                 />
               </div>
             </div>
@@ -356,6 +424,7 @@ export default function Signup() {
                   value={nomeNegocio}
                   onChange={(e) => setNomeNegocio(e.target.value)}
                   required
+                  minLength={2}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Ex: Mercadinho do Zé"
                 />
@@ -395,6 +464,8 @@ export default function Signup() {
                     type="text"
                     value={cidade}
                     onChange={(e) => setCidade(e.target.value)}
+                    required
+                    minLength={2}
                     className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                     placeholder="Saquarema"
                   />
@@ -407,6 +478,7 @@ export default function Signup() {
                 <select
                   value={estado}
                   onChange={(e) => setEstado(e.target.value)}
+                  required
                   className="w-full px-3 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition cursor-pointer"
                 >
                   {[
@@ -450,6 +522,7 @@ export default function Signup() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Mínimo 6 caracteres"
                 />
@@ -468,6 +541,7 @@ export default function Signup() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  minLength={6}
                   className={`w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition ${
                     confirmPassword && password !== confirmPassword
                       ? 'border-red-400'
