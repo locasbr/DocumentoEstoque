@@ -65,5 +65,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
   changeFrequency: 'monthly',
   priority: 0.7,
 },
+{
+  url: `${baseUrl}/checklist-abrir-mercadinho`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.9,
+},
   ]
 }

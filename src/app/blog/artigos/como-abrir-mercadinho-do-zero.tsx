@@ -4,7 +4,7 @@ import {
   AlertTriangle,
   Sparkles,
   ArrowRight,
-  Download,
+  
   Rocket,
 } from 'lucide-react'
 
@@ -80,11 +80,11 @@ export default function ArtigoAbrirMercadinhoDoZero() {
                 equipamentos, produtos, capital e marketing.
               </p>
               <Link
-                href="/signup"
+                href="/checklist-abrir-mercadinho"
                 className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm"
               >
-                <Download className="w-4 h-4" />
-                Baixar checklist grátis
+                <CheckCircle className="w-4 h-4" />
+                Acessar checklist completo
               </Link>
             </div>
           </div>
