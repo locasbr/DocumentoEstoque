@@ -8,6 +8,7 @@ import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 import TrialBanner from '@/components/trial-banner'
+import ModalCompletarPerfil from '@/components/modal-completar-perfil'
 
 const RESTRICTED_ROUTES = [
   '/dashboard$',
@@ -29,7 +30,8 @@ export default function DashboardLayout({
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
   const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
-
+  // 🆕 NOVO: estado pra forçar completar perfil
+  const [precisaCompletarPerfil, setPrecisaCompletarPerfil] = useState(false)
   const initialCheckDone = useRef(false)
   const userLevelRef = useRef<string>('dono')
 
@@ -97,17 +99,30 @@ export default function DashboardLayout({
           }
         }
 
-        // ── Verifica plano/trial ──
+        // ── Verifica plano/trial/telefone ──
         const { data: perfil } = await supabase
           .from('perfis')
-          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin') // 👈 ADICIONADO is_admin
+          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone')
           .eq('id', data.session.user.id)
           .single()
 
         if (perfil) {
-          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano
+          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano/telefone
           if (perfil.is_admin === true) {
             console.log('🛡️ Admin detectado - acesso liberado sem restrições')
+            initialCheckDone.current = true
+            setIsLoading(false)
+            return
+          }
+
+          // 🆕 NOVO: Se NÃO tem telefone, força completar perfil
+          // (só pra dono, não pra funcionário)
+          if (
+            userLevel === 'dono' &&
+            (!perfil.telefone || perfil.telefone === '')
+          ) {
+            console.log('📱 Usuário sem WhatsApp cadastrado - bloqueando acesso')
+            setPrecisaCompletarPerfil(true)
             initialCheckDone.current = true
             setIsLoading(false)
             return
@@ -150,6 +165,7 @@ export default function DashboardLayout({
             const diasPlano = Math.ceil(
               (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
             )
+
             if (
               diasPlano >= 0 &&
               diasPlano <= 5 &&
@@ -180,12 +196,25 @@ export default function DashboardLayout({
       {mostrarBanner && diasRestantes !== null && (
         <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
       )}
+
       <Navbar />
       <Sidebar />
       <SearchCommand />
+
       <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
         {children}
       </main>
+
+      {/* 🆕 NOVO: Modal de completar perfil (bloqueante) */}
+      {precisaCompletarPerfil && (
+        <ModalCompletarPerfil
+          onComplete={() => {
+            setPrecisaCompletarPerfil(false)
+            // Recarrega a página pra pegar o perfil atualizado
+            window.location.reload()
+          }}
+        />
+      )}
     </div>
   )
 }

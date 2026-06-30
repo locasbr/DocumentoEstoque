@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { validarEmail } from '@/lib/email-validation'
 import Alert from '@/components/alerts'
 import { Mail, Lock, User, Store, CheckCircle, Phone, MapPin } from 'lucide-react'
 
@@ -14,6 +15,7 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [nomeCompleto, setNomeCompleto] = useState('')
   const [nomeNegocio, setNomeNegocio] = useState('')
+
   // 🆕 CAMPOS NOVOS
   const [whatsapp, setWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -46,7 +48,20 @@ export default function Signup() {
     setError('')
     setSuccess('')
 
-    // Validações
+    // ════════════════════════════════════════════════════
+    // 🛡️ CAMADA 1: Validação forte de email
+    // ════════════════════════════════════════════════════
+    const validacaoEmail = validarEmail(email)
+    if (!validacaoEmail.valido) {
+      let mensagem = validacaoEmail.erro || 'Email inválido'
+      if (validacaoEmail.sugestao) {
+        mensagem += ` Você quis dizer ${validacaoEmail.sugestao}?`
+      }
+      setError(mensagem)
+      return
+    }
+
+    // Validações de senha
     if (password !== confirmPassword) {
       setError('As senhas não coincidem')
       return
@@ -57,7 +72,7 @@ export default function Signup() {
       return
     }
 
-    // 🆕 Validação WhatsApp
+    // Validação WhatsApp
     const whatsappNumeros = whatsapp.replace(/\D/g, '')
     if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
       setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
@@ -67,14 +82,58 @@ export default function Signup() {
     setLoading(true)
 
     try {
+      // ════════════════════════════════════════════════════
+      // 🛡️ CAMADA 2: Checar se WhatsApp já tem conta
+      // ════════════════════════════════════════════════════
+      const { data: perfisExistentes } = await supabase
+        .from('perfis')
+        .select('id, telefone')
+        .eq('telefone', whatsappNumeros)
+        .limit(1)
+
+      if (perfisExistentes && perfisExistentes.length > 0) {
+        setError(
+          'Este WhatsApp já tem uma conta no EstoqueSystem. Faça login ou use "Esqueci a senha" para recuperar o acesso.'
+        )
+        setLoading(false)
+        return
+      }
+
+      // ════════════════════════════════════════════════════
+      // 🛡️ CAMADA 3: Checar prefixos de email suspeitos
+      // (mesmo nome + domínios diferentes = burla de trial)
+      // ════════════════════════════════════════════════════
+      const emailNormalizado = email.trim().toLowerCase()
+      const prefixoEmail = emailNormalizado.split('@')[0]
+
+      // Só verifica prefixos de 4+ chars (evita falso positivo em prefixos curtos como "lu", "ana")
+      if (prefixoEmail.length >= 4) {
+        const { data: emailsSimilares } = await supabase
+          .from('perfis_completos')
+          .select('email')
+          .ilike('email', `${prefixoEmail}@%`)
+          .limit(5)
+
+        if (emailsSimilares && emailsSimilares.length > 0) {
+          const emailExistente = emailsSimilares[0].email
+          setError(
+            `Já existe uma conta com email "${emailExistente}". Se for sua conta, faça login. Se não, use outro nome de email.`
+          )
+          setLoading(false)
+          return
+        }
+      }
+
+      // ════════════════════════════════════════════════════
+      // ✅ TUDO LIBERADO: cria a conta
+      // ════════════════════════════════════════════════════
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: emailNormalizado,
         password,
         options: {
           data: {
             nome_completo: nomeCompleto,
             nome_negocio: nomeNegocio,
-            // 🆕 Passa via metadata também
             telefone: whatsappNumeros,
             cidade: cidade,
             estado: estado,
@@ -93,23 +152,46 @@ export default function Signup() {
       }
 
       if (data.user) {
-        // 🆕 Atualiza o perfil com WhatsApp/cidade/estado
-        // (caso o trigger automático não tenha pego)
-        await supabase
-          .from('perfis')
-          .update({
-            telefone: whatsappNumeros,
-            cidade: cidade || null,
-            estado: estado || null,
-          })
-          .eq('id', data.user.id)
+  // 🛡️ UPSERT + retry — garante que o telefone SEMPRE seja salvo
+  let tentativas = 0
+  let salvouTelefone = false
+
+  while (tentativas < 3 && !salvouTelefone) {
+    tentativas++
+    
+    const { error: upsertError } = await supabase
+      .from('perfis')
+      .upsert(
+        {
+          id: data.user.id,
+          telefone: whatsappNumeros,
+          cidade: cidade || null,
+          estado: estado || null,
+          nome_negocio: nomeNegocio,
+        },
+        { onConflict: 'id' }
+      )
+
+    if (!upsertError) {
+      salvouTelefone = true
+    } else {
+      console.error(`Tentativa ${tentativas} falhou:`, upsertError)
+      // Espera 500ms antes de tentar de novo (pode ser race condition do trigger)
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  }
+
+  if (!salvouTelefone) {
+    console.error('⚠️ Falha ao salvar telefone após 3 tentativas')
+    // Não bloqueia o cadastro, mas loga o erro
+  }
 
         // Envia email de boas-vindas
         fetch('/api/email/boas-vindas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email,
+            email: emailNormalizado,
             nome: nomeCompleto,
           }),
         }).catch(console.error)
@@ -135,7 +217,6 @@ export default function Signup() {
         setSuccess('Conta criada com sucesso! Redirecionando...')
         setTimeout(() => {
           router.push('/dashboard')
-          
         }, 1500)
       }
     } catch (err) {
@@ -281,7 +362,7 @@ export default function Signup() {
               </div>
             </div>
 
-            {/* 🆕 WhatsApp */}
+            {/* WhatsApp */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
                 <span>WhatsApp</span>
@@ -302,7 +383,7 @@ export default function Signup() {
               </div>
             </div>
 
-            {/* 🆕 Cidade + Estado */}
+            {/* Cidade + Estado */}
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
