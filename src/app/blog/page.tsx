@@ -9,6 +9,16 @@ export const metadata = {
 
 const ARTIGOS = [
   {
+    slug: 'como-abrir-mercadinho-do-zero',
+    titulo: 'Como abrir um mercadinho do ZERO em 2026 (guia completo passo a passo)',
+    descricao:
+      'Aprenda do investimento inicial aos primeiros passos. Guia prático pra quem quer abrir mercadinho sem quebrar no 1º ano. Com checklist grátis pra baixar.',
+    categoria: 'Abrindo um Mercadinho',
+    tempoLeitura: '15 min',
+    data: '2026-06-29',
+    destaque: true,
+  },
+  {
     slug: 'como-controlar-fiado-no-mercadinho',
     titulo: 'Como controlar fiado no mercadinho sem caderno (guia 2026)',
     descricao:
@@ -16,7 +26,7 @@ const ARTIGOS = [
     categoria: 'Controle Financeiro',
     tempoLeitura: '8 min',
     data: '2026-06-29',
-    destaque: true,
+    destaque: false,
   },
 ]
 

@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation'
 import ArtigoFiado from '../artigos/como-controlar-fiado'
+import ArtigoAbrirMercadinho from '../artigos/como-abrir-mercadinho-do-zero'
 
 const ARTIGOS_MAP: Record<string, React.ComponentType> = {
   'como-controlar-fiado-no-mercadinho': ArtigoFiado,
+  'como-abrir-mercadinho-do-zero': ArtigoAbrirMercadinho,
 }
 
 export async function generateMetadata({
@@ -17,7 +19,13 @@ export async function generateMetadata({
       title:
         'Como controlar fiado no mercadinho sem caderno (guia completo 2026)',
       description:
-        'Aprenda o método definitivo pra acabar com a bagunça do caderninho de fiado. Guia prático com planilha grátis pra download.',
+        'Aprenda o método definitivo pra acabar com a bagunça do caderninho de fiado.',
+    },
+    'como-abrir-mercadinho-do-zero': {
+      title:
+        'Como abrir um mercadinho do ZERO em 2026 (guia completo passo a passo)',
+      description:
+        'Aprenda passo a passo como abrir seu mercadinho do zero: investimento, documentos, produtos iniciais, sistema e dicas pra não quebrar no 1º ano.',
     },
   }
 

@@ -53,5 +53,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'yearly',
       priority: 0.3,
     },
+    {
+  url: `${baseUrl}/blog/como-abrir-mercadinho-do-zero`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.9, // 👈 prioridade ALTA (artigo principal)
+},
+{
+  url: `${baseUrl}/blog/como-controlar-fiado-no-mercadinho`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.7,
+},
   ]
 }
