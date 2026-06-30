@@ -5,7 +5,6 @@ import Link from 'next/link'
 import {
   CheckCircle2,
   Circle,
-  Download,
   Printer,
   ArrowLeft,
   Sparkles,
