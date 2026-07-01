@@ -4,7 +4,21 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
-import { User, Lock, Store, Mail, Save, Eye, EyeOff, LogOut } from 'lucide-react'
+import {
+  User,
+  Lock,
+  Store,
+  Mail,
+  Save,
+  Eye,
+  EyeOff,
+  LogOut,
+  Download,
+  Trash2,
+  Shield,
+  X,
+  AlertTriangle,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { getPlanoInfo } from '@/lib/planos'
 
@@ -31,13 +45,19 @@ export default function PerfilPage() {
   const [resetEnviado, setResetEnviado] = useState(false)
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null>(null)
 
+  // ══════════ 🔒 LGPD STATES ══════════
+  const [exportandoLGPD, setExportandoLGPD] = useState(false)
+  const [modalDeletar, setModalDeletar] = useState(false)
+  const [senhaConfirmacao, setSenhaConfirmacao] = useState('')
+  const [textoConfirmacao, setTextoConfirmacao] = useState('')
+  const [deletandoConta, setDeletandoConta] = useState(false)
+
   useEffect(() => {
     async function carregarPerfil() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
-      // ✅ CORREÇÃO 1: Se não tiver user, redireciona pro login
       if (!user) {
         setLoading(false)
         router.push('/login')
@@ -74,11 +94,9 @@ export default function PerfilPage() {
       setLoading(false)
     }
     carregarPerfil()
-    // ✅ CORREÇÃO 2: Silencia warning do ESLint
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ✅ CORREÇÃO 3: Salvar nome do negócio SEM non-null assertion
   async function salvarNegocio() {
     if (!nomeNegocio.trim()) {
       addNotification('Digite um nome válido', 'warning')
@@ -110,11 +128,9 @@ export default function PerfilPage() {
     setSalvandoNegocio(false)
   }
 
-  // Atualizar e-mail
   async function atualizarEmail() {
     if (!novoEmail || novoEmail === userEmail) return
 
-    // Validação de email simples
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(novoEmail)) {
       addNotification('Email inválido', 'warning')
@@ -135,7 +151,6 @@ export default function PerfilPage() {
     setSalvandoEmail(false)
   }
 
-  // Atualizar senha
   async function atualizarSenha() {
     if (!novaSenha || novaSenha !== confirmarSenha) {
       addNotification('As senhas não coincidem', 'error')
@@ -157,7 +172,6 @@ export default function PerfilPage() {
     setSalvandoSenha(false)
   }
 
-  // ✅ CORREÇÃO 4: Reset com timer de 30 segundos pra reabilitar
   async function enviarResetSenha() {
     const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
@@ -167,16 +181,136 @@ export default function PerfilPage() {
     } else {
       setResetEnviado(true)
       addNotification('📧 E-mail de recuperação enviado!', 'success')
-      // 🆕 Reabilita após 30 segundos pra permitir reenvio
       setTimeout(() => setResetEnviado(false), 30000)
     }
   }
 
-  // Logout
   async function handleLogout() {
     if (!confirm('Tem certeza que deseja sair?')) return
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  // ══════════════════════════════════════════════════
+  // 🔒 LGPD: EXPORTAR DADOS
+  // ══════════════════════════════════════════════════
+  async function exportarDadosLGPD() {
+    setExportandoLGPD(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addNotification('Sessão expirada. Faça login novamente.', 'error')
+        return
+      }
+
+      const response = await fetch('/api/lgpd/exportar-dados', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        addNotification(data.error || 'Erro ao exportar dados', 'error')
+        return
+      }
+
+      // Download do JSON
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `meus-dados-estoquesystem-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      addNotification(
+        '✅ Dados exportados! Verifique seus downloads.',
+        'success',
+        5000
+      )
+    } catch (error) {
+      console.error('Erro ao exportar:', error)
+      addNotification('Erro ao exportar dados', 'error')
+    } finally {
+      setExportandoLGPD(false)
+    }
+  }
+
+  // ══════════════════════════════════════════════════
+  // 🔒 LGPD: DELETAR CONTA
+  // ══════════════════════════════════════════════════
+  async function deletarContaLGPD() {
+    if (textoConfirmacao !== 'DELETAR MINHA CONTA') {
+      addNotification(
+        'Digite exatamente "DELETAR MINHA CONTA" para confirmar',
+        'warning'
+      )
+      return
+    }
+
+    if (!senhaConfirmacao) {
+      addNotification('Digite sua senha para confirmar', 'warning')
+      return
+    }
+
+    setDeletandoConta(true)
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addNotification('Sessão expirada', 'error')
+        return
+      }
+
+      const response = await fetch('/api/lgpd/deletar-conta', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          senha: senhaConfirmacao,
+          confirmacao: textoConfirmacao,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        addNotification(data.error || 'Erro ao deletar conta', 'error')
+        return
+      }
+
+      addNotification(
+        data.message || 'Conta deletada com sucesso.',
+        'success',
+        3000
+      )
+
+      await supabase.auth.signOut()
+      router.push('/')
+    } catch (error) {
+      console.error('Erro ao deletar conta:', error)
+      addNotification('Erro ao deletar conta', 'error')
+    } finally {
+      setDeletandoConta(false)
+    }
+  }
+
+  function fecharModalDeletar() {
+    if (deletandoConta) return
+    setModalDeletar(false)
+    setSenhaConfirmacao('')
+    setTextoConfirmacao('')
   }
 
   if (loading)
@@ -220,7 +354,6 @@ export default function PerfilPage() {
 
         {planoInfo ? (
           <div className="space-y-4">
-            {/* Status do plano */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-3xl">
@@ -260,7 +393,6 @@ export default function PerfilPage() {
               </span>
             </div>
 
-            {/* Barra de progresso do trial */}
             {planoInfo.plano === 'trial' && planoInfo.diasRestantes !== null && (
               <div className="space-y-2">
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -280,7 +412,6 @@ export default function PerfilPage() {
               </div>
             )}
 
-            {/* Botão de ação - Trial */}
             {planoInfo.plano === 'trial' && (
               <Link
                 href="/assinar"
@@ -290,7 +421,6 @@ export default function PerfilPage() {
               </Link>
             )}
 
-            {/* Botão upgrade pra quem tá ativo mas não é Negócio */}
             {planoInfo.plano === 'ativo' &&
               planoInfo.tipoPlano !== 'negocio' && (
                 <Link
@@ -308,7 +438,6 @@ export default function PerfilPage() {
                 </Link>
               )}
 
-            {/* Mensagem pra quem já tá no Negócio */}
             {planoInfo.plano === 'ativo' &&
               planoInfo.tipoPlano === 'negocio' && (
                 <div className="text-center py-3 px-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
@@ -482,6 +611,223 @@ export default function PerfilPage() {
           Sair da conta
         </button>
       </div>
+
+      {/* ══════════ 🔒 SEÇÃO LGPD ══════════ */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+              Seus Dados (LGPD)
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Conforme a Lei Geral de Proteção de Dados, você tem controle total
+              sobre seus dados.
+            </p>
+          </div>
+        </div>
+
+        {/* Exportar */}
+        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-start gap-3 mb-3">
+            <Download className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                Exportar meus dados
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Baixe um arquivo JSON com TODOS os seus dados: produtos, vendas,
+                clientes, movimentações, etc.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={exportarDadosLGPD}
+            disabled={exportandoLGPD}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50"
+          >
+            <Download size={16} />
+            {exportandoLGPD ? 'Exportando...' : 'Baixar meus dados'}
+          </button>
+        </div>
+
+        {/* Deletar conta */}
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-start gap-3 mb-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                Deletar minha conta permanentemente
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300">
+                <strong>Atenção:</strong> essa ação é{' '}
+                <strong>irreversível</strong>. Todos os seus dados (produtos,
+                vendas, clientes, funcionários) serão apagados permanentemente.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setModalDeletar(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition"
+          >
+            <Trash2 size={16} />
+            Solicitar exclusão da conta
+          </button>
+        </div>
+
+        {/* Info sobre LGPD */}
+        <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800 pt-3">
+          <p className="mb-1">
+            🔒 <strong>Seus direitos garantidos:</strong>
+          </p>
+          <ul className="space-y-0.5 pl-4">
+            <li>• Acessar e exportar seus dados a qualquer momento</li>
+            <li>• Corrigir informações incorretas</li>
+            <li>• Solicitar exclusão total dos dados</li>
+            <li>• Revogar consentimento cancelando a conta</li>
+          </ul>
+          <p className="mt-2">
+            Dúvidas?{' '}
+            <a
+              href="https://wa.me/5522999467499?text=Tenho%20d%C3%BAvidas%20sobre%20LGPD"
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              fale conosco no WhatsApp
+            </a>
+          </p>
+        </div>
+      </div>
+
+      {/* ══════════ 🗑️ MODAL DE CONFIRMAÇÃO DE EXCLUSÃO ══════════ */}
+      {modalDeletar && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                  <AlertTriangle
+                    size={20}
+                    className="text-red-600 dark:text-red-400"
+                  />
+                </div>
+                <h3 className="text-lg font-bold text-red-600 dark:text-red-400">
+                  Deletar conta?
+                </h3>
+              </div>
+              <button
+                onClick={fecharModalDeletar}
+                disabled={deletandoConta}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                <p className="text-sm font-semibold text-red-900 dark:text-red-100 mb-2">
+                  ⚠️ Essa ação é IRREVERSÍVEL
+                </p>
+                <p className="text-xs text-red-700 dark:text-red-300 mb-2">
+                  Todos esses dados serão <strong>apagados permanentemente</strong>:
+                </p>
+                <ul className="text-xs text-red-700 dark:text-red-300 space-y-1 list-disc pl-4">
+                  <li>Itens de venda vinculados às transações</li>
+                  <li>Todos os produtos cadastrados</li>
+                  <li>Histórico completo de vendas</li>
+                  <li>Clientes e registros de fiado</li>
+                  <li>Movimentações de estoque e alertas</li>
+                  <li>Insights de IA salvos no sistema</li>
+                  <li>Funcionários e permissões</li>
+                  <li>Sua assinatura (se ativa)</li>
+                  <li>Configurações e preferências</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Digite <strong>DELETAR MINHA CONTA</strong> para confirmar:
+                </label>
+                <input
+                  type="text"
+                  value={textoConfirmacao}
+                  onChange={(e) => setTextoConfirmacao(e.target.value)}
+                  disabled={deletandoConta}
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full font-mono"
+                  placeholder="DELETAR MINHA CONTA"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Digite sua senha atual:
+                </label>
+                <input
+                  type="password"
+                  value={senhaConfirmacao}
+                  onChange={(e) => setSenhaConfirmacao(e.target.value)}
+                  disabled={deletandoConta}
+                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
+                  placeholder="Sua senha"
+                />
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <p className="text-xs text-blue-800 dark:text-blue-300">
+                  💡 <strong>Dica:</strong> antes de deletar, considere{' '}
+                  <button
+                    onClick={() => {
+                      fecharModalDeletar()
+                      exportarDadosLGPD()
+                    }}
+                    className="underline font-semibold hover:text-blue-600 dark:hover:text-blue-200"
+                  >
+                    exportar seus dados
+                  </button>{' '}
+                  primeiro. Você não conseguirá recuperar depois.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 p-5 border-t border-gray-200 dark:border-gray-800">
+              <button
+                onClick={fecharModalDeletar}
+                disabled={deletandoConta}
+                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deletarContaLGPD}
+                disabled={
+                  deletandoConta ||
+                  textoConfirmacao !== 'DELETAR MINHA CONTA' ||
+                  !senhaConfirmacao
+                }
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+              >
+                {deletandoConta ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deletando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Deletar conta
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
