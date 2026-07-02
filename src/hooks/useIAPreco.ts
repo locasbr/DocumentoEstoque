@@ -52,7 +52,7 @@ export function useIAPreco() {
         return null
       }
 
-      const response = await fetch('/api/ia/preco', {
+      const response = await fetch('/api/ia/produto/preco', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
