@@ -9,7 +9,7 @@ import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 import TrialBanner from '@/components/trial-banner'
 import ModalCompletarPerfil from '@/components/modal-completar-perfil'
-
+import AdminWarningBanner from '@/components/admin-warning-banner'
 const RESTRICTED_ROUTES = [
   '/dashboard$',
   '/dashboard/produtos',
@@ -193,6 +193,7 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <AdminWarningBanner />
       {mostrarBanner && diasRestantes !== null && (
         <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
       )}

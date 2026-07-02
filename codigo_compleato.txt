@@ -26,6 +26,16 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 
+// ════════════════════════════════════════════════════
+// 🔒 LIMITES DE USUÁRIOS POR PLANO
+// (igual ao usePlano.ts pra manter consistência)
+// ════════════════════════════════════════════════════
+const LIMITES_USUARIOS: Record<string, number> = {
+  iniciante: 1,
+  profissional: 3,
+  negocio: 10,
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ════════════════════════════════════════════════════
@@ -119,11 +129,11 @@ export async function POST(req: NextRequest) {
     }
 
     // ════════════════════════════════════════════════════
-    // ✅ Verifica se o perfil do dono existe
+    // ✅ Verifica se o perfil do dono existe + pega plano
     // ════════════════════════════════════════════════════
     const { data: perfil } = await supabaseAdmin
       .from('perfis')
-      .select('id')
+      .select('id, tipo_plano, plano, is_admin')
       .eq('id', donoId)
       .single()
 
@@ -132,6 +142,45 @@ export async function POST(req: NextRequest) {
         { error: 'Perfil não encontrado' },
         { status: 404 }
       )
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🔒 NOVO: VERIFICA LIMITE DE USUÁRIOS POR PLANO
+    // ════════════════════════════════════════════════════
+    // Admin tem acesso ilimitado (pra testes)
+    if (!perfil.is_admin) {
+      const tipoPlano = perfil.tipo_plano || 'profissional'
+      const limite = LIMITES_USUARIOS[tipoPlano] || 1
+
+      // Conta quantos membros (ativos + pendentes) já existem
+      const { count: totalFuncionarios } = await supabaseAdmin
+        .from('membros')
+        .select('*', { count: 'exact', head: true })
+        .eq('dono_id', donoId)
+        .in('status', ['ativo', 'pendente'])
+
+      // ✅ +1 pq o dono também conta como usuário do plano
+      const totalAtual = (totalFuncionarios || 0) + 1
+
+      if (totalAtual >= limite) {
+        const nomesPlanos: Record<string, string> = {
+          iniciante: 'Iniciante',
+          profissional: 'Profissional',
+          negocio: 'Negócio',
+        }
+
+        return NextResponse.json(
+          {
+            error: `Limite de ${limite} usuário(s) atingido no plano ${nomesPlanos[tipoPlano] || tipoPlano}. Faça upgrade pra adicionar mais funcionários.`,
+            motivo: 'limite_plano',
+            limite,
+            atual: totalAtual,
+            tipo_plano: tipoPlano,
+            upgrade: true,
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // ════════════════════════════════════════════════════
@@ -153,7 +202,6 @@ export async function POST(req: NextRequest) {
 
     // ════════════════════════════════════════════════════
     // 🔐 Gera senha temporária SEGURA usando crypto
-    // (não usa mais Math.random())
     // ════════════════════════════════════════════════════
     const tempPassword = gerarSenhaSegura(12)
 
@@ -235,7 +283,6 @@ function gerarSenhaSegura(length: number = 12): string {
   }
   return password
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\api\ia\analise-vendas\route.ts ===
@@ -1414,6 +1461,173 @@ export async function POST(req: NextRequest) {
 }
 
 
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\api\perfil\completar\route.ts ===
+// src/app/api/perfil/completar/route.ts
+import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(req: NextRequest) {
+  try {
+    // ════════════════════════════════════════════════════
+    // 🔒 Autenticação via JWT
+    // ════════════════════════════════════════════════════
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    }
+
+    // ════════════════════════════════════════════════════
+    // 📥 Pega o WhatsApp do body
+    // ════════════════════════════════════════════════════
+    const { whatsapp } = await req.json()
+
+    if (!whatsapp) {
+      return NextResponse.json(
+        { error: 'WhatsApp é obrigatório' },
+        { status: 400 }
+      )
+    }
+
+    const whatsappNumeros = whatsapp.replace(/\D/g, '')
+
+    if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
+      return NextResponse.json(
+        { error: 'WhatsApp inválido. Use o formato (XX) XXXXX-XXXX' },
+        { status: 400 }
+      )
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ Admin client
+    // ════════════════════════════════════════════════════
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // ════════════════════════════════════════════════════
+    // 🔍 Busca dados do user atual
+    // ════════════════════════════════════════════════════
+    const { data: perfilAtual } = await supabaseAdmin
+      .from('perfis')
+      .select('id, nome_negocio')
+      .eq('id', user.id)
+      .single()
+
+    if (!perfilAtual) {
+      return NextResponse.json(
+        { error: 'Perfil não encontrado' },
+        { status: 404 }
+      )
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🕵️ DETECTA FANTASMAS: outras contas do mesmo dono
+    // (mesmo prefixo de email OU mesmo nome de negócio)
+    // ════════════════════════════════════════════════════
+    const emailUser = user.email?.toLowerCase() || ''
+    const prefixoEmail = emailUser.split('@')[0]
+    const nomeNegocio = perfilAtual.nome_negocio?.toLowerCase().trim() || ''
+
+    // Busca via view perfis_completos (que tem o email)
+    const { data: contasSuspeitas } = await supabaseAdmin
+      .from('perfis_completos')
+      .select('id, email, nome_negocio, telefone')
+      .neq('id', user.id) // Exclui o próprio user
+      .or(
+        `email.ilike.${prefixoEmail}@%,nome_negocio.ilike.${nomeNegocio}%`
+      )
+
+    const fantasmas = (contasSuspeitas || []).filter((c) => {
+      // Só considera fantasma se TEM mesmo prefixo OU mesmo nome
+      const cEmail = c.email?.toLowerCase() || ''
+      const cPrefixo = cEmail.split('@')[0]
+      const cNome = c.nome_negocio?.toLowerCase().trim() || ''
+
+      return cPrefixo === prefixoEmail || (cNome === nomeNegocio && nomeNegocio.length > 2)
+    })
+
+    console.log(
+      `🕵️ User ${emailUser} tem ${fantasmas.length} fantasma(s) detectado(s)`
+    )
+
+    // ════════════════════════════════════════════════════
+    // 🗑️ DELETA OS FANTASMAS (se houver)
+    // ════════════════════════════════════════════════════
+    const fantasmasDeletados: string[] = []
+
+    if (fantasmas.length > 0) {
+      for (const fantasma of fantasmas) {
+        const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
+          fantasma.id
+        )
+
+        if (!deleteError) {
+          fantasmasDeletados.push(fantasma.email)
+          console.log(`🗑️ Fantasma deletado: ${fantasma.email}`)
+        } else {
+          console.error(`❌ Erro ao deletar ${fantasma.email}:`, deleteError)
+        }
+      }
+    }
+
+    // ════════════════════════════════════════════════════
+    // 📝 ATUALIZA o perfil com o WhatsApp
+    // ════════════════════════════════════════════════════
+    const { error: updateError } = await supabaseAdmin
+      .from('perfis')
+      .update({ telefone: whatsappNumeros })
+      .eq('id', user.id)
+
+    if (updateError) {
+      // Se for erro de telefone duplicado (do índice unique)
+      if (updateError.message?.includes('unique') || updateError.message?.includes('duplicate')) {
+        return NextResponse.json(
+          {
+            error: 'Este WhatsApp já está cadastrado em outra conta. Use outro número ou faça login na conta correta.',
+          },
+          { status: 409 }
+        )
+      }
+      throw updateError
+    }
+
+    // ════════════════════════════════════════════════════
+    // ✅ Sucesso
+    // ════════════════════════════════════════════════════
+    return NextResponse.json({
+      success: true,
+      message: 'WhatsApp cadastrado com sucesso',
+      fantasmas_deletados: fantasmasDeletados.length,
+      detalhes: fantasmasDeletados,
+    })
+  } catch (error: any) {
+    console.error('Erro ao completar perfil:', error)
+    return NextResponse.json(
+      { error: error.message || 'Erro interno' },
+      { status: 500 }
+    )
+  }
+}
+
+
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\api\webhook\mercadopago\route.ts ===
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -2269,6 +2483,1457 @@ export default function EmailConfirmadoPage() {
   )
 }
 
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\blog\artigos\como-abrir-mercadinho-do-zero.tsx ===
+import Link from 'next/link'
+import {
+  CheckCircle,
+  AlertTriangle,
+  Sparkles,
+  ArrowRight,
+  
+  Rocket,
+} from 'lucide-react'
+
+export default function ArtigoAbrirMercadinhoDoZero() {
+  return (
+    <article className="max-w-3xl mx-auto px-4 py-12">
+      <header className="mb-12">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-semibold rounded">
+            🚀 Abrindo um Mercadinho
+          </span>
+          <span className="text-xs text-gray-500">15 min de leitura</span>
+          <span className="text-xs text-gray-500">29 de junho, 2026</span>
+        </div>
+        <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white leading-tight mb-4">
+          Como abrir um mercadinho do ZERO em 2026 (guia completo passo a passo)
+        </h1>
+        <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+          Se você tá pensando em abrir um mercadinho mas não sabe por onde
+          começar, esse guia é pra você. Vou te mostrar TUDO que precisa fazer
+          — do investimento inicial aos primeiros 90 dias — pra você não
+          quebrar no 1º ano.
+        </p>
+      </header>
+
+      <div className="prose prose-lg dark:prose-invert max-w-none">
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Você passa pelo mercadinho do bairro, olha o movimento e pensa:
+          &quot;será que eu conseguia abrir um?&quot; Eu te entendo. Visitei
+          mais de 30 mercadinhos em Saquarema nos últimos meses, e ouvi a
+          mesma história: &quot;se eu soubesse o que sei hoje quando abri,
+          teria feito tudo diferente&quot;.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Então escrevi esse guia COMPLETO pra você abrir o seu mercadinho
+          com o pé direito desde o começo. Sem mistério, sem enrolação.
+        </p>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          📋 O que você vai aprender
+        </h2>
+
+        <ul className="space-y-2 my-6 list-none p-0">
+          {[
+            'Quanto custa abrir um mercadinho de verdade em 2026',
+            'Documentos e licenças que você precisa',
+            'Como escolher o ponto certo',
+            'Os 50 produtos OBRIGATÓRIOS pra começar',
+            'Sistema vs caderno: por que escolher sistema desde o dia 1',
+            'Os 5 erros que fazem 60% dos mercadinhos quebrarem',
+            'Plano de marketing pros primeiros 90 dias',
+          ].map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-2 text-gray-700 dark:text-gray-300"
+            >
+              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="my-10 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-2xl">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl">📋</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Baixe o Checklist Grátis: 30 itens pra abrir seu mercadinho
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 mb-4 text-sm">
+                Lista completa com TUDO que você precisa: documentos,
+                equipamentos, produtos, capital e marketing.
+              </p>
+              <Link
+                href="/checklist-abrir-mercadinho"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Acessar checklist completo
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          💰 Quanto custa abrir um mercadinho em 2026?
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Vou ser direto: <strong>depende do tamanho</strong>. Baseado nos
+          mercadinhos que visitei aqui na região, uma estimativa real:
+        </p>
+
+        <div className="my-6 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-100 dark:bg-gray-800">
+                <th className="text-left p-3 font-bold">Tamanho</th>
+                <th className="text-left p-3 font-bold">Investimento</th>
+                <th className="text-left p-3 font-bold">Faturamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <td className="p-3 font-semibold">🏪 Pequeno (40m²)</td>
+                <td className="p-3">R$ 25k - R$ 45k</td>
+                <td className="p-3 text-green-600">R$ 15k - R$ 30k/mês</td>
+              </tr>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <td className="p-3 font-semibold">🏬 Médio (80m²)</td>
+                <td className="p-3">R$ 50k - R$ 100k</td>
+                <td className="p-3 text-green-600">R$ 40k - R$ 80k/mês</td>
+              </tr>
+              <tr>
+                <td className="p-3 font-semibold">🏢 Grande (150m²+)</td>
+                <td className="p-3">R$ 120k - R$ 250k</td>
+                <td className="p-3 text-green-600">R$ 100k+/mês</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Vou detalhar o cenário <strong>mais comum</strong> (pequeno, 40m²):
+        </p>
+
+        <div className="my-6 space-y-3">
+          {[
+            { item: 'Aluguel + caução (3 meses)', valor: 'R$ 4.500 - R$ 7.500' },
+            { item: 'Reforma e instalação', valor: 'R$ 3.000 - R$ 8.000' },
+            { item: 'Equipamentos', valor: 'R$ 8.000 - R$ 15.000' },
+            { item: 'Estoque inicial', valor: 'R$ 6.000 - R$ 12.000' },
+            { item: 'Sistema de gestão (1º ano)', valor: 'R$ 480 - R$ 960' },
+            { item: 'Marketing inicial', valor: 'R$ 500 - R$ 1.500' },
+            { item: 'Capital de giro (3 meses)', valor: 'R$ 3.000 - R$ 5.000' },
+          ].map((item) => (
+            <div
+              key={item.item}
+              className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl"
+            >
+              <span className="text-gray-700 dark:text-gray-300 text-sm">
+                {item.item}
+              </span>
+              <span className="font-bold text-blue-700 dark:text-blue-300 text-sm">
+                {item.valor}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="my-6 p-5 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-l-4 border-green-500 rounded-r-xl">
+          <p className="font-bold text-green-900 dark:text-green-300 mb-1">
+            💡 TOTAL REALISTA: R$ 25.000 a R$ 45.000
+          </p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Pra mercadinho de 40m² em bairro. Em região nobre pode dobrar.
+          </p>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          📄 Documentos necessários
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Não abra na informalidade. Os documentos custam pouco e te salvam
+          de multas ENORMES:
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          1. CNPJ
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          MEI se faturar até R$ 81k/ano (~R$ 75/mês de DAS). Acima disso,
+          vira ME (R$ 300-800 pra abrir + ~R$ 200/mês de contador).
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          2. Alvará de Funcionamento
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Da prefeitura. Custo: R$ 100 a R$ 500.
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          3. Vigilância Sanitária
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          OBRIGATÓRIO pra comércio de alimentos. Custo: R$ 80 a R$ 300.
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          4. Bombeiros
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Custo: R$ 200 a R$ 600 + extintores.
+        </p>
+
+        <div className="my-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              <strong>Dica de ouro:</strong> Procure o Sebrae da sua cidade.
+              Eles ajudam DE GRAÇA com toda essa parte burocrática.
+            </p>
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          📍 Como escolher o ponto perfeito
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          O ponto é <strong>50% do sucesso</strong>. Avalie 5 critérios:
+        </p>
+
+        <div className="my-6 space-y-3">
+          {[
+            {
+              icon: '🚶',
+              titulo: 'Movimento de pedestres',
+              texto: 'Mínimo: 50 pessoas/hora passando na frente.',
+            },
+            {
+              icon: '🏘️',
+              titulo: 'Densidade residencial',
+              texto: 'Quantas casas num raio de 500m? Quanto mais, melhor.',
+            },
+            {
+              icon: '⚔️',
+              titulo: 'Concorrência',
+              texto: '1-2 concorrentes num raio de 1km é saudável.',
+            },
+            {
+              icon: '🚗',
+              titulo: 'Acessibilidade',
+              texto: 'Tem onde estacionar? É fácil chegar a pé?',
+            },
+            {
+              icon: '💰',
+              titulo: 'Aluguel x faturamento',
+              texto: 'Aluguel: máx 10-15% do faturamento esperado.',
+            },
+          ].map((item) => (
+            <div
+              key={item.titulo}
+              className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
+            >
+              <div className="text-2xl">{item.icon}</div>
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {item.titulo}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {item.texto}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          📦 Os 50 produtos OBRIGATÓRIOS
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Foca nos produtos de alta saída:
+        </p>
+
+        <div className="my-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+            <p className="font-bold text-blue-900 dark:text-blue-300 mb-2">
+              🥖 Alimentos básicos (15)
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Arroz, feijão, açúcar, sal, óleo, café, leite, pão, ovos,
+              macarrão, farinha, biscoito, achocolatado, queijo, presunto
+            </p>
+          </div>
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+            <p className="font-bold text-green-900 dark:text-green-300 mb-2">
+              🥤 Bebidas (10)
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Refrigerantes, suco em pó, água mineral, cerveja, energético,
+              suco de caixinha
+            </p>
+          </div>
+          <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+            <p className="font-bold text-purple-900 dark:text-purple-300 mb-2">
+              🧼 Limpeza (10)
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Detergente, sabão em pó, sabão em barra, amaciante, água
+              sanitária, desinfetante, esponja, pano
+            </p>
+          </div>
+          <div className="p-4 bg-pink-50 dark:bg-pink-900/20 rounded-xl">
+            <p className="font-bold text-pink-900 dark:text-pink-300 mb-2">
+              🪥 Higiene (10)
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Papel higiênico, sabonete, shampoo, creme dental, escova,
+              desodorante, absorvente, fralda
+            </p>
+          </div>
+          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl col-span-1 md:col-span-2">
+            <p className="font-bold text-yellow-900 dark:text-yellow-300 mb-2">
+              🍫 Bônus (5)
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Cigarro, pilha, isqueiro, bala/chiclete, salgadinho
+            </p>
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          💻 Sistema vs caderno: por que SISTEMA desde o dia 1
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Esse é o conselho mais importante:{' '}
+          <strong>NÃO comece com caderno</strong>. Aqui o porquê:
+        </p>
+
+        <div className="my-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+            <p className="font-bold text-red-900 dark:text-red-300 mb-3">
+              ❌ Caderno
+            </p>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• Perde 15-30% das vendas a fiado</li>
+              <li>• Não sabe quais produtos vendem mais</li>
+              <li>• Estoque acaba sem perceber</li>
+              <li>• Produtos vencem nas prateleiras</li>
+              <li>• Sem visão de lucro real</li>
+            </ul>
+          </div>
+          <div className="p-5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+            <p className="font-bold text-green-900 dark:text-green-300 mb-3">
+              ✅ Sistema
+            </p>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• Controle TOTAL de fiado</li>
+              <li>• Relatório de produto mais vendido</li>
+              <li>• Alertas de estoque baixo</li>
+              <li>• Alerta de produto vencendo</li>
+              <li>• Lucro real em tempo real</li>
+            </ul>
+          </div>
+        </div>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Sistema bom custa <strong>R$ 39,90/mês</strong> (menos que 2
+          cervejas). O caderno te custa <strong>centenas em perdas</strong>.
+        </p>
+
+        <div className="my-10 p-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl text-white text-center">
+          <Sparkles className="w-12 h-12 mx-auto mb-4" />
+          <h3 className="text-2xl font-extrabold mb-3">
+            EstoqueSystem: Feito pra mercadinho iniciante
+          </h3>
+          <p className="text-green-50 mb-6 max-w-md mx-auto">
+            Sistema brasileiro, simples de usar, 15 dias grátis. Sem cartão.
+          </p>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-3 rounded-full hover:shadow-2xl transition"
+          >
+            Começar teste grátis
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          ⚠️ Os 5 erros que quebram mercadinhos
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          <strong>60% dos mercadinhos fecham no primeiro ano</strong>.
+          Evite esses erros:
+        </p>
+
+        <div className="my-6 space-y-3">
+          {[
+            {
+              num: '1',
+              titulo: 'Misturar dinheiro pessoal com do mercadinho',
+              texto:
+                'NUNCA tira do caixa pra contas pessoais. Separa conta bancária desde o dia 1.',
+            },
+            {
+              num: '2',
+              titulo: 'Vender muito fiado sem controle',
+              texto:
+                'Fiado é necessário, mas tem que ser CONTROLADO. Sem sistema, você perde muito.',
+            },
+            {
+              num: '3',
+              titulo: 'Comprar muito sem girar',
+              texto:
+                'Não enche o estoque achando que vai vender. Comece com pouco e aumenta.',
+            },
+            {
+              num: '4',
+              titulo: 'Não saber precificar',
+              texto:
+                'Aprende a calcular margem ANTES de abrir. Mínimo 30% em alimentos, 40% em limpeza.',
+            },
+            {
+              num: '5',
+              titulo: 'Não cuidar de marketing',
+              texto:
+                'Mercadinho novo precisa divulgação. Os 90 primeiros dias são CRÍTICOS.',
+            },
+          ].map((item) => (
+            <div
+              key={item.num}
+              className="flex items-start gap-4 p-5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl"
+            >
+              <div className="w-10 h-10 bg-red-500 text-white font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                {item.num}
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 dark:text-white mb-1">
+                  {item.titulo}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {item.texto}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          🚀 Plano dos primeiros 90 dias
+        </h2>
+
+        <div className="my-6 space-y-4">
+          <div className="p-5 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-xl">
+            <p className="font-bold text-blue-900 dark:text-blue-300 mb-2">
+              📅 Mês 1: Foco em divulgação
+            </p>
+            <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+              <li>✓ Inauguração com promoção (10-20% off na 1ª semana)</li>
+              <li>✓ Distribui 500 panfletos no bairro</li>
+              <li>✓ Cria Instagram e WhatsApp Business</li>
+              <li>✓ Posta TODOS os dias no Instagram</li>
+              <li>✓ Cadastra TODOS os clientes no sistema</li>
+            </ul>
+          </div>
+
+          <div className="p-5 bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500 rounded-r-xl">
+            <p className="font-bold text-purple-900 dark:text-purple-300 mb-2">
+              📅 Mês 2: Foco em fidelização
+            </p>
+            <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+              <li>✓ Analisa relatórios — quais produtos vendem mais?</li>
+              <li>✓ Aumenta estoque dos campeões</li>
+              <li>✓ Remove produtos parados</li>
+              <li>✓ Pede indicação pros clientes fiéis</li>
+              <li>✓ Promoção do dia (1 produto/dia em desconto)</li>
+            </ul>
+          </div>
+
+          <div className="p-5 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-r-xl">
+            <p className="font-bold text-green-900 dark:text-green-300 mb-2">
+              📅 Mês 3: Foco em otimização
+            </p>
+            <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+              <li>✓ Negocia melhor com fornecedores (tem volume agora)</li>
+              <li>✓ Avalia se contrata 1º funcionário</li>
+              <li>✓ Implementa controle de fiado se necessário</li>
+              <li>✓ Faz primeira análise de lucro real</li>
+              <li>✓ Planeja expansão</li>
+            </ul>
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          Perguntas frequentes
+        </h2>
+
+        <div className="space-y-3 my-6">
+          {[
+            {
+              p: 'Preciso de funcionário desde o começo?',
+              r: 'Não. No 1º mês, fica SOZINHO pra entender o movimento.',
+            },
+            {
+              p: 'Vale a pena abrir em região de praia?',
+              r: 'Sim, mas com cuidado: alta temporada vende muito, baixa cai 70%.',
+            },
+            {
+              p: 'Quanto tempo demora pra ter lucro?',
+              r: 'Mercadinho bem montado dá lucro a partir do 3º-6º mês.',
+            },
+            {
+              p: 'Posso abrir sem experiência?',
+              r: 'Pode, mas vai aprender na dor. Recomendo trabalhar 1-2 meses num mercadinho antes.',
+            },
+            {
+              p: 'Como o EstoqueSystem ajuda desde o começo?',
+              r: 'Cadastra produtos, vende no PDV pelo celular, controla fiado, alertas de estoque.',
+            },
+          ].map((faq) => (
+            <details
+              key={faq.p}
+              className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
+            >
+              <summary className="cursor-pointer p-4 font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl">
+                {faq.p}
+              </summary>
+              <p className="px-4 pb-4 text-gray-600 dark:text-gray-400 leading-relaxed">
+                {faq.r}
+              </p>
+            </details>
+          ))}
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          🎯 Conclusão
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Abrir mercadinho é uma decisão linda — independência, patrimônio,
+          fazer parte do bairro. Mas é muito trabalho. Esse guia te deu o
+          mapa, agora é executar.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Minha recomendação?{' '}
+          <strong>Não pula a etapa do sistema</strong>. Já que vai fazer
+          tudo certo desde o começo, faz isso também.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Se quiser testar o EstoqueSystem,{' '}
+          <Link
+            href="/signup"
+            className="text-green-600 dark:text-green-400 font-semibold underline"
+          >
+            comece o teste grátis de 15 dias
+          </Link>
+          . Sem cartão, sem compromisso.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-6">
+          Sucesso na jornada! 💚
+          <br />
+          <strong>Lucas Machado</strong>
+          <br />
+          <span className="text-sm text-gray-500">
+            Criador do EstoqueSystem · Saquarema, RJ
+          </span>
+        </p>
+      </div>
+
+      <div className="mt-16 p-8 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-center">
+        <Rocket className="w-12 h-12 text-green-600 mx-auto mb-3" />
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+          Pronto pra abrir seu mercadinho com o pé direito?
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          Comece com o EstoqueSystem grátis por 15 dias.
+        </p>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold px-6 py-3 rounded-full hover:shadow-lg hover:shadow-green-500/30 transition"
+        >
+          Testar EstoqueSystem grátis →
+        </Link>
+      </div>
+    </article>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\blog\artigos\como-controlar-fiado.tsx ===
+import Link from 'next/link'
+import {
+  CheckCircle,
+  XCircle,
+  Sparkles,
+  ArrowRight,
+  Download,
+} from 'lucide-react'
+
+export default function ArtigoControlarFiado() {
+  return (
+    <article className="max-w-3xl mx-auto px-4 py-12">
+      <header className="mb-12">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
+            💰 Controle Financeiro
+          </span>
+          <span className="text-xs text-gray-500">8 min de leitura</span>
+          <span className="text-xs text-gray-500">29 de junho, 2026</span>
+        </div>
+        <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white leading-tight mb-4">
+          Como controlar fiado no mercadinho sem caderno (guia 2026)
+        </h1>
+        <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+          Se você ainda usa caderno pra anotar quem deve no seu mercadinho,
+          esse artigo vai mudar sua vida financeira. Vou te mostrar o método
+          definitivo, sem complicação, e ainda te dou uma planilha grátis pra
+          começar hoje.
+        </p>
+      </header>
+
+      <div className="prose prose-lg dark:prose-invert max-w-none">
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Você abre o caderno de fiado pra cobrar o seu Zé e... cadê a página?
+          Ah, achei — mas a letra tá borrada, e você não lembra se aquele
+          débito de R$ 47 é dele ou da dona Maria.
+        </p>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Aí o cliente chega, jura que já pagou metade, e você fica naquela
+          dúvida. Discute? Cobra? Esquece? Em todo cenário, você sai{' '}
+          <strong>perdendo dinheiro</strong>.
+        </p>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Se você se identificou, esse artigo é pra você. Vou te mostrar:
+        </p>
+
+        <ul className="space-y-2 my-6 list-none p-0">
+          {[
+            'Por que o caderno tá te fazendo perder até 30% das vendas a prazo',
+            'O método correto pra controlar fiado em 2026 (com tecnologia)',
+            'Como cobrar cliente devedor sem brigar nem perder o cliente',
+            'Uma planilha grátis pra você baixar e começar hoje',
+            'Como automatizar tudo isso pelo celular em menos de 5 minutos',
+          ].map((item) => (
+            <li
+              key={item}
+              className="flex items-start gap-2 text-gray-700 dark:text-gray-300"
+            >
+              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="my-10 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-2xl">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl">📊</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Baixe a planilha grátis de Controle de Fiado
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 mb-4 text-sm">
+                Modelo pronto pra você organizar quem deve, quanto deve, e
+                quando vence. Funciona no Excel e Google Sheets.
+              </p>
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm"
+              >
+                <Download className="w-4 h-4" />
+                Baixar planilha grátis
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          O caderno de fiado tá te fazendo perder dinheiro
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Eu visitei mais de 30 mercadinhos aqui em Saquarema e na região, e
+          conversei direto com os donos. O padrão é sempre o mesmo:{' '}
+          <strong>
+            quem usa caderno perde entre 15% e 30% do dinheiro emprestado no
+            fiado
+          </strong>
+          .
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Por quê? Por 5 motivos que você provavelmente já viu acontecer:
+        </p>
+
+        <div className="space-y-3 my-6">
+          {[
+            {
+              titulo: 'Letra ilegível',
+              texto:
+                'No corre do dia, você anota rápido e depois nem você consegue ler.',
+            },
+            {
+              titulo: 'Página perdida',
+              texto:
+                'Caderno cai, molha, rasga. E lá se foi R$ 200 do mês.',
+            },
+            {
+              titulo: 'Cliente esquecido',
+              texto:
+                'Algum cliente some por 6 meses, você nem lembra que ele devia.',
+            },
+            {
+              titulo: 'Confusão de valores',
+              texto:
+                'Você esqueceu de dar baixa quando ele pagou R$ 30. Aí cobra de novo. Cliente fica chateado.',
+            },
+            {
+              titulo: 'Sem visão do total',
+              texto:
+                'Quanto tem em fiado HOJE? Você não sabe. Não tem como planejar fluxo de caixa.',
+            },
+          ].map((item) => (
+            <div
+              key={item.titulo}
+              className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl"
+            >
+              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {item.titulo}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {item.texto}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          O método CERTO pra controlar fiado em 2026
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          O método correto envolve 4 passos simples. Você não precisa ser
+          contador nem entender de tecnologia avançada. Olha só:
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          Passo 1: Cadastra cada cliente uma vez
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Em vez de procurar a página da Dona Maria no caderno toda vez, você
+          cadastra ela <strong>uma vez só</strong>: nome, WhatsApp, e endereço
+          (opcional). Pronto. Da próxima vez é só clicar no nome dela.
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          Passo 2: Registra o débito na hora
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Cliente comprou R$ 47,80 e vai pagar depois? Você seleciona o nome
+          dele, coloca o valor, e registra. Em 5 segundos.{' '}
+          <strong>Sem caderno, sem confusão</strong>.
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          Passo 3: Recebe pagamento e dá baixa automática
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Quando o cliente pagar (parcial ou total), você só registra o
+          pagamento. O saldo dele atualiza sozinho. Você sempre sabe quanto ele
+          ainda deve.
+        </p>
+
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">
+          Passo 4: Cobra com elegância pelo WhatsApp
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Cliente sumiu? Você manda uma mensagem educada no WhatsApp dele,
+          lembrando do valor pendente. Sem brigar, sem constranger. Só
+          profissionalismo.
+        </p>
+
+        <div className="my-8 p-5 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-r-xl">
+          <p className="text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
+            💬 Modelo de mensagem profissional:
+          </p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+            &quot;Oi, Dona Maria! Tudo bem? Aqui é do Mercadinho. Tô passando
+            só pra lembrar que tem um saldinho de R$ 47,80 aberto aqui. Quando
+            puder dar uma passada pra acertar, agradeço! 💚&quot;
+          </p>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          Como o EstoqueSystem resolve tudo isso
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          O <strong>EstoqueSystem</strong> é um sistema feito especificamente
+          pra mercadinhos brasileiros, com o módulo de fiado pensado pra quem
+          tá cansado do caderno. Olha o que você consegue fazer:
+        </p>
+
+        <div className="my-6 space-y-3">
+          {[
+            'Cadastrar cliente com WhatsApp e endereço',
+            'Registrar débito em 5 segundos no celular',
+            'Ver saldo devedor de cada cliente em tempo real',
+            'Receber pagamentos parciais',
+            'Mandar lembrete pelo WhatsApp com 1 clique',
+            'Ver TOTAL de fiado pendente do mercadinho',
+            'Histórico completo de cada cliente',
+          ].map((item) => (
+            <div key={item} className="flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <span className="text-gray-700 dark:text-gray-300">{item}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="my-10 p-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl text-white text-center">
+          <Sparkles className="w-12 h-12 mx-auto mb-4" />
+          <h3 className="text-2xl font-extrabold mb-3">
+            Quer testar de graça por 15 dias?
+          </h3>
+          <p className="text-green-50 mb-6 max-w-md mx-auto">
+            Sem cartão de crédito. Sem pegadinha. Você só paga se gostar.
+            Planos a partir de R$ 39,90/mês.
+          </p>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-3 rounded-full hover:shadow-2xl transition"
+          >
+            Começar teste grátis agora
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          Perguntas frequentes
+        </h2>
+
+        <div className="space-y-3 my-6">
+          {[
+            {
+              p: 'Posso usar no celular?',
+              r: 'Sim! O EstoqueSystem funciona 100% no celular, tablet e computador. Você só precisa de internet.',
+            },
+            {
+              p: 'E se eu não souber mexer com tecnologia?',
+              r: 'O sistema foi feito pra ser SIMPLES. Quem usa caderno consegue usar em 10 minutos. Tem tutoriais e suporte direto via WhatsApp.',
+            },
+            {
+              p: 'Quanto custa?',
+              r: 'Você testa 15 dias grátis. Depois, planos a partir de R$ 39,90/mês. Cancela quando quiser, sem multa.',
+            },
+            {
+              p: 'Meus dados ficam seguros?',
+              r: 'Sim. Usamos criptografia profissional e backup automático. Seus dados são SÓ seus.',
+            },
+            {
+              p: 'Posso importar meus clientes do caderno?',
+              r: 'Sim! Você pode cadastrar manualmente ou importar via planilha CSV (no plano Profissional ou Negócio).',
+            },
+          ].map((faq) => (
+            <details
+              key={faq.p}
+              className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl"
+            >
+              <summary className="cursor-pointer p-4 font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl">
+                {faq.p}
+              </summary>
+              <p className="px-4 pb-4 text-gray-600 dark:text-gray-400 leading-relaxed">
+                {faq.r}
+              </p>
+            </details>
+          ))}
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mt-12 mb-4">
+          Conclusão
+        </h2>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Controlar fiado com caderno em 2026 é como andar de carroça quando
+          existe carro. Funciona? Funciona. Mas você tá perdendo tempo,
+          dinheiro e paciência.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Migrar pra um sistema digital leva <strong>15 minutos</strong> e
+          paga o investimento já no primeiro mês — só com o dinheiro que você
+          deixa de perder em fiado esquecido.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          Se quiser testar como funciona,{' '}
+          <Link
+            href="/signup"
+            className="text-green-600 dark:text-green-400 font-semibold underline"
+          >
+            comece o teste grátis de 15 dias aqui
+          </Link>
+          . Sem cartão, sem compromisso.
+        </p>
+
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-6">
+          Um abraço e bora vender mais! 💚
+          <br />
+          <strong>Lucas Machado</strong>
+          <br />
+          <span className="text-sm text-gray-500">
+            Criador do EstoqueSystem · Saquarema, RJ
+          </span>
+        </p>
+      </div>
+
+      <div className="mt-16 p-8 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-center">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+          Gostou desse artigo?
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          Compartilha com outro dono de mercadinho que precisa parar de usar
+          caderno!
+        </p>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold px-6 py-3 rounded-full hover:shadow-lg hover:shadow-green-500/30 transition"
+        >
+          Testar EstoqueSystem grátis →
+        </Link>
+      </div>
+    </article>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\blog\[slug]\page.tsx ===
+import { notFound } from 'next/navigation'
+import ArtigoFiado from '../artigos/como-controlar-fiado'
+import ArtigoAbrirMercadinho from '../artigos/como-abrir-mercadinho-do-zero'
+
+const ARTIGOS_MAP: Record<string, React.ComponentType> = {
+  'como-controlar-fiado-no-mercadinho': ArtigoFiado,
+  'como-abrir-mercadinho-do-zero': ArtigoAbrirMercadinho,
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+
+  const metas: Record<string, { title: string; description: string }> = {
+    'como-controlar-fiado-no-mercadinho': {
+      title:
+        'Como controlar fiado no mercadinho sem caderno (guia completo 2026)',
+      description:
+        'Aprenda o método definitivo pra acabar com a bagunça do caderninho de fiado.',
+    },
+    'como-abrir-mercadinho-do-zero': {
+      title:
+        'Como abrir um mercadinho do ZERO em 2026 (guia completo passo a passo)',
+      description:
+        'Aprenda passo a passo como abrir seu mercadinho do zero: investimento, documentos, produtos iniciais, sistema e dicas pra não quebrar no 1º ano.',
+    },
+  }
+
+  const meta = metas[slug]
+  if (!meta) return {}
+
+  return {
+    title: meta.title,
+    description: meta.description,
+    openGraph: {
+      title: meta.title,
+      description: meta.description,
+    },
+  }
+}
+
+export default async function ArtigoPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  const Artigo = ARTIGOS_MAP[slug]
+  if (!Artigo) notFound()
+  return <Artigo />
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\blog\layout.tsx ===
+import Link from 'next/link'
+import { ArrowLeft, BookOpen } from 'lucide-react'
+
+export default function BlogLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-950">
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-green-600 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Voltar ao site</span>
+          </Link>
+          <Link
+            href="/blog"
+            className="flex items-center gap-2 font-bold text-gray-900 dark:text-white"
+          >
+            <BookOpen className="w-5 h-5 text-green-600" />
+            Blog EstoqueSystem
+          </Link>
+          <Link
+            href="/signup"
+            className="text-sm font-semibold px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full hover:shadow-lg hover:shadow-green-500/30 transition"
+          >
+            Teste grátis
+          </Link>
+        </div>
+      </header>
+      {children}
+    </div>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\blog\page.tsx ===
+import Link from 'next/link'
+import { Clock, Tag, ArrowRight } from 'lucide-react'
+
+export const metadata = {
+  title: 'Blog EstoqueSystem - Dicas pra mercadinhos brasileiros',
+  description:
+    'Aprenda a gerenciar seu mercadinho com dicas práticas: estoque, fiado, vendas, precificação e muito mais. Conteúdo grátis pra você crescer.',
+}
+
+const ARTIGOS = [
+  {
+    slug: 'como-abrir-mercadinho-do-zero',
+    titulo: 'Como abrir um mercadinho do ZERO em 2026 (guia completo passo a passo)',
+    descricao:
+      'Aprenda do investimento inicial aos primeiros passos. Guia prático pra quem quer abrir mercadinho sem quebrar no 1º ano. Com checklist grátis pra baixar.',
+    categoria: 'Abrindo um Mercadinho',
+    tempoLeitura: '15 min',
+    data: '2026-06-29',
+    destaque: true,
+  },
+  {
+    slug: 'como-controlar-fiado-no-mercadinho',
+    titulo: 'Como controlar fiado no mercadinho sem caderno (guia 2026)',
+    descricao:
+      'Aprenda o método definitivo para acabar com a bagunça do caderninho e nunca mais perder dinheiro com cliente devedor.',
+    categoria: 'Controle Financeiro',
+    tempoLeitura: '8 min',
+    data: '2026-06-29',
+    destaque: false,
+  },
+]
+
+export default function BlogPage() {
+  return (
+    <main className="max-w-4xl mx-auto px-4 py-12">
+      <div className="text-center mb-16">
+        <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-bold mb-4">
+          📚 BLOG ESTOQUESYSTEM
+        </div>
+        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
+          Dicas práticas pra{' '}
+          <span className="bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">
+            seu mercadinho crescer
+          </span>
+        </h1>
+        <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+          Conteúdo grátis pra você gerenciar melhor seu comércio. Sem
+          enrolação, direto ao ponto.
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        {ARTIGOS.map((artigo) => (
+          <Link
+            key={artigo.slug}
+            href={`/blog/${artigo.slug}`}
+            className="block bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-8 hover:shadow-xl hover:border-green-300 dark:hover:border-green-700 transition-all hover:-translate-y-1 group"
+          >
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
+                <Tag className="w-3 h-3" />
+                {artigo.categoria}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {artigo.tempoLeitura} de leitura
+              </span>
+              {artigo.destaque && (
+                <span className="text-xs px-2 py-1 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 text-amber-700 dark:text-amber-400 font-bold rounded">
+                  ⭐ EM DESTAQUE
+                </span>
+              )}
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-green-600 dark:group-hover:text-green-400 transition">
+              {artigo.titulo}
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
+              {artigo.descricao}
+            </p>
+            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-sm group-hover:gap-2 transition-all">
+              Ler artigo completo
+              <ArrowRight className="w-4 h-4" />
+            </span>
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-8 md:p-12 text-center text-white">
+        <h2 className="text-2xl md:text-3xl font-extrabold mb-3">
+          Pronto pra organizar seu mercadinho?
+        </h2>
+        <p className="text-green-50 mb-6 max-w-md mx-auto">
+          15 dias grátis pra testar tudo. Sem cartão, sem compromisso.
+        </p>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-3 rounded-full hover:shadow-2xl transition"
+        >
+          Começar teste grátis
+          <ArrowRight className="w-5 h-5" />
+        </Link>
+      </div>
+    </main>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\checklist-abrir-mercadinho\page.tsx ===
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import {
+  CheckCircle2,
+  Circle,
+  Printer,
+  ArrowLeft,
+  Sparkles,
+  ArrowRight,
+} from 'lucide-react'
+
+const CHECKLIST = [
+  {
+    categoria: '📄 Documentos e Burocracia',
+    cor: 'blue',
+    itens: [
+      'Definir tipo de empresa (MEI ou ME)',
+      'Abrir CNPJ no Portal do Empreendedor',
+      'Solicitar Alvará de Funcionamento na prefeitura',
+      'Conseguir licença da Vigilância Sanitária',
+      'Conseguir vistoria do Corpo de Bombeiros',
+      'Abrir conta bancária PJ',
+      'Contratar contador (se for ME)',
+    ],
+  },
+  {
+    categoria: '📍 Ponto Comercial',
+    cor: 'purple',
+    itens: [
+      'Pesquisar 5+ pontos diferentes',
+      'Verificar movimento de pedestres (50+/hora)',
+      'Mapear concorrência num raio de 1km',
+      'Negociar aluguel (máx 10-15% do faturamento esperado)',
+      'Verificar acessibilidade e estacionamento',
+      'Assinar contrato de aluguel com caução',
+      'Fazer reforma básica (pintura, iluminação)',
+    ],
+  },
+  {
+    categoria: '🛠️ Equipamentos Essenciais',
+    cor: 'green',
+    itens: [
+      'Geladeira comercial (1-2 unidades)',
+      'Freezer horizontal',
+      'Balança digital (homologada INMETRO)',
+      'Leitor de código de barras USB',
+      'Computador ou tablet pro PDV',
+      'Impressora de cupom (opcional)',
+      'Prateleiras e gôndolas',
+      'Cestas e carrinhos',
+      'Câmeras de segurança (recomendado)',
+    ],
+  },
+  {
+    categoria: '📦 Estoque Inicial (50 produtos)',
+    cor: 'orange',
+    itens: [
+      'Alimentos básicos: 15 itens (arroz, feijão, açúcar...)',
+      'Bebidas: 10 itens (refri, água, suco...)',
+      'Limpeza: 10 itens (detergente, sabão...)',
+      'Higiene: 10 itens (papel higiênico, sabonete...)',
+      'Bônus: 5 itens (cigarro, pilha, bala...)',
+      'Negociar com 3-5 fornecedores diferentes',
+      'Comprar pouca quantidade de cada (testa o giro)',
+    ],
+  },
+  {
+    categoria: '💻 Sistema e Tecnologia',
+    cor: 'cyan',
+    itens: [
+      'Contratar sistema de gestão (EstoqueSystem 15 dias grátis)',
+      'Cadastrar todos os 50 produtos no sistema',
+      'Configurar preços e margens de lucro',
+      'Treinar uso do PDV',
+      'Criar WhatsApp Business',
+      'Criar Instagram do mercadinho',
+      'Configurar maquininha de cartão (PIX/débito/crédito)',
+    ],
+  },
+  {
+    categoria: '💰 Capital de Giro',
+    cor: 'emerald',
+    itens: [
+      'Reservar 3 meses de aluguel',
+      'Reservar 3 meses de contas (luz, água, internet)',
+      'Reservar capital pra repor estoque',
+      'NUNCA usar capital de giro pra contas pessoais',
+      'Abrir poupança separada pra emergência',
+    ],
+  },
+  {
+    categoria: '📣 Marketing Inicial',
+    cor: 'pink',
+    itens: [
+      'Criar logo simples (Canva grátis)',
+      'Mandar fazer fachada com placa profissional',
+      'Imprimir 500-1000 panfletos',
+      'Distribuir panfletos no bairro (1 semana antes de abrir)',
+      'Postar diariamente no Instagram (15 dias antes)',
+      'Promoção de inauguração (10-20% off na 1ª semana)',
+      'Cadastrar no Google Meu Negócio (GRÁTIS!)',
+    ],
+  },
+  {
+    categoria: '👥 Equipe e Operação',
+    cor: 'amber',
+    itens: [
+      'Trabalhar SOZINHO no 1º mês (entende o movimento)',
+      'Definir horário de funcionamento (testar abertura)',
+      'Criar rotina de abertura e fechamento',
+      'Estabelecer regras claras de fiado',
+      'Criar lista de fornecedores de confiança',
+      'Definir dia/horário de receber mercadoria',
+    ],
+  },
+]
+
+export default function ChecklistPage() {
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+
+  const toggleItem = (item: string) => {
+    const newChecked = new Set(checked)
+    if (newChecked.has(item)) {
+      newChecked.delete(item)
+    } else {
+      newChecked.add(item)
+    }
+    setChecked(newChecked)
+  }
+
+  const totalItens = CHECKLIST.reduce((acc, cat) => acc + cat.itens.length, 0)
+  const totalChecked = checked.size
+  const porcentagem = Math.round((totalChecked / totalItens) * 100)
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link
+            href="/blog"
+            className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-green-600 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Voltar ao Blog</span>
+          </Link>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 text-sm font-semibold px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition print:hidden"
+          >
+            <Printer className="w-4 h-4" />
+            Imprimir
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-12">
+        {/* Hero */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-bold mb-4">
+            📋 CHECKLIST INTERATIVO
+          </div>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
+            Checklist Completo:{' '}
+            <span className="bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
+              Abrir Mercadinho do Zero
+            </span>
+          </h1>
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            {totalItens} itens organizados em 8 categorias. Marque conforme
+            for fazendo e acompanhe seu progresso em tempo real!
+          </p>
+        </div>
+
+        {/* Barra de Progresso */}
+        <div className="mb-10 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg print:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-bold text-gray-900 dark:text-white">
+              Seu progresso
+            </p>
+            <p className="font-bold text-2xl text-green-600 dark:text-green-400">
+              {porcentagem}%
+            </p>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-green-500 to-emerald-600 transition-all duration-500"
+              style={{ width: `${porcentagem}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            {totalChecked} de {totalItens} itens concluídos
+          </p>
+        </div>
+
+        {/* Categorias */}
+        <div className="space-y-8">
+          {CHECKLIST.map((categoria) => {
+            const itensChecked = categoria.itens.filter((item) =>
+              checked.has(item)
+            ).length
+            const completo = itensChecked === categoria.itens.length
+
+            return (
+              <div
+                key={categoria.categoria}
+                className={`bg-white dark:bg-gray-900 border-2 rounded-2xl p-6 transition-all ${
+                  completo
+                    ? 'border-green-500 shadow-lg shadow-green-500/10'
+                    : 'border-gray-200 dark:border-gray-800'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+                    {categoria.categoria}
+                  </h2>
+                  <span
+                    className={`text-sm font-bold px-3 py-1 rounded-full ${
+                      completo
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                    }`}
+                  >
+                    {itensChecked}/{categoria.itens.length}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {categoria.itens.map((item) => {
+                    const isChecked = checked.has(item)
+                    return (
+                      <button
+                        key={item}
+                        onClick={() => toggleItem(item)}
+                        className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
+                          isChecked
+                            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                            : 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                        }`}
+                      >
+                        {isChecked ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                        )}
+                        <span
+                          className={`text-sm md:text-base ${
+                            isChecked
+                              ? 'text-gray-500 dark:text-gray-500 line-through'
+                              : 'text-gray-900 dark:text-white'
+                          }`}
+                        >
+                          {item}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* CTA Final */}
+        <div className="mt-12 p-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl text-white text-center">
+          <Sparkles className="w-12 h-12 mx-auto mb-4" />
+          <h3 className="text-2xl md:text-3xl font-extrabold mb-3">
+            Já tá no item de Sistema?
+          </h3>
+          <p className="text-green-50 mb-6 max-w-md mx-auto">
+            Comece com o EstoqueSystem grátis por 15 dias. Sem cartão, sem
+            compromisso. Ideal pra quem tá começando!
+          </p>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-3 rounded-full hover:shadow-2xl transition"
+          >
+            Começar teste grátis
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+        </div>
+
+        {/* Compartilhamento */}
+        <div className="mt-8 p-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl text-center print:hidden">
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            Conhece alguém que tá pensando em abrir mercadinho? Compartilha esse
+            checklist! 💚
+          </p>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(
+              'Olha esse checklist pra abrir mercadinho — é grátis e muito completo! https://estoquesystem.com.br/checklist-abrir-mercadinho'
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+          >
+            📱 Compartilhar no WhatsApp
+          </a>
+        </div>
+      </main>
+    </div>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\admin\page.tsx ===
@@ -5779,9 +7444,11 @@ function gerarSenhaSegura(length: number = 12): string {
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useMembro } from '@/hooks/useMembro'
+import { usePlano } from '@/hooks/usePlano'
 import { formatarData } from '@/lib/utils'
 import {
   Plus,
@@ -5791,6 +7458,11 @@ import {
   UserPlus,
   KeyRound,
   Loader2,
+  Users,
+  Crown,
+  AlertTriangle,
+  Sparkles,
+  Zap,
 } from 'lucide-react'
 
 interface Membro {
@@ -5805,6 +7477,7 @@ interface Membro {
 
 export default function EquipePage() {
   const { membro: usuarioAtual, isDono, isLoading: loadingMembro } = useMembro()
+  const { tipoPlano, limites, isAdmin, loading: loadingPlano } = usePlano()
   const { addNotification } = useNotification()
 
   const [membros, setMembros] = useState<Membro[]>([])
@@ -5818,6 +7491,31 @@ export default function EquipePage() {
   const senhaBoxRef = useRef<HTMLDivElement>(null)
 
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
+
+  // ════════════════════════════════════════════════════
+  // 🔢 CÁLCULOS DE USO DO PLANO
+  // ════════════════════════════════════════════════════
+  // Conta apenas membros ativos + pendentes (inativos não contam)
+  const membrosContagem = membros.filter(
+    (m) => m.status === 'ativo' || m.status === 'pendente'
+  ).length
+  
+  // ✅ +1 pq o dono também conta no limite do plano
+  const usuariosUsados = membrosContagem + 1
+  const usuariosRestantes = Math.max(0, limites.usuarios - usuariosUsados)
+  const limiteAtingido = !isAdmin && usuariosUsados >= limites.usuarios
+  const percentualUso = isAdmin
+    ? 0
+    : Math.min(100, (usuariosUsados / limites.usuarios) * 100)
+  const quasePerto = !isAdmin && usuariosRestantes === 1 && !limiteAtingido
+
+  // Nome bonito do plano pra UI
+  const nomesPlanos: Record<string, string> = {
+    iniciante: 'Iniciante',
+    profissional: 'Profissional',
+    negocio: 'Negócio',
+  }
+  const nomePlano = nomesPlanos[tipoPlano] || 'Profissional'
 
   // ════════════════════════════════════════════════════
   // 📡 Buscar lista de membros
@@ -5843,10 +7541,12 @@ export default function EquipePage() {
 
   useEffect(() => {
     if (loadingMembro) return
+
     if (!isDono) {
       addNotification('Apenas donos podem acessar esta página', 'error')
       return
     }
+
     fetchMembros()
   }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
 
@@ -5863,6 +7563,16 @@ export default function EquipePage() {
   // ════════════════════════════════════════════════════
   const handleInviteNewMember = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // 🔒 BLOQUEIO no frontend (defesa em camadas — backend tbm bloqueia)
+    if (limiteAtingido) {
+      addNotification(
+        `Limite de ${limites.usuarios} usuário(s) atingido. Faça upgrade!`,
+        'warning',
+        5000
+      )
+      return
+    }
 
     if (!newEmail.trim()) {
       addNotification('Email é obrigatório', 'warning')
@@ -5888,7 +7598,6 @@ export default function EquipePage() {
       }
 
       // ✅ Envia o token no header Authorization
-      // ❌ NÃO envia mais donoId no body!
       const response = await fetch('/api/equipe/convidar', {
         method: 'POST',
         headers: {
@@ -5906,10 +7615,19 @@ export default function EquipePage() {
         if (response.status === 401) {
           addNotification('Sessão expirada. Faça login novamente.', 'error')
         } else if (response.status === 403) {
-          addNotification(
-            data.error || 'Sem permissão pra essa ação',
-            'error'
-          )
+          // 🆕 Trata o erro de limite de plano com CTA pra upgrade
+          if (data.motivo === 'limite_plano') {
+            addNotification(
+              `⚠️ ${data.error}`,
+              'warning',
+              6000
+            )
+          } else {
+            addNotification(
+              data.error || 'Sem permissão pra essa ação',
+              'error'
+            )
+          }
         } else if (response.status === 409) {
           addNotification('Este funcionário já foi convidado', 'warning')
         } else {
@@ -5954,6 +7672,16 @@ export default function EquipePage() {
           : currentStatus === 'inativo'
           ? 'ativo'
           : 'ativo'
+
+      // 🔒 Se está tentando ATIVAR e já tá no limite → bloqueia
+      if (newStatus === 'ativo' && limiteAtingido) {
+        addNotification(
+          `Limite de ${limites.usuarios} usuário(s) ativos atingido. Desative outro ou faça upgrade.`,
+          'warning',
+          5000
+        )
+        return
+      }
 
       const { error } = await supabase
         .from('membros')
@@ -6077,9 +7805,9 @@ export default function EquipePage() {
   }
 
   // ════════════════════════════════════════════════════
-  // 🚫 BLOQUEIO: não autenticado ou não é dono
+  // 🚫 BLOQUEIO: loading
   // ════════════════════════════════════════════════════
-  if (loadingMembro) {
+  if (loadingMembro || loadingPlano) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
@@ -6112,6 +7840,168 @@ export default function EquipePage() {
         </p>
       </div>
 
+      {/* ══════════ 🆕 BANNER DE USO DO PLANO ══════════ */}
+      {!isAdmin && (
+        <div
+          className={`card p-5 border-2 ${
+            limiteAtingido
+              ? 'border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800'
+              : quasePerto
+                ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800'
+                : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800'
+          }`}
+        >
+          <div className="flex items-start gap-4 flex-wrap">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                limiteAtingido
+                  ? 'bg-red-100 dark:bg-red-900/30'
+                  : quasePerto
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-blue-100 dark:bg-blue-900/30'
+              }`}
+            >
+              <Users
+                className={`w-6 h-6 ${
+                  limiteAtingido
+                    ? 'text-red-600 dark:text-red-400'
+                    : quasePerto
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-blue-600 dark:text-blue-400'
+                }`}
+              />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <h3 className="font-bold text-gray-900 dark:text-white">
+                  Plano {nomePlano} — {usuariosUsados} de {limites.usuarios} usuário(s)
+                </h3>
+                {limiteAtingido && (
+                  <span className="text-xs font-bold px-2 py-0.5 bg-red-600 text-white rounded-full">
+                    LIMITE ATINGIDO
+                  </span>
+                )}
+                {quasePerto && (
+                  <span className="text-xs font-bold px-2 py-0.5 bg-amber-500 text-white rounded-full">
+                    ÚLTIMO SLOT
+                  </span>
+                )}
+              </div>
+
+              {/* Barra de progresso */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    limiteAtingido
+                      ? 'bg-red-500'
+                      : quasePerto
+                        ? 'bg-amber-500'
+                        : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${percentualUso}%` }}
+                />
+              </div>
+
+              <p
+                className={`text-sm ${
+                  limiteAtingido
+                    ? 'text-red-700 dark:text-red-300'
+                    : quasePerto
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {limiteAtingido ? (
+                  <>
+                    ⚠️ Você atingiu o limite do plano {nomePlano}. Faça upgrade
+                    pra adicionar mais funcionários.
+                  </>
+                ) : quasePerto ? (
+                  <>
+                    ⚡ Falta apenas 1 slot. Considere fazer upgrade pra crescer
+                    sem se preocupar.
+                  </>
+                ) : (
+                  <>
+                    Você ainda pode adicionar{' '}
+                    <strong>{usuariosRestantes} funcionário(s)</strong> nesse
+                    plano.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* Botão de upgrade */}
+            {(limiteAtingido || quasePerto) && tipoPlano !== 'negocio' && (
+              <Link
+                href="/assinar"
+                className={`flex items-center gap-2 px-4 py-2.5 text-white font-bold rounded-xl whitespace-nowrap transition shadow-lg ${
+                  tipoPlano === 'iniciante'
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-green-500/30'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-purple-500/30'
+                }`}
+              >
+                {tipoPlano === 'iniciante' ? (
+                  <>
+                    <Sparkles size={16} />
+                    Upgrade Profissional
+                  </>
+                ) : (
+                  <>
+                    <Crown size={16} />
+                    Upgrade Negócio
+                  </>
+                )}
+              </Link>
+            )}
+          </div>
+
+          {/* 🆕 Detalhes do que cada plano oferece (se atingiu limite) */}
+          {limiteAtingido && tipoPlano !== 'negocio' && (
+            <div className="mt-4 pt-4 border-t border-red-200 dark:border-red-800">
+              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
+                💡 Veja o que muda no upgrade:
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                {tipoPlano === 'iniciante' && (
+                  <>
+                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                      <Zap size={14} />
+                      <span>Profissional: até <strong>3 usuários</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                      <Crown size={14} />
+                      <span>Negócio: até <strong>10 usuários</strong></span>
+                    </div>
+                  </>
+                )}
+                {tipoPlano === 'profissional' && (
+                  <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                    <Crown size={14} />
+                    <span>
+                      Negócio: até <strong>10 usuários</strong> + IA completa
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🛡️ Badge de Admin (se for admin) */}
+      {isAdmin && (
+        <div className="card p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-300 dark:border-yellow-700">
+          <div className="flex items-center gap-3">
+            <Crown className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+              🛡️ Você é admin — sem limite de usuários
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Invite Form */}
       <div className="card">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -6125,17 +8015,44 @@ export default function EquipePage() {
               placeholder="Email do funcionário"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
-              className="input-field flex-1"
-              disabled={isInviting}
+              className="input-field flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isInviting || limiteAtingido}
             />
             <button
               type="submit"
-              disabled={isInviting}
-              className="btn-primary flex items-center gap-2 whitespace-nowrap"
+              disabled={isInviting || limiteAtingido}
+              className={`btn-primary flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+                limiteAtingido
+                  ? '!bg-gray-400 hover:!bg-gray-400'
+                  : ''
+              }`}
+              title={
+                limiteAtingido
+                  ? `Limite de ${limites.usuarios} usuário(s) atingido`
+                  : ''
+              }
             >
-              <Plus size={18} /> {isInviting ? 'Enviando...' : 'Convidar'}
+              {limiteAtingido ? (
+                <>
+                  <AlertTriangle size={18} />
+                  Limite atingido
+                </>
+              ) : (
+                <>
+                  <Plus size={18} />
+                  {isInviting ? 'Enviando...' : 'Convidar'}
+                </>
+              )}
             </button>
           </div>
+
+          {/* 🆕 Aviso pequeno embaixo do form quando bloqueado */}
+          {limiteAtingido && (
+            <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+              <AlertTriangle size={12} />
+              Faça upgrade do plano pra adicionar mais funcionários.
+            </p>
+          )}
 
           {generatedPassword && (
             <div
@@ -6306,11 +8223,19 @@ export default function EquipePage() {
                               onClick={() =>
                                 toggleStatus(membro.id, membro.status)
                               }
-                              className={`px-3 py-1 rounded text-xs font-medium transition ${
+                              disabled={
+                                membro.status === 'inativo' && limiteAtingido
+                              }
+                              className={`px-3 py-1 rounded text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed ${
                                 membro.status === 'ativo'
                                   ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
                                   : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
                               }`}
+                              title={
+                                membro.status === 'inativo' && limiteAtingido
+                                  ? 'Limite atingido — desative outro pra ativar este'
+                                  : ''
+                              }
                             >
                               {membro.status === 'ativo'
                                 ? 'Desativar'
@@ -6349,6 +8274,7 @@ export default function EquipePage() {
                       </div>
                     </div>
                   </div>
+
                   <div className="flex gap-2 mb-3">
                     <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                       {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
@@ -6378,7 +8304,10 @@ export default function EquipePage() {
                       </button>
                       <button
                         onClick={() => toggleStatus(membro.id, membro.status)}
-                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                        disabled={
+                          membro.status === 'inativo' && limiteAtingido
+                        }
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
                           membro.status === 'ativo'
                             ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
                             : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
@@ -6403,7 +8332,6 @@ export default function EquipePage() {
     </div>
   )
 }
-
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\app\dashboard\estoque\movimento\page.tsx ===
@@ -13628,6 +15556,7 @@ import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 import TrialBanner from '@/components/trial-banner'
+import ModalCompletarPerfil from '@/components/modal-completar-perfil'
 
 const RESTRICTED_ROUTES = [
   '/dashboard$',
@@ -13649,7 +15578,8 @@ export default function DashboardLayout({
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
   const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
-
+  // 🆕 NOVO: estado pra forçar completar perfil
+  const [precisaCompletarPerfil, setPrecisaCompletarPerfil] = useState(false)
   const initialCheckDone = useRef(false)
   const userLevelRef = useRef<string>('dono')
 
@@ -13717,17 +15647,30 @@ export default function DashboardLayout({
           }
         }
 
-        // ── Verifica plano/trial ──
+        // ── Verifica plano/trial/telefone ──
         const { data: perfil } = await supabase
           .from('perfis')
-          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin') // 👈 ADICIONADO is_admin
+          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone')
           .eq('id', data.session.user.id)
           .single()
 
         if (perfil) {
-          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano
+          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano/telefone
           if (perfil.is_admin === true) {
             console.log('🛡️ Admin detectado - acesso liberado sem restrições')
+            initialCheckDone.current = true
+            setIsLoading(false)
+            return
+          }
+
+          // 🆕 NOVO: Se NÃO tem telefone, força completar perfil
+          // (só pra dono, não pra funcionário)
+          if (
+            userLevel === 'dono' &&
+            (!perfil.telefone || perfil.telefone === '')
+          ) {
+            console.log('📱 Usuário sem WhatsApp cadastrado - bloqueando acesso')
+            setPrecisaCompletarPerfil(true)
             initialCheckDone.current = true
             setIsLoading(false)
             return
@@ -13770,6 +15713,7 @@ export default function DashboardLayout({
             const diasPlano = Math.ceil(
               (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
             )
+
             if (
               diasPlano >= 0 &&
               diasPlano <= 5 &&
@@ -13800,12 +15744,25 @@ export default function DashboardLayout({
       {mostrarBanner && diasRestantes !== null && (
         <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
       )}
+
       <Navbar />
       <Sidebar />
       <SearchCommand />
+
       <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
         {children}
       </main>
+
+      {/* 🆕 NOVO: Modal de completar perfil (bloqueante) */}
+      {precisaCompletarPerfil && (
+        <ModalCompletarPerfil
+          onComplete={() => {
+            setPrecisaCompletarPerfil(false)
+            // Recarrega a página pra pegar o perfil atualizado
+            window.location.reload()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -15414,6 +17371,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { validarEmail } from '@/lib/email-validation'
 import Alert from '@/components/alerts'
 import { Mail, Lock, User, Store, CheckCircle, Phone, MapPin } from 'lucide-react'
 
@@ -15424,7 +17382,8 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [nomeCompleto, setNomeCompleto] = useState('')
   const [nomeNegocio, setNomeNegocio] = useState('')
-  // 🆕 CAMPOS NOVOS
+
+  // CAMPOS NOVOS
   const [whatsapp, setWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [estado, setEstado] = useState('RJ')
@@ -15433,7 +17392,7 @@ export default function Signup() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // 🆕 Formata WhatsApp automaticamente: (22) 99999-9999
+  // Formata WhatsApp automaticamente: (22) 99999-9999
   const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let valor = e.target.value.replace(/\D/g, '')
     if (valor.length > 11) valor = valor.slice(0, 11)
@@ -15456,37 +17415,159 @@ export default function Signup() {
     setError('')
     setSuccess('')
 
-    // Validações
-    if (password !== confirmPassword) {
-      setError('As senhas não coincidem')
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 1: Nome completo
+    // ════════════════════════════════════════════════════
+    const nomeLimpo = nomeCompleto.trim()
+    if (nomeLimpo.length < 3) {
+      setError('Digite seu nome completo (mínimo 3 caracteres)')
+      return
+    }
+    if (!nomeLimpo.includes(' ')) {
+      setError('Digite nome E sobrenome (ex: João Silva)')
       return
     }
 
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 2: Nome do negócio
+    // ════════════════════════════════════════════════════
+    const negocioLimpo = nomeNegocio.trim()
+    if (negocioLimpo.length < 2) {
+      setError('Digite o nome do seu negócio (mínimo 2 caracteres)')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 3: WhatsApp
+    // ════════════════════════════════════════════════════
+    const whatsappNumeros = whatsapp.replace(/\D/g, '')
+    if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
+      setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
+      return
+    }
+    // Bloqueia números obviamente falsos (todos iguais)
+    if (/^(\d)\1+$/.test(whatsappNumeros)) {
+      setError('Digite um WhatsApp válido')
+      return
+    }
+    // Bloqueia DDDs inválidos (só 11-99)
+    const ddd = parseInt(whatsappNumeros.substring(0, 2))
+    if (ddd < 11 || ddd > 99) {
+      setError('DDD inválido. Use um DDD brasileiro válido')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 4: Cidade
+    // ════════════════════════════════════════════════════
+    const cidadeLimpa = cidade.trim()
+    if (cidadeLimpa.length < 2) {
+      setError('Digite a cidade do seu negócio')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 5: UF
+    // ════════════════════════════════════════════════════
+    if (!estado || estado.length !== 2) {
+      setError('Selecione um estado válido')
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 6: Email (forte)
+    // ════════════════════════════════════════════════════
+    const validacaoEmail = validarEmail(email)
+    if (!validacaoEmail.valido) {
+      let mensagem = validacaoEmail.erro || 'Email inválido'
+      if (validacaoEmail.sugestao) {
+        mensagem += ` Você quis dizer ${validacaoEmail.sugestao}?`
+      }
+      setError(mensagem)
+      return
+    }
+
+    // ════════════════════════════════════════════════════
+    // 🛡️ VALIDAÇÃO 7: Senha
+    // ════════════════════════════════════════════════════
     if (password.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres')
       return
     }
-
-    // 🆕 Validação WhatsApp
-    const whatsappNumeros = whatsapp.replace(/\D/g, '')
-    if (whatsappNumeros.length < 10 || whatsappNumeros.length > 11) {
-      setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem')
+      return
+    }
+    // Bloqueia senhas muito comuns
+    const senhasComuns = [
+      '123456', '1234567', '12345678', '123456789', '1234567890',
+      'senha123', 'senha1234', 'senha12345',
+      'qwerty', 'qwerty123', 'abc123', 'abc1234',
+      'password', 'password123', 'admin123', 'admin1234',
+      '111111', '222222', '000000',
+    ]
+    if (senhasComuns.includes(password.toLowerCase())) {
+      setError('Essa senha é muito comum. Use uma mais segura')
       return
     }
 
     setLoading(true)
 
     try {
+      // ════════════════════════════════════════════════════
+      // 🛡️ CAMADA 2: Checar se WhatsApp já tem conta
+      // ════════════════════════════════════════════════════
+      const { data: perfisExistentes } = await supabase
+        .from('perfis')
+        .select('id, telefone')
+        .eq('telefone', whatsappNumeros)
+        .limit(1)
+
+      if (perfisExistentes && perfisExistentes.length > 0) {
+        setError(
+          'Este WhatsApp já tem uma conta no EstoqueSystem. Faça login ou use "Esqueci a senha" para recuperar o acesso.'
+        )
+        setLoading(false)
+        return
+      }
+
+      // ════════════════════════════════════════════════════
+      // 🛡️ CAMADA 3: Checar prefixos de email suspeitos
+      // (mesmo nome + domínios diferentes = burla de trial)
+      // ════════════════════════════════════════════════════
+      const emailNormalizado = email.trim().toLowerCase()
+      const prefixoEmail = emailNormalizado.split('@')[0]
+
+      // Só verifica prefixos de 4+ chars (evita falso positivo)
+      if (prefixoEmail.length >= 4) {
+        const { data: emailsSimilares } = await supabase
+          .from('perfis_completos')
+          .select('email')
+          .ilike('email', `${prefixoEmail}@%`)
+          .limit(5)
+
+        if (emailsSimilares && emailsSimilares.length > 0) {
+          const emailExistente = emailsSimilares[0].email
+          setError(
+            `Já existe uma conta com email "${emailExistente}". Se for sua conta, faça login. Se não, use outro nome de email.`
+          )
+          setLoading(false)
+          return
+        }
+      }
+
+      // ════════════════════════════════════════════════════
+      // ✅ TUDO LIBERADO: cria a conta
+      // ════════════════════════════════════════════════════
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: emailNormalizado,
         password,
         options: {
           data: {
-            nome_completo: nomeCompleto,
-            nome_negocio: nomeNegocio,
-            // 🆕 Passa via metadata também
+            nome_completo: nomeLimpo,
+            nome_negocio: negocioLimpo,
             telefone: whatsappNumeros,
-            cidade: cidade,
+            cidade: cidadeLimpa,
             estado: estado,
           },
           emailRedirectTo: `${window.location.origin}/auth/confirmado`,
@@ -15496,6 +17577,10 @@ export default function Signup() {
       if (signUpError) {
         if (signUpError.message.includes('already registered')) {
           setError('Este email já está cadastrado. Tente fazer login.')
+        } else if (signUpError.message.includes('WhatsApp já está cadastrado')) {
+          setError(
+            'Este WhatsApp já tem uma conta no EstoqueSystem. Faça login ou use "Esqueci a senha".'
+          )
         } else {
           setError(signUpError.message)
         }
@@ -15503,24 +17588,45 @@ export default function Signup() {
       }
 
       if (data.user) {
-        // 🆕 Atualiza o perfil com WhatsApp/cidade/estado
-        // (caso o trigger automático não tenha pego)
-        await supabase
-          .from('perfis')
-          .update({
-            telefone: whatsappNumeros,
-            cidade: cidade || null,
-            estado: estado || null,
-          })
-          .eq('id', data.user.id)
+        // 🛡️ UPSERT + retry — garante que o telefone SEMPRE seja salvo
+        let tentativas = 0
+        let salvouTelefone = false
+
+        while (tentativas < 3 && !salvouTelefone) {
+          tentativas++
+
+          const { error: upsertError } = await supabase
+            .from('perfis')
+            .upsert(
+              {
+                id: data.user.id,
+                telefone: whatsappNumeros,
+                cidade: cidadeLimpa,
+                estado: estado,
+                nome_negocio: negocioLimpo,
+              },
+              { onConflict: 'id' }
+            )
+
+          if (!upsertError) {
+            salvouTelefone = true
+          } else {
+            console.error(`Tentativa ${tentativas} falhou:`, upsertError)
+            await new Promise((resolve) => setTimeout(resolve, 500))
+          }
+        }
+
+        if (!salvouTelefone) {
+          console.error('⚠️ Falha ao salvar telefone após 3 tentativas')
+        }
 
         // Envia email de boas-vindas
         fetch('/api/email/boas-vindas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email,
-            nome: nomeCompleto,
+            email: emailNormalizado,
+            nome: nomeLimpo,
           }),
         }).catch(console.error)
 
@@ -15545,7 +17651,6 @@ export default function Signup() {
         setSuccess('Conta criada com sucesso! Redirecionando...')
         setTimeout(() => {
           router.push('/dashboard')
-          
         }, 1500)
       }
     } catch (err) {
@@ -15667,8 +17772,9 @@ export default function Signup() {
                   value={nomeCompleto}
                   onChange={(e) => setNomeCompleto(e.target.value)}
                   required
+                  minLength={3}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                  placeholder="Seu nome"
+                  placeholder="Ex: João Silva"
                 />
               </div>
             </div>
@@ -15685,13 +17791,14 @@ export default function Signup() {
                   value={nomeNegocio}
                   onChange={(e) => setNomeNegocio(e.target.value)}
                   required
+                  minLength={2}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Ex: Mercadinho do Zé"
                 />
               </div>
             </div>
 
-            {/* 🆕 WhatsApp */}
+            {/* WhatsApp */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
                 <span>WhatsApp</span>
@@ -15712,7 +17819,7 @@ export default function Signup() {
               </div>
             </div>
 
-            {/* 🆕 Cidade + Estado */}
+            {/* Cidade + Estado */}
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -15724,6 +17831,8 @@ export default function Signup() {
                     type="text"
                     value={cidade}
                     onChange={(e) => setCidade(e.target.value)}
+                    required
+                    minLength={2}
                     className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                     placeholder="Saquarema"
                   />
@@ -15736,6 +17845,7 @@ export default function Signup() {
                 <select
                   value={estado}
                   onChange={(e) => setEstado(e.target.value)}
+                  required
                   className="w-full px-3 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition cursor-pointer"
                 >
                   {[
@@ -15779,6 +17889,7 @@ export default function Signup() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                   placeholder="Mínimo 6 caracteres"
                 />
@@ -15797,6 +17908,7 @@ export default function Signup() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  minLength={6}
                   className={`w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition ${
                     confirmPassword && password !== confirmPassword
                       ? 'border-red-400'
@@ -16315,25 +18427,50 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 import ToastContainer from '@/components/toast-container'
 
 export const metadata: Metadata = {
-  title: 'EstoqueSystem — Controle de Estoque para Pequenos Comércios',
+  metadataBase: new URL('https://estoquesystem.com.br'),
+  title: {
+    default: 'EstoqueSystem — Controle de Estoque para Mercadinhos Brasileiros',
+    template: '%s | EstoqueSystem',
+  },
   description:
-    'Sistema completo de estoque, PDV e relatórios para mercados, mercearias e pequenos comércios. Funciona no celular. 15 dias grátis.',
+    'Sistema completo de estoque, PDV, fiado e relatórios para mercados, mercearias e pequenos comércios. Funciona no celular. 15 dias grátis, sem cartão.',
   keywords: [
     'sistema de estoque',
     'controle de estoque',
     'PDV',
     'ponto de venda',
-    'mercado',
+    'mercadinho',
     'mercearia',
+    'mercado',
     'gestão de estoque',
     'estoque online',
+    'controle de fiado',
+    'sistema para mercadinho',
+    'app mercadinho',
+    'sistema PDV celular',
+    'controle de vendas',
+    'gestão comércio',
+    'pequenos comércios',
+    'sistema brasileiro',
+    'EstoqueSystem',
+    'Saquarema',
   ],
-  authors: [{ name: 'Lucas Machado' }],
+  authors: [{ name: 'Lucas Machado', url: 'https://estoquesystem.com.br' }],
+  creator: 'Lucas Machado',
+  publisher: 'EstoqueSystem',
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'EstoqueSystem — Controle de Estoque Simples e Inteligente',
     description:
-      'Gerencie seu estoque, venda pelo PDV e acompanhe relatórios. Tudo no celular. Teste grátis por 15 dias.',
-    url: 'https://documento-estoque.vercel.app',
+      'Gerencie seu estoque, venda pelo PDV e acompanhe relatórios. Tudo no celular. 15 dias grátis, sem cartão de crédito.',
+    url: 'https://estoquesystem.com.br',
     siteName: 'EstoqueSystem',
     locale: 'pt_BR',
     type: 'website',
@@ -16342,20 +18479,37 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'EstoqueSystem — Sistema de Estoque',
+        alt: 'EstoqueSystem — Sistema de Estoque para Mercadinhos',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'EstoqueSystem — Controle de Estoque Simples',
-    description: 'Sistema de estoque, PDV e relatórios. 15 dias grátis.',
+    description:
+      'Sistema de estoque, PDV, fiado e relatórios pra mercadinhos. 15 dias grátis.',
     images: ['/og-image.png'],
+    creator: '@estoquesystem',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-icon.png',
   },
+  verification: {
+    google: 'krg-zQL0eyIxldgnTAzi1b_0B6TRl55JIwlFo-8Zaio',
+  },
+  category: 'business',
 }
 
 export default function RootLayout({
@@ -16382,6 +18536,76 @@ export default function RootLayout({
               gtag('js', new Date());
               gtag('config', 'GT-PHPDXM6V');
             `,
+          }}
+        />
+
+        {/* Schema.org - SoftwareApplication (Google adora!) */}
+        <Script
+          id="schema-software"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'SoftwareApplication',
+              name: 'EstoqueSystem',
+              description:
+                'Sistema de gestão de estoque, PDV e controle de fiado para mercadinhos brasileiros.',
+              applicationCategory: 'BusinessApplication',
+              operatingSystem: 'Web, iOS, Android',
+              offers: {
+                '@type': 'Offer',
+                price: '39.90',
+                priceCurrency: 'BRL',
+                priceValidUntil: '2026-12-31',
+                availability: 'https://schema.org/InStock',
+              },
+              aggregateRating: {
+                '@type': 'AggregateRating',
+                ratingValue: '4.9',
+                ratingCount: '12',
+              },
+              creator: {
+                '@type': 'Person',
+                name: 'Lucas Machado',
+              },
+            }),
+          }}
+        />
+
+        {/* Schema.org - Organização Local */}
+        <Script
+          id="schema-organization"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: 'EstoqueSystem',
+              url: 'https://estoquesystem.com.br',
+              logo: 'https://estoquesystem.com.br/og-image.png',
+              description:
+                'Sistema brasileiro de gestão para mercadinhos, mercearias e pequenos comércios.',
+              founder: {
+                '@type': 'Person',
+                name: 'Lucas Machado',
+              },
+              address: {
+                '@type': 'PostalAddress',
+                addressLocality: 'Saquarema',
+                addressRegion: 'RJ',
+                addressCountry: 'BR',
+              },
+              contactPoint: {
+                '@type': 'ContactPoint',
+                telephone: '+55-22-99946-7499',
+                contactType: 'customer service',
+                areaServed: 'BR',
+                availableLanguage: 'Portuguese',
+              },
+              sameAs: [
+                'https://wa.me/5522999467499',
+              ],
+            }),
           }}
         />
       </head>
@@ -17449,6 +19673,107 @@ export default function LandingPage() {
       </a>
     </div>
   )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\robots.ts ===
+import { MetadataRoute } from 'next'
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: [
+          '/dashboard/',
+          '/api/',
+          '/auth/',
+          '/login',
+          '/reset-password',
+        ],
+      },
+    ],
+    sitemap: 'https://estoquesystem.com.br/sitemap.xml',
+  }
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\app\sitemap.ts ===
+import { MetadataRoute } from 'next'
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = 'https://estoquesystem.com.br'
+  const lastModified = new Date()
+
+  return [
+    {
+      url: baseUrl,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 1,
+    },
+    {
+      url: `${baseUrl}/signup`,
+      lastModified,
+      changeFrequency: 'monthly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/login`,
+      lastModified,
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/assinar`,
+      lastModified,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/blog`,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/blog/como-controlar-fiado-no-mercadinho`,
+      lastModified,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/termos`,
+      lastModified,
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
+      url: `${baseUrl}/privacidade`,
+      lastModified,
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
+  url: `${baseUrl}/blog/como-abrir-mercadinho-do-zero`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.9, // 👈 prioridade ALTA (artigo principal)
+},
+{
+  url: `${baseUrl}/blog/como-controlar-fiado-no-mercadinho`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.7,
+},
+{
+  url: `${baseUrl}/checklist-abrir-mercadinho`,
+  lastModified,
+  changeFrequency: 'monthly',
+  priority: 0.9,
+},
+  ]
 }
 
 
@@ -19638,6 +21963,218 @@ export default function Loading() {
   )
 }
 
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\modal-completar-perfil.tsx ===
+// src/components/modal-completar-perfil.tsx
+'use client'
+
+import { useState } from 'react'
+import { Phone, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+
+interface Props {
+  onComplete: () => void
+}
+
+export default function ModalCompletarPerfil({ onComplete }: Props) {
+  const [whatsapp, setWhatsapp] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [sucesso, setSucesso] = useState<{
+    fantasmasDeletados: number
+  } | null>(null)
+
+  const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let valor = e.target.value.replace(/\D/g, '')
+    if (valor.length > 11) valor = valor.slice(0, 11)
+
+    if (valor.length > 10) {
+      valor = valor.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3')
+    } else if (valor.length > 6) {
+      valor = valor.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
+    } else if (valor.length > 2) {
+      valor = valor.replace(/(\d{2})(\d{0,5})/, '($1) $2')
+    } else if (valor.length > 0) {
+      valor = valor.replace(/(\d{0,2})/, '($1')
+    }
+
+    setWhatsapp(valor)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    const numeros = whatsapp.replace(/\D/g, '')
+    if (numeros.length < 10 || numeros.length > 11) {
+      setError('WhatsApp inválido. Use o formato (XX) XXXXX-XXXX')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setError('Sessão expirada. Faça login novamente.')
+        return
+      }
+
+      const response = await fetch('/api/perfil/completar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ whatsapp: numeros }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || 'Erro ao salvar')
+        return
+      }
+
+      // 🎉 Sucesso!
+      setSucesso({ fantasmasDeletados: data.fantasmas_deletados || 0 })
+
+      // Espera 3 segundos pra mostrar sucesso e depois libera o dashboard
+      setTimeout(() => {
+        onComplete()
+      }, 3000)
+    } catch (err: any) {
+      setError(err.message || 'Erro ao processar')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ════════════════════════════════════════════════════
+  // 🎉 TELA DE SUCESSO
+  // ════════════════════════════════════════════════════
+  if (sucesso) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="inline-flex w-16 h-16 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 items-center justify-center mb-4 shadow-lg shadow-green-500/30">
+            <CheckCircle className="w-9 h-9 text-white" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Pronto! 🎉
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            WhatsApp cadastrado com sucesso!
+          </p>
+
+          {sucesso.fantasmasDeletados > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4 text-left">
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                ℹ️ Detectamos {sucesso.fantasmasDeletados} cadastro(s)
+                duplicado(s) e removemos pra organizar sua conta.
+              </p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400">
+            Redirecionando pro dashboard...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════════════════════
+  // 📝 FORMULÁRIO
+  // ════════════════════════════════════════════════════
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+              <Phone className="w-5 h-5" />
+            </div>
+            <h3 className="text-xl font-bold">Complete seu cadastro</h3>
+          </div>
+          <p className="text-green-100 text-sm">
+            Pra continuar, precisamos do seu WhatsApp pra suporte
+          </p>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="p-6 space-y-5">
+          {/* Aviso importante */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                ⚠️ Importante
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                Cada pessoa pode ter <strong>apenas 1 conta</strong> no
+                EstoqueSystem. Se você tiver cadastros duplicados, eles serão
+                removidos automaticamente.
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 text-sm text-red-700 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Seu WhatsApp <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="tel"
+                  value={whatsapp}
+                  onChange={handleWhatsappChange}
+                  required
+                  autoFocus
+                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition text-lg font-semibold"
+                  placeholder="(22) 99999-9999"
+                />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Esse número será usado pra suporte e notificações importantes.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                'Confirmar e continuar'
+              )}
+            </button>
+          </form>
+
+          <p className="text-xs text-center text-gray-400">
+            🔒 Seus dados estão seguros (LGPD)
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 
 // === C:\Users\locas\Documents\DocumentoEstoque\src\components\navbar.tsx ===
@@ -22060,6 +24597,143 @@ export async function parsearCSV(arquivo: File): Promise<ResultadoParse> {
       erroGeral: `Erro ao ler arquivo: ${err.message || 'desconhecido'}`,
     }
   }
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\lib\email-validation.ts ===
+// src/lib/email-validation.ts
+
+// ════════════════════════════════════════════════════
+// 🚫 DOMÍNIOS INVÁLIDOS (NÃO EXISTEM)
+// ════════════════════════════════════════════════════
+const DOMINIOS_INEXISTENTES = [
+  'gmail.com.br',
+  'hotmail.com.br',
+  'outlook.com.br',
+  'icloud.com.br',
+  'live.com.br',
+]
+
+// ════════════════════════════════════════════════════
+// ⌨️ TYPOS COMUNS (correção sugerida)
+// ════════════════════════════════════════════════════
+const TYPOS_COMUNS: Record<string, string> = {
+  'gmial.com': 'gmail.com',
+  'gmai.com': 'gmail.com',
+  'gmal.com': 'gmail.com',
+  'gnail.com': 'gmail.com',
+  'gmail.co': 'gmail.com',
+  'gmail.cm': 'gmail.com',
+  'hotmial.com': 'hotmail.com',
+  'hotmai.com': 'hotmail.com',
+  'hotmal.com': 'hotmail.com',
+  'hotmaill.com': 'hotmail.com',
+  'hotmail.co': 'hotmail.com',
+  'outlok.com': 'outlook.com',
+  'outloo.com': 'outlook.com',
+  'yaho.com': 'yahoo.com',
+  'yhoo.com': 'yahoo.com',
+}
+
+// ════════════════════════════════════════════════════
+// 🗑️ EMAILS DESCARTÁVEIS / TEMPORÁRIOS
+// ════════════════════════════════════════════════════
+const DOMINIOS_DESCARTAVEIS = [
+  'tempmail.com',
+  'tempmail.org',
+  '10minutemail.com',
+  '10minutemail.net',
+  'guerrillamail.com',
+  'mailinator.com',
+  'throwaway.email',
+  'temp-mail.org',
+  'fakeinbox.com',
+  'trashmail.com',
+  'yopmail.com',
+  'getnada.com',
+  'maildrop.cc',
+  'sharklasers.com',
+  'dispostable.com',
+]
+
+// ════════════════════════════════════════════════════
+// ✅ RESULTADO DA VALIDAÇÃO
+// ════════════════════════════════════════════════════
+export interface ResultadoValidacao {
+  valido: boolean
+  erro?: string
+  sugestao?: string
+}
+
+// ════════════════════════════════════════════════════
+// 🛡️ VALIDAÇÃO PRINCIPAL
+// ════════════════════════════════════════════════════
+export function validarEmail(email: string): ResultadoValidacao {
+  if (!email || email.trim().length === 0) {
+    return { valido: false, erro: 'Digite seu email' }
+  }
+
+  const emailLimpo = email.trim().toLowerCase()
+
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!regex.test(emailLimpo)) {
+    return { valido: false, erro: 'Formato de email inválido' }
+  }
+
+  const partes = emailLimpo.split('@')
+  if (partes.length !== 2) {
+    return { valido: false, erro: 'Email inválido' }
+  }
+
+  const usuario = partes[0]
+  const dominio = partes[1]
+
+  if (usuario.length < 1) {
+    return { valido: false, erro: 'Email inválido' }
+  }
+  if (usuario.length > 64) {
+    return { valido: false, erro: 'Email muito longo' }
+  }
+
+  if (!dominio.includes('.')) {
+    return { valido: false, erro: 'Domínio do email inválido' }
+  }
+
+  // 🚫 Bloqueia domínios INEXISTENTES (gmail.com.br, etc.)
+  if (DOMINIOS_INEXISTENTES.includes(dominio)) {
+    const dominioCorreto = dominio.replace('.com.br', '.com')
+    return {
+      valido: false,
+      erro: `O domínio "@${dominio}" não existe.`,
+      sugestao: `${usuario}@${dominioCorreto}`,
+    }
+  }
+
+  // ⌨️ Detecta typos comuns
+  if (TYPOS_COMUNS[dominio]) {
+    return {
+      valido: false,
+      erro: `Parece que você digitou "@${dominio}" por engano.`,
+      sugestao: `${usuario}@${TYPOS_COMUNS[dominio]}`,
+    }
+  }
+
+  // 🗑️ Bloqueia emails descartáveis
+  if (DOMINIOS_DESCARTAVEIS.includes(dominio)) {
+    return {
+      valido: false,
+      erro: 'Não aceitamos emails temporários. Use um email pessoal real.',
+    }
+  }
+
+  return { valido: true }
+}
+
+// ════════════════════════════════════════════════════
+// 🔧 NORMALIZA EMAIL (lowercase + trim)
+// ════════════════════════════════════════════════════
+export function normalizarEmail(email: string): string {
+  return email.trim().toLowerCase()
 }
 
 
