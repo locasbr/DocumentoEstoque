@@ -53,18 +53,47 @@ export default function AnaliseIA() {
   }
 
   const renderAnalise = (texto: string) => {
-    const linhas = texto.split('\n').filter(Boolean)
-    return linhas.map((linha, i) => {
-      const formatada = linha.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  const linhas = texto.split('\n').filter(Boolean)
+  return linhas.map((linha, i) => {
+    let formatada = linha.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    
+    // 🆕 Detecta bullets (linha começa com * ou -)
+    const isBullet = /^[\*\-]\s/.test(linha.trim())
+    // 🆕 Detecta títulos (linha só com **texto**)
+    const isTitulo = /^\*\*(.+)\*\*:?$/.test(linha.trim())
+    // 🆕 Detecta numeração (1., 2., 3.)
+    const isNumerado = /^\d+\.\s/.test(linha.trim())
+    
+    if (isBullet) {
+      formatada = formatada.replace(/^[\*\-]\s*/, '')
       return (
-        <p
-          key={i}
-          className="text-gray-700 dark:text-gray-300 mb-2 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: formatada }}
-        />
+        <div key={i} className="flex gap-2 mb-2 text-gray-700 dark:text-gray-300 leading-relaxed">
+          <span className="text-purple-500 font-bold flex-shrink-0">●</span>
+          <span className="flex-1" dangerouslySetInnerHTML={{ __html: formatada }} />
+        </div>
       )
-    })
-  }
+    }
+    
+    if (isTitulo) {
+      return (
+        <h4 key={i} className="text-gray-900 dark:text-white font-bold text-base mt-4 mb-2"
+          dangerouslySetInnerHTML={{ __html: formatada }} />
+      )
+    }
+    
+    if (isNumerado) {
+      return (
+        <p key={i} className="text-gray-700 dark:text-gray-300 mb-2 leading-relaxed ml-4"
+          dangerouslySetInnerHTML={{ __html: formatada }} />
+      )
+    }
+    
+    return (
+      <p key={i} className="text-gray-700 dark:text-gray-300 mb-2 leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: formatada }} />
+    )
+  })
+}
 
   return (
     <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-5 md:p-6 border border-purple-200 dark:border-purple-800">
@@ -77,7 +106,7 @@ export default function AnaliseIA() {
             Análise Inteligente com IA
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Powered by Gemini Flash 2.0 • Últimos 30 dias
+            Powered by Google Gemini • Últimos 30 dias
           </p>
         </div>
       </div>

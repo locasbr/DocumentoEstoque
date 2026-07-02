@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
+import { chamarIA } from '@/lib/gemini'
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,7 +17,7 @@ export async function POST(req: NextRequest) {
     )
 
     // ════════════════════════════════════════════════════
-    // 🔒 VERIFICA PLANO via tabela `perfis` (não `assinaturas`!)
+    // 🔒 VERIFICA PLANO via tabela `perfis`
     // ════════════════════════════════════════════════════
     const { data: perfil, error: perfilError } = await supabaseAdmin
       .from('perfis')
@@ -35,11 +33,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ✅ Regras de acesso:
-    // - Admin: acesso total (pra testar)
-    // - Trial: acesso total (deixa testar tudo nos 15 dias)
-    // - Profissional ou Negócio ativo: acesso liberado
-    // - Iniciante ativo: bloqueado
+    // ✅ Regras de acesso
     const podeUsarIA =
       perfil.is_admin === true ||
       perfil.plano === 'trial' ||
@@ -58,7 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ════════════════════════════════════════════════════
-    // 📊 BUSCA VENDAS dos últimos 30 dias (do user logado)
+    // 📊 BUSCA VENDAS dos últimos 30 dias
     // ════════════════════════════════════════════════════
     const dataInicio = new Date()
     dataInicio.setDate(dataInicio.getDate() - 30)
@@ -158,33 +152,21 @@ Sua análise deve conter:
 Seja direto, sem enrolação. Não invente dados que não estão acima.`
 
     // ════════════════════════════════════════════════════
-    // 🚀 CHAMA GEMINI
+    // 🚀 CHAMA GEMINI (via alias inteligente do lib/gemini.ts)
     // ════════════════════════════════════════════════════
-    const geminiRes = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 600,
-        },
-      }),
-    })
-
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text()
-      console.error('Erro Gemini:', err)
+    let analise: string
+    try {
+      analise = await chamarIA(prompt)
+    } catch (err: any) {
+      console.error('Erro Gemini:', err.message || err)
       return NextResponse.json(
-        { error: 'Erro ao gerar análise' },
+        { 
+          error: 'Erro ao gerar análise',
+          detalhe: err.message || 'Falha ao conectar com IA'
+        },
         { status: 500 }
       )
     }
-
-    const geminiData = await geminiRes.json()
-    const analise =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      'Não foi possível gerar a análise no momento.'
 
     console.log(`✅ Análise IA gerada pro user ${userId}`)
 
