@@ -347,9 +347,9 @@ export default function PDVPage() {
     [addNotification, tocarBipe]
   )
 
-  const removerDoCarrinho = (produto_id: string) => {
-    setCarrinho(carrinho.filter((i) => i.produto_id !== produto_id))
-  }
+  const removerDoCarrinho = useCallback((produto_id: string) => {
+    setCarrinho((prev) => prev.filter((i) => i.produto_id !== produto_id))
+  }, [])
 
   const atualizarQuantidade = (produto_id: string, nova: number) => {
     if (nova <= 0) {
@@ -568,6 +568,7 @@ export default function PDVPage() {
     addNotification,
     produtos,
     abrirPagamento,
+    removerDoCarrinho,
     telaSucesso,
   ])
 

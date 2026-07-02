@@ -1,9 +1,17 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import ToastContainer from '@/components/toast-container'
+import InstallPWABanner from '@/components/install-pwa-banner'
+
+export const viewport: Viewport = {
+  themeColor: '#16a34a',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://estoquesystem.com.br'),
@@ -44,6 +52,12 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: '/',
+  },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'EstoqueSystem',
   },
   openGraph: {
     title: 'EstoqueSystem — Controle de Estoque Simples e Inteligente',
@@ -192,6 +206,7 @@ export default function RootLayout({
         <ThemeProvider>
           <NotificationProvider>
             {children}
+            <InstallPWABanner />
             <ToastContainer />
           </NotificationProvider>
         </ThemeProvider>
