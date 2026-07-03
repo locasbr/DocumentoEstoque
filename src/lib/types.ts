@@ -2,6 +2,7 @@ export interface Produto {
   id: string;
   nome: string;
   descricao?: string;
+  marca?: string;
   sku: string;
   quantidade_atual: number;
   quantidade_minima: number;
