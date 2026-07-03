@@ -3,6 +3,7 @@
 import BotaoIA from '@/components/botao-ia'
 import SugestaoPrecoIA from '@/components/sugestao-preco-ia'
 import { useIAPreco, type SugestaoPreco } from '@/hooks/useIAPreco'
+import { useIAProduto } from '@/hooks/useIAProduto'
 import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
 import BarcodeProductModal from '@/components/barcode-product-modal'
 import { useState } from 'react'
@@ -41,33 +42,17 @@ export default function NovoProdutoPage() {
   // 🔒 Modal de limite atingido
   const [mostrarLimiteAtingido, setMostrarLimiteAtingido] = useState(false)
 
-// ✨ IA de preço
-const { sugerirPreco, carregando: carregandoIAPreco } = useIAPreco()
-const [sugestaoPreco, setSugestaoPreco] = useState<SugestaoPreco | null>(null)
+  // ✨ IA de preço
+  const { sugerirPreco, carregando: carregandoIAPreco } = useIAPreco()
+  const [sugestaoPreco, setSugestaoPreco] = useState<SugestaoPreco | null>(null)
 
-const handleSugerirPreco = async () => {
-  const sugestao = await sugerirPreco({
-    nome: formData.nome,
-    categoria: formData.categoria,
-    descricao: formData.descricao,
-    precoCusto: formData.preco_custo,
-  })
-  if (sugestao) {
-    setSugestaoPreco(sugestao)
-  }
-}
-
-const handleSelecionarPreco = (preco: number) => {
-  setFormData((prev) => ({
-    ...prev,
-    preco_venda: preco,
-  }))
-  setSugestaoPreco(null)
-}
+  // ✨ IA de dados do produto (marca, descrição, categoria)
+  const { completarComIA, carregando: carregandoIAProduto } = useIAProduto()
 
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
+    marca: '',
     sku: '',
     categoria: '',
     quantidade_atual: 0,
@@ -75,8 +60,51 @@ const handleSelecionarPreco = (preco: number) => {
     preco_custo: 0,
     preco_venda: 0,
     data_validade: '',
-    
   })
+
+  const handleSugerirPreco = async () => {
+    const sugestao = await sugerirPreco({
+      nome: formData.nome,
+      categoria: formData.categoria,
+      descricao: formData.descricao,
+      precoCusto: formData.preco_custo,
+    })
+    if (sugestao) {
+      setSugestaoPreco(sugestao)
+    }
+  }
+
+  const handleSelecionarPreco = (preco: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      preco_venda: preco,
+    }))
+    setSugestaoPreco(null)
+  }
+
+  // ✨ Completar dados com IA (marca, descrição, categoria)
+  const handleCompletarComIA = async () => {
+    if (!formData.nome.trim()) {
+      addNotification('Digite o nome do produto primeiro', 'warning', 2000)
+      return
+    }
+
+    const sugestao = await completarComIA({
+      nomeOriginal: formData.nome,
+      sku: formData.sku,
+      marca: formData.marca,
+      descricaoOriginal: formData.descricao,
+    })
+
+    if (sugestao) {
+      setFormData((prev) => ({
+        ...prev,
+        marca: sugestao.marca || prev.marca,
+        descricao: sugestao.descricao || prev.descricao,
+        categoria: sugestao.categoria || prev.categoria,
+      }))
+    }
+  }
 
   // 🔒 LOADING DO PLANO
   if (loadingPlano) {
@@ -130,10 +158,8 @@ const handleSelecionarPreco = (preco: number) => {
       categoria: produto.categoria || prev.categoria,
     }))
     setBarcodeModalAberto(false)
-    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
+    addNotification('✅ Formulário preenchido automaticamente!', 'success', 2000)
   }
-
-  
 
   const getValidadeInfo = () => {
     if (!formData.data_validade) return null
@@ -188,7 +214,7 @@ const handleSelecionarPreco = (preco: number) => {
       }
 
       setSuccess('Produto criado com sucesso!')
-      addNotification('\u2705 Produto adicionado ao estoque!', 'success', 3000)
+      addNotification('✅ Produto adicionado ao estoque!', 'success', 3000)
       setTimeout(() => {
         router.push('/dashboard/produtos')
       }, 1500)
@@ -265,7 +291,6 @@ const handleSelecionarPreco = (preco: number) => {
 
       <div className="card max-w-2xl dark:bg-gray-900 dark:border-gray-800">
         <form onSubmit={handleSubmit} className="space-y-6">
-          
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -308,6 +333,35 @@ const handleSelecionarPreco = (preco: number) => {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* ✨ BOTÃO IA — Completar dados automaticamente */}
+          <div>
+            <BotaoIA
+              onClick={handleCompletarComIA}
+              carregando={carregandoIAProduto}
+              label="✨ Completar com IA (marca, descrição, categoria)"
+              className="w-full justify-center text-sm"
+            />
+            {!formData.nome.trim() && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-1">
+                ⚠️ Digite o nome do produto primeiro
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
+              Marca
+            </label>
+            <input
+              type="text"
+              name="marca"
+              value={formData.marca}
+              onChange={handleInputChange}
+              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
+              placeholder="Ex: Coca-Cola, Nestlé, Sadia..."
+            />
           </div>
 
           <div>
@@ -395,44 +449,44 @@ const handleSelecionarPreco = (preco: number) => {
           </div>
 
           <div>
-  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-    Preço de Venda (R$) *
-  </label>
-  <input
-    type="number"
-    name="preco_venda"
-    value={formData.preco_venda}
-    onChange={handleInputChange}
-    step="0.01"
-    min="0"
-    required
-    className="input-field w-full mt-1"
-  />
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Preço de Venda (R$) *
+            </label>
+            <input
+              type="number"
+              name="preco_venda"
+              value={formData.preco_venda}
+              onChange={handleInputChange}
+              step="0.01"
+              min="0"
+              required
+              className="input-field w-full mt-1"
+            />
 
-  {/* ✨ BOTÃO IA — Sugestão de preço */}
-  <div className="mt-2">
-    <BotaoIA
-      onClick={handleSugerirPreco}
-      carregando={carregandoIAPreco}
-      label="✨ Sugerir preço com IA"
-      className="w-full justify-center text-sm"
-    />
-    {(!formData.nome.trim() || formData.preco_custo <= 0) && (
-      <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-1">
-        ⚠️ Preencha o nome e o preço de custo primeiro
-      </p>
-    )}
-  </div>
+            {/* ✨ BOTÃO IA — Sugestão de preço */}
+            <div className="mt-2">
+              <BotaoIA
+                onClick={handleSugerirPreco}
+                carregando={carregandoIAPreco}
+                label="✨ Sugerir preço com IA"
+                className="w-full justify-center text-sm"
+              />
+              {(!formData.nome.trim() || formData.preco_custo <= 0) && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-1">
+                  ⚠️ Preencha o nome e o preço de custo primeiro
+                </p>
+              )}
+            </div>
 
-  {/* ✨ Painel de sugestões */}
-  {sugestaoPreco && (
-    <SugestaoPrecoIA
-      sugestao={sugestaoPreco}
-      onSelecionar={handleSelecionarPreco}
-      onFechar={() => setSugestaoPreco(null)}
-    />
-  )}
-</div>
+            {/* ✨ Painel de sugestões */}
+            {sugestaoPreco && (
+              <SugestaoPrecoIA
+                sugestao={sugestaoPreco!}
+                onSelecionar={handleSelecionarPreco}
+                onFechar={() => setSugestaoPreco(null)}
+              />
+            )}
+          </div>
 
           {/* ══════════ DATA DE VALIDADE — só mostra se temValidade ══════════ */}
           {temValidade ? (
@@ -452,29 +506,29 @@ const handleSelecionarPreco = (preco: number) => {
                 Deixe em branco se o produto não tem validade
               </p>
 
-              {validadeInfo && validadeInfo.vencido && (
+              {validadeInfo?.vencido && (
                 <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                   <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
                   <p className="text-sm text-red-700 dark:text-red-400 font-medium">
-                    Atenção: esta data já está vencida (há {Math.abs(validadeInfo.diasRestantes)} dias)
+                    Atenção: esta data já está vencida (há {Math.abs(validadeInfo?.diasRestantes ?? 0)} dias)
                   </p>
                 </div>
               )}
 
-              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
+              {!validadeInfo?.vencido && (validadeInfo?.diasRestantes ?? 0) <= 7 && (
                 <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
                   <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
-                    Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
+                    Aviso: este produto vence em {validadeInfo?.diasRestantes ?? 0} dia(s)
                   </p>
                 </div>
               )}
 
-              {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
+              {!validadeInfo?.vencido && (validadeInfo?.diasRestantes ?? 0) > 7 && (validadeInfo?.diasRestantes ?? 0) <= 30 && (
                 <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
                   <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
                   <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                    Validade: {validadeInfo.diasRestantes} dias restantes
+                    Validade: {validadeInfo?.diasRestantes ?? 0} dias restantes
                   </p>
                 </div>
               )}
@@ -530,7 +584,7 @@ const handleSelecionarPreco = (preco: number) => {
       {barcodeModalAberto && produtoBarcode !== null && (
         <BarcodeProductModal
           codigo={barcodeDetectado}
-          produto={produtoBarcode}
+          produto={produtoBarcode!}
           loading={buscandoBarcode}
           onConfirmar={handleConfirmarBarcode}
           onCancelar={() => setBarcodeModalAberto(false)}
