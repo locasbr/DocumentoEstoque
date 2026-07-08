@@ -28,6 +28,84 @@ export default function Login() {
   const [resetSucesso, setResetSucesso] = useState(false)
   const [resetError, setResetError] = useState('')
 
+  const traduzirErroSupabase = (mensagem: string): string => {
+    const msg = mensagem.toLowerCase().trim()
+
+    if (msg.includes('invalid login credentials')) {
+      return 'Email ou senha incorretos.'
+    }
+
+    if (msg.includes('email not confirmed')) {
+      return 'Email ainda não confirmado. Verifique sua caixa de entrada (e o spam) pra confirmar a conta.'
+    }
+
+    if (msg.includes('email link is invalid') || msg.includes('token has expired')) {
+      return 'Link inválido ou expirado. Solicite um novo.'
+    }
+
+    if (msg.includes('user not found')) {
+      return 'Usuário não encontrado.'
+    }
+
+    if (msg.includes('user already registered')) {
+      return 'Este email já está cadastrado. Faça login.'
+    }
+
+    if (msg.includes('already registered')) {
+      return 'Este email já está cadastrado.'
+    }
+
+    if (msg.includes('password should be at least')) {
+      return 'A senha precisa ter pelo menos 6 caracteres.'
+    }
+
+    if (msg.includes('weak password') || msg.includes('password is too weak')) {
+      return 'Senha muito fraca. Use letras, números e ao menos 6 caracteres.'
+    }
+
+    if (msg.includes('new password should be different')) {
+      return 'A nova senha precisa ser diferente da atual.'
+    }
+
+    if (msg.includes('email rate limit exceeded')) {
+      return 'Muitas tentativas de envio de email. Aguarde alguns minutos e tente de novo.'
+    }
+
+    if (msg.includes('rate limit') || msg.includes('too many requests')) {
+      return 'Muitas tentativas. Aguarde um pouco e tente novamente.'
+    }
+
+    if (msg.includes('signups not allowed') || msg.includes('signup disabled')) {
+      return 'Cadastros estão temporariamente desabilitados.'
+    }
+
+    if (msg.includes('unable to validate email address') || msg.includes('invalid email')) {
+      return 'Email inválido. Verifique o formato.'
+    }
+
+    if (msg.includes('oauth') || msg.includes('provider')) {
+      return 'Erro ao autenticar com o provedor externo. Tente de novo.'
+    }
+
+    if (msg.includes('jwt expired') || msg.includes('session expired') || msg.includes('invalid jwt')) {
+      return 'Sua sessão expirou. Faça login novamente.'
+    }
+
+    if (msg.includes('missing') && msg.includes('token')) {
+      return 'Sessão inválida. Faça login novamente.'
+    }
+
+    if (msg.includes('network') || msg.includes('failed to fetch')) {
+      return 'Erro de conexão. Verifique sua internet e tente de novo.'
+    }
+
+    return mensagem
+  }
+
+  const erroEmailNaoConfirmado =
+    error.toLowerCase().includes('email ainda não confirmado') ||
+    error.toLowerCase().includes('email not confirmed')
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -40,11 +118,7 @@ export default function Login() {
       })
 
       if (signInError) {
-        if (signInError.message === 'Invalid login credentials') {
-          setError('Email ou senha incorretos.')
-        } else {
-          setError(signInError.message)
-        }
+        setError(traduzirErroSupabase(signInError.message))
         return
       }
 
@@ -74,7 +148,7 @@ export default function Login() {
       })
 
       if (error) {
-        setResetError(error.message)
+        setResetError(traduzirErroSupabase(error.message))
       } else {
         setResetSucesso(true)
       }
@@ -253,6 +327,35 @@ export default function Login() {
           </div>
 
           {error && <Alert message={error} type="error" />}
+
+          {erroEmailNaoConfirmado && (
+            <button
+              type="button"
+              onClick={async () => {
+                setLoading(true)
+                try {
+                  const { error: resendError } = await supabase.auth.resend({
+                    type: 'signup',
+                    email,
+                  })
+
+                  if (resendError) {
+                    setError(traduzirErroSupabase(resendError.message))
+                    return
+                  }
+
+                  setError('Email de confirmação reenviado. Verifique sua caixa de entrada.')
+                } catch {
+                  setError('Erro ao reenviar email. Tente novamente.')
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              className="mt-2 text-sm font-semibold text-green-600 hover:text-green-700 dark:text-green-400 hover:underline"
+            >
+              Reenviar email de confirmação
+            </button>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
