@@ -8,6 +8,7 @@ import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 import TrialBanner from '@/components/trial-banner'
+import AvisoVencimento from '@/components/AvisoVencimento'
 import ModalCompletarPerfil from '@/components/modal-completar-perfil'
 import AdminWarningBanner from '@/components/admin-warning-banner'
 const RESTRICTED_ROUTES = [
@@ -29,7 +30,6 @@ export default function DashboardLayout({
   const [isLoading, setIsLoading] = useState(true)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
-  const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
   // 🆕 NOVO: estado pra forçar completar perfil
   const [precisaCompletarPerfil, setPrecisaCompletarPerfil] = useState(false)
   const initialCheckDone = useRef(false)
@@ -150,32 +150,6 @@ export default function DashboardLayout({
             setDiasRestantes(dias)
             if (dias >= 0 && dias <= 5) setMostrarBanner(true)
           }
-
-          if (perfil.plano === 'ativo' && perfil.plano_fim) {
-            const fimPlano = new Date(perfil.plano_fim)
-            if (fimPlano < agora) {
-              await supabase
-                .from('perfis')
-                .update({ plano: 'expirado' })
-                .eq('id', data.session.user.id)
-              router.push('/assinar')
-              return
-            }
-
-            const diasPlano = Math.ceil(
-              (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
-            )
-
-            if (
-              diasPlano >= 0 &&
-              diasPlano <= 5 &&
-              perfil.tipo_pagamento === 'pix'
-            ) {
-              setDiasRestantes(diasPlano)
-              setMostrarBanner(true)
-              setTipoBanner('renovacao')
-            }
-          }
         }
 
         initialCheckDone.current = true
@@ -193,16 +167,17 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AdminWarningBanner />
-      {mostrarBanner && diasRestantes !== null && (
-        <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
-      )}
-
       <Navbar />
       <Sidebar />
       <SearchCommand />
 
       <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
+        <AdminWarningBanner />
+        <AvisoVencimento />
+        {mostrarBanner && diasRestantes !== null && (
+          <TrialBanner diasRestantes={diasRestantes} />
+        )}
+
         {children}
       </main>
 

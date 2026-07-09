@@ -118,6 +118,7 @@ function AssinarContent() {
 
   const statusPagamento = searchParams.get('pagamento')
   const planoParam = searchParams.get('plano')
+  const querRenovar = searchParams.get('renovar') === '1'
 
   useEffect(() => {
     const verificar = async () => {
@@ -136,14 +137,25 @@ function AssinarContent() {
         .eq('id', data.session.user.id)
         .single()
 
-      if (perfil?.plano === 'ativo' && perfil?.tipo_plano === 'negocio') {
+      if (
+        perfil?.plano === 'ativo' &&
+        perfil?.tipo_plano === 'negocio' &&
+        !querRenovar
+      ) {
         router.push('/dashboard')
         return
       }
 
-      // Pré-seleciona plano vindo da URL (?plano=profissional)
-      if (planoParam && ['iniciante', 'profissional', 'negocio'].includes(planoParam)) {
-        setPlanoSelecionado(planoParam)
+      const planoVindoDaUrl =
+        planoParam && ['iniciante', 'profissional', 'negocio'].includes(planoParam)
+          ? planoParam
+          : null
+
+      // Quando vem do banner de renovação, a URL manda na seleção inicial.
+      if (querRenovar && planoVindoDaUrl) {
+        setPlanoSelecionado(planoVindoDaUrl)
+      } else if (planoVindoDaUrl) {
+        setPlanoSelecionado(planoVindoDaUrl)
       } else if (perfil?.tipo_plano) {
         // Ou sugere upgrade lógico
         setTipoPlanoAtual(perfil.tipo_plano)
@@ -200,6 +212,7 @@ function AssinarContent() {
   const subtituloHeader = isUpgrade
     ? `Você está no plano ${tipoPlanoAtual === 'iniciante' ? 'Iniciante' : 'Profissional'}. Desbloqueie mais recursos!`
     : 'Sem fidelidade. Cancele quando quiser.'
+  const planoRenovacao = querRenovar && planoSelecionado ? PLANOS.find((p) => p.id === planoSelecionado) : null
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 py-8 md:py-12 px-4 relative overflow-hidden">
@@ -234,6 +247,11 @@ function AssinarContent() {
 
         {/* Header */}
         <div className="text-center mb-10 md:mb-12">
+          {querRenovar && planoRenovacao && (
+            <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-amber-200 dark:border-amber-800">
+              🔄 Renovação do seu plano {planoRenovacao.nome}
+            </div>
+          )}
           <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-green-500/20">
             {isUpgrade ? '🚀 Upgrade disponível' : '🔒 Período de teste encerrou'}
           </div>
@@ -250,7 +268,7 @@ function AssinarContent() {
           {PLANOS.map((plano) => {
             const Icon = plano.icon
             const isSelected = planoSelecionado === plano.id
-            const isCurrent = tipoPlanoAtual === plano.id
+            const isCurrent = tipoPlanoAtual === plano.id && !querRenovar
 
             return (
               <button
@@ -395,15 +413,19 @@ function AssinarContent() {
           {/* Botão de pagamento */}
           <button
             onClick={handlePagar}
-            disabled={processando !== null || tipoPlanoAtual === planoSelecionado}
+            disabled={processando !== null || (tipoPlanoAtual === planoSelecionado && !querRenovar)}
             className={`w-full ${
               planoAtual?.corBotao || 'bg-green-600 hover:bg-green-700'
             } disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:shadow-none text-white font-bold py-4 rounded-full text-base md:text-lg transition-all`}
           >
             {processando
               ? 'Processando...'
-              : tipoPlanoAtual === planoSelecionado
+              : tipoPlanoAtual === planoSelecionado && !querRenovar
               ? 'Este é seu plano atual'
+              : querRenovar && tipoPlanoAtual === planoSelecionado
+              ? `Renovar ${planoAtual?.nome} • R$ ${planoAtual?.preco
+                  .toFixed(2)
+                  .replace('.', ',')}/mês`
               : `${isUpgrade ? 'Fazer upgrade pro' : 'Assinar'} ${planoAtual?.nome} • R$ ${planoAtual?.preco
                   .toFixed(2)
                   .replace('.', ',')}/mês`}
