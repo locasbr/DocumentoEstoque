@@ -2260,6 +2260,7 @@ function AssinarContent() {
 
   const statusPagamento = searchParams.get('pagamento')
   const planoParam = searchParams.get('plano')
+  const querRenovar = searchParams.get('renovar') === '1'
 
   useEffect(() => {
     const verificar = async () => {
@@ -2278,14 +2279,25 @@ function AssinarContent() {
         .eq('id', data.session.user.id)
         .single()
 
-      if (perfil?.plano === 'ativo' && perfil?.tipo_plano === 'negocio') {
+      if (
+        perfil?.plano === 'ativo' &&
+        perfil?.tipo_plano === 'negocio' &&
+        !querRenovar
+      ) {
         router.push('/dashboard')
         return
       }
 
-      // Pré-seleciona plano vindo da URL (?plano=profissional)
-      if (planoParam && ['iniciante', 'profissional', 'negocio'].includes(planoParam)) {
-        setPlanoSelecionado(planoParam)
+      const planoVindoDaUrl =
+        planoParam && ['iniciante', 'profissional', 'negocio'].includes(planoParam)
+          ? planoParam
+          : null
+
+      // Quando vem do banner de renovação, a URL manda na seleção inicial.
+      if (querRenovar && planoVindoDaUrl) {
+        setPlanoSelecionado(planoVindoDaUrl)
+      } else if (planoVindoDaUrl) {
+        setPlanoSelecionado(planoVindoDaUrl)
       } else if (perfil?.tipo_plano) {
         // Ou sugere upgrade lógico
         setTipoPlanoAtual(perfil.tipo_plano)
@@ -2342,6 +2354,7 @@ function AssinarContent() {
   const subtituloHeader = isUpgrade
     ? `Você está no plano ${tipoPlanoAtual === 'iniciante' ? 'Iniciante' : 'Profissional'}. Desbloqueie mais recursos!`
     : 'Sem fidelidade. Cancele quando quiser.'
+  const planoRenovacao = querRenovar && planoSelecionado ? PLANOS.find((p) => p.id === planoSelecionado) : null
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 py-8 md:py-12 px-4 relative overflow-hidden">
@@ -2376,6 +2389,11 @@ function AssinarContent() {
 
         {/* Header */}
         <div className="text-center mb-10 md:mb-12">
+          {querRenovar && planoRenovacao && (
+            <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-amber-200 dark:border-amber-800">
+              🔄 Renovação do seu plano {planoRenovacao.nome}
+            </div>
+          )}
           <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-green-500/20">
             {isUpgrade ? '🚀 Upgrade disponível' : '🔒 Período de teste encerrou'}
           </div>
@@ -2392,7 +2410,7 @@ function AssinarContent() {
           {PLANOS.map((plano) => {
             const Icon = plano.icon
             const isSelected = planoSelecionado === plano.id
-            const isCurrent = tipoPlanoAtual === plano.id
+            const isCurrent = tipoPlanoAtual === plano.id && !querRenovar
 
             return (
               <button
@@ -2537,15 +2555,19 @@ function AssinarContent() {
           {/* Botão de pagamento */}
           <button
             onClick={handlePagar}
-            disabled={processando !== null || tipoPlanoAtual === planoSelecionado}
+            disabled={processando !== null || (tipoPlanoAtual === planoSelecionado && !querRenovar)}
             className={`w-full ${
               planoAtual?.corBotao || 'bg-green-600 hover:bg-green-700'
             } disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:shadow-none text-white font-bold py-4 rounded-full text-base md:text-lg transition-all`}
           >
             {processando
               ? 'Processando...'
-              : tipoPlanoAtual === planoSelecionado
+              : tipoPlanoAtual === planoSelecionado && !querRenovar
               ? 'Este é seu plano atual'
+              : querRenovar && tipoPlanoAtual === planoSelecionado
+              ? `Renovar ${planoAtual?.nome} • R$ ${planoAtual?.preco
+                  .toFixed(2)
+                  .replace('.', ',')}/mês`
               : `${isUpgrade ? 'Fazer upgrade pro' : 'Assinar'} ${planoAtual?.nome} • R$ ${planoAtual?.preco
                   .toFixed(2)
                   .replace('.', ',')}/mês`}
@@ -16204,6 +16226,7 @@ import Sidebar from '@/components/sidebar'
 import SearchCommand from '@/components/search-command'
 import Loading from '@/components/loading'
 import TrialBanner from '@/components/trial-banner'
+import AvisoVencimento from '@/components/AvisoVencimento'
 import ModalCompletarPerfil from '@/components/modal-completar-perfil'
 import AdminWarningBanner from '@/components/admin-warning-banner'
 const RESTRICTED_ROUTES = [
@@ -16225,7 +16248,6 @@ export default function DashboardLayout({
   const [isLoading, setIsLoading] = useState(true)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
-  const [tipoBanner, setTipoBanner] = useState<'trial' | 'renovacao'>('trial')
   // 🆕 NOVO: estado pra forçar completar perfil
   const [precisaCompletarPerfil, setPrecisaCompletarPerfil] = useState(false)
   const initialCheckDone = useRef(false)
@@ -16346,32 +16368,6 @@ export default function DashboardLayout({
             setDiasRestantes(dias)
             if (dias >= 0 && dias <= 5) setMostrarBanner(true)
           }
-
-          if (perfil.plano === 'ativo' && perfil.plano_fim) {
-            const fimPlano = new Date(perfil.plano_fim)
-            if (fimPlano < agora) {
-              await supabase
-                .from('perfis')
-                .update({ plano: 'expirado' })
-                .eq('id', data.session.user.id)
-              router.push('/assinar')
-              return
-            }
-
-            const diasPlano = Math.ceil(
-              (fimPlano.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
-            )
-
-            if (
-              diasPlano >= 0 &&
-              diasPlano <= 5 &&
-              perfil.tipo_pagamento === 'pix'
-            ) {
-              setDiasRestantes(diasPlano)
-              setMostrarBanner(true)
-              setTipoBanner('renovacao')
-            }
-          }
         }
 
         initialCheckDone.current = true
@@ -16389,16 +16385,17 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AdminWarningBanner />
-      {mostrarBanner && diasRestantes !== null && (
-        <TrialBanner diasRestantes={diasRestantes} tipo={tipoBanner} />
-      )}
-
       <Navbar />
       <Sidebar />
       <SearchCommand />
 
       <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
+        <AdminWarningBanner />
+        <AvisoVencimento />
+        {mostrarBanner && diasRestantes !== null && (
+          <TrialBanner diasRestantes={diasRestantes} />
+        )}
+
         {children}
       </main>
 
@@ -16452,6 +16449,7 @@ import {
   Zap,
   Target,
 } from 'lucide-react'
+
 
 // ════════════════════════════════════════════════════
 // 📋 TIPOS
@@ -17498,6 +17496,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sucesso, setSucesso] = useState('') // 🆕 estado separado pra mensagens de sucesso
 
   // Reset password
   const [modoReset, setModoReset] = useState(false)
@@ -17506,9 +17505,72 @@ export default function Login() {
   const [resetSucesso, setResetSucesso] = useState(false)
   const [resetError, setResetError] = useState('')
 
+  const traduzirErroSupabase = (mensagem: string): string => {
+    const msg = mensagem.toLowerCase().trim()
+
+    if (msg.includes('invalid login credentials')) {
+      return 'Email ou senha incorretos.'
+    }
+    if (msg.includes('email not confirmed')) {
+      return 'Email ainda não confirmado. Verifique sua caixa de entrada (e o spam) pra confirmar a conta.'
+    }
+    if (msg.includes('email link is invalid') || msg.includes('token has expired')) {
+      return 'Link inválido ou expirado. Solicite um novo.'
+    }
+    if (msg.includes('user not found')) {
+      return 'Usuário não encontrado.'
+    }
+    if (msg.includes('user already registered')) {
+      return 'Este email já está cadastrado. Faça login.'
+    }
+    if (msg.includes('already registered')) {
+      return 'Este email já está cadastrado.'
+    }
+    if (msg.includes('password should be at least')) {
+      return 'A senha precisa ter pelo menos 6 caracteres.'
+    }
+    if (msg.includes('weak password') || msg.includes('password is too weak')) {
+      return 'Senha muito fraca. Use letras, números e ao menos 6 caracteres.'
+    }
+    if (msg.includes('new password should be different')) {
+      return 'A nova senha precisa ser diferente da atual.'
+    }
+    if (msg.includes('email rate limit exceeded')) {
+      return 'Muitas tentativas de envio de email. Aguarde alguns minutos e tente de novo.'
+    }
+    if (msg.includes('rate limit') || msg.includes('too many requests')) {
+      return 'Muitas tentativas. Aguarde um pouco e tente novamente.'
+    }
+    if (msg.includes('signups not allowed') || msg.includes('signup disabled')) {
+      return 'Cadastros estão temporariamente desabilitados.'
+    }
+    if (msg.includes('unable to validate email address') || msg.includes('invalid email')) {
+      return 'Email inválido. Verifique o formato.'
+    }
+    if (msg.includes('oauth') || msg.includes('provider')) {
+      return 'Erro ao autenticar com o provedor externo. Tente de novo.'
+    }
+    if (msg.includes('jwt expired') || msg.includes('session expired') || msg.includes('invalid jwt')) {
+      return 'Sua sessão expirou. Faça login novamente.'
+    }
+    if (msg.includes('missing') && msg.includes('token')) {
+      return 'Sessão inválida. Faça login novamente.'
+    }
+    if (msg.includes('network') || msg.includes('failed to fetch')) {
+      return 'Erro de conexão. Verifique sua internet e tente de novo.'
+    }
+
+    return mensagem
+  }
+
+  const erroEmailNaoConfirmado =
+    error.toLowerCase().includes('email ainda não confirmado') ||
+    error.toLowerCase().includes('email not confirmed')
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSucesso('')
     setLoading(true)
 
     try {
@@ -17518,11 +17580,7 @@ export default function Login() {
       })
 
       if (signInError) {
-        if (signInError.message === 'Invalid login credentials') {
-          setError('Email ou senha incorretos.')
-        } else {
-          setError(signInError.message)
-        }
+        setError(traduzirErroSupabase(signInError.message))
         return
       }
 
@@ -17530,6 +17588,29 @@ export default function Login() {
     } catch (err) {
       setError('Erro ao fazer login. Tente novamente.')
       console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReenviarConfirmacao = async () => {
+    setLoading(true)
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      })
+
+      if (resendError) {
+        setError(traduzirErroSupabase(resendError.message))
+        return
+      }
+
+      // 🆕 Limpa o erro e mostra a mensagem de sucesso
+      setError('')
+      setSucesso('Email de confirmação reenviado! Verifique sua caixa de entrada.')
+    } catch {
+      setError('Erro ao reenviar email. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -17552,7 +17633,7 @@ export default function Login() {
       })
 
       if (error) {
-        setResetError(error.message)
+        setResetError(traduzirErroSupabase(error.message))
       } else {
         setResetSucesso(true)
       }
@@ -17731,6 +17812,25 @@ export default function Login() {
           </div>
 
           {error && <Alert message={error} type="error" />}
+
+          {/* 🆕 Alert verde de sucesso pro reenvio */}
+          {sucesso && (
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl text-green-700 dark:text-green-400 text-sm">
+              ✅ {sucesso}
+            </div>
+          )}
+
+          {/* Botão de reenvio (só aparece se o erro for de email não confirmado E ainda não reenviou) */}
+          {erroEmailNaoConfirmado && !sucesso && (
+            <button
+              type="button"
+              onClick={handleReenviarConfirmacao}
+              disabled={loading}
+              className="mb-4 text-sm font-semibold text-green-600 hover:text-green-700 dark:text-green-400 hover:underline disabled:opacity-50"
+            >
+              📩 Reenviar email de confirmação
+            </button>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -20907,6 +21007,105 @@ export default function AnaliseIA() {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+
+// === C:\Users\locas\Documents\DocumentoEstoque\src\components\AvisoVencimento.tsx ===
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { AlertTriangle, X } from 'lucide-react'
+
+export default function AvisoVencimento() {
+  const router = useRouter()
+  const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
+  const [tipoPlano, setTipoPlano] = useState<string | null>(null)
+  const [fechado, setFechado] = useState(false)
+
+  useEffect(() => {
+    const verificar = async () => {
+      const { data: sessao } = await supabase.auth.getSession()
+      if (!sessao.session) return
+
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('plano, tipo_pagamento, plano_fim, tipo_plano')
+        .eq('id', sessao.session.user.id)
+        .single()
+
+      // Só interessa: plano ativo, pago via PIX, com data de fim
+      if (
+        perfil?.plano !== 'ativo' ||
+        perfil?.tipo_pagamento !== 'pix' ||
+        !perfil?.plano_fim
+      ) {
+        return
+      }
+
+      const hoje = new Date()
+      const fim = new Date(perfil.plano_fim)
+      const dias = Math.ceil(
+        (fim.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)
+      )
+
+      // Mostra só quando falta 3 dias ou menos (e ainda não venceu)
+      if (dias <= 3 && dias >= 0) {
+        setDiasRestantes(dias)
+        setTipoPlano(perfil.tipo_plano ?? null)
+      }
+    }
+
+    verificar()
+  }, [])
+
+  // Não mostra nada se não tá vencendo ou se o user fechou
+  if (diasRestantes === null || fechado) return null
+
+  const texto =
+    diasRestantes === 0
+      ? 'Seu plano vence hoje!'
+      : diasRestantes === 1
+      ? 'Seu plano vence amanhã!'
+      : `Seu plano vence em ${diasRestantes} dias`
+
+  return (
+    <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 mb-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-300 dark:border-amber-700 rounded-2xl">
+      <div className="flex items-center gap-3 flex-1">
+        <div className="w-10 h-10 flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div>
+          <p className="font-bold text-amber-900 dark:text-amber-200">
+            ⏰ {texto}
+          </p>
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            Como você paga via PIX, ele não renova sozinho. Renove pra não
+            perder o acesso ao seu estoque e PDV.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 w-full sm:w-auto">
+        <button
+          onClick={() =>
+            router.push(`/assinar?renovar=1&plano=${tipoPlano ?? ''}`)
+          }
+          className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white font-bold px-5 py-2.5 rounded-full text-sm transition-colors whitespace-nowrap"
+        >
+          Renovar agora
+        </button>
+        <button
+          onClick={() => setFechado(true)}
+          className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-full transition-colors"
+          aria-label="Fechar aviso"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   )
 }

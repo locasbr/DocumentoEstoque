@@ -416,6 +416,7 @@ const handleSelecionarPreco = (preco: number) => {
       onClick={handleSugerirPreco}
       carregando={carregandoIAPreco}
       label="✨ Sugerir preço com IA"
+      feature="preco"
       className="w-full justify-center text-sm"
     />
     {(!formData.nome?.trim() || formData.preco_custo <= 0) && (

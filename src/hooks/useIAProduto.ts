@@ -39,18 +39,23 @@ export function useIAProduto() {
     setCarregando(true)
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         addNotification('Usuário não autenticado', 'error')
         return null
       }
 
       const response = await fetch('/api/ia/produto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           ...params,
-          userId: userData.user.id,
         }),
       })
 

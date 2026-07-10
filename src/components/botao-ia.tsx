@@ -5,11 +5,14 @@ import { Sparkles, Crown, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { usePlano } from '@/hooks/usePlano'
 
+type FeatureIA = 'cadastro' | 'preco' | 'analise'
+
 interface BotaoIAProps {
   onClick: () => void
   carregando?: boolean
   label?: string
   className?: string
+  feature?: FeatureIA
 }
 
 export default function BotaoIA({
@@ -17,8 +20,28 @@ export default function BotaoIA({
   carregando = false,
   label = '✨ Completar com IA',
   className = '',
+  feature = 'cadastro',
 }: BotaoIAProps) {
-  const { temIA, loading } = usePlano()
+  const {
+    temIACadastroAutomatico,
+    temIASugestaoPreco,
+    temIAAnaliseMensal,
+    loading,
+  } = usePlano()
+
+  const podeUsarIA =
+    feature === 'cadastro'
+      ? temIACadastroAutomatico
+      : feature === 'preco'
+        ? temIASugestaoPreco
+        : temIAAnaliseMensal
+
+  const textoUpsell =
+    feature === 'cadastro'
+      ? '👑 Cadastro automático — Plano Negócio'
+      : feature === 'preco'
+        ? '👑 Sugestão de preço — Plano Negócio'
+        : '👑 Análise com IA — Plano Profissional'
 
   // Loading do plano
   if (loading) {
@@ -34,15 +57,15 @@ export default function BotaoIA({
   }
 
   // 🔒 BLOQUEIO: sem plano Negócio
-  if (!temIA) {
+  if (!podeUsarIA) {
     return (
       <Link
         href="/assinar"
         className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/30 transition font-medium ${className}`}
-        title="Disponível no plano Negócio"
+        title={textoUpsell}
       >
         <Crown className="w-4 h-4" />
-        IA — Plano Negócio
+        {textoUpsell}
       </Link>
     )
   }

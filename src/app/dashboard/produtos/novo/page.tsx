@@ -341,6 +341,7 @@ export default function NovoProdutoPage() {
               onClick={handleCompletarComIA}
               carregando={carregandoIAProduto}
               label="✨ Completar com IA (marca, descrição, categoria)"
+              feature="cadastro"
               className="w-full justify-center text-sm"
             />
             {!formData.nome.trim() && (
@@ -469,6 +470,7 @@ export default function NovoProdutoPage() {
                 onClick={handleSugerirPreco}
                 carregando={carregandoIAPreco}
                 label="✨ Sugerir preço com IA"
+                feature="preco"
                 className="w-full justify-center text-sm"
               />
               {(!formData.nome.trim() || formData.preco_custo <= 0) && (

@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Sparkles, Loader2, TrendingUp, Lock } from 'lucide-react'
+import { Sparkles, TrendingUp, Lock } from 'lucide-react'
 import { useNotification } from '@/contexts/NotificationContext'
 import Link from 'next/link'
+import BotaoIA from '@/components/botao-ia'
 
 export default function AnaliseIA() {
   const [loading, setLoading] = useState(false)
@@ -18,16 +19,22 @@ export default function AnaliseIA() {
     setBloqueado(false)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         addNotification('Faça login novamente', 'error')
         return
       }
 
       const res = await fetch('/api/ia/analise-vendas', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({}),
       })
 
       const data = await res.json()
@@ -131,36 +138,26 @@ export default function AnaliseIA() {
       ) : analise ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-4">
           {renderAnalise(analise)}
-          <button
+          <BotaoIA
             onClick={gerarAnalise}
-            disabled={loading}
-            className="mt-4 text-sm text-purple-600 dark:text-purple-400 hover:underline font-medium"
-          >
-            🔄 Gerar nova análise
-          </button>
+            carregando={loading}
+            label="🔄 Gerar nova análise"
+            feature="analise"
+            className="mt-4 w-full justify-center text-sm"
+          />
         </div>
       ) : (
         <div className="text-center py-4">
           <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
             Deixe a IA analisar seus 30 dias de vendas e te dar sugestões práticas pra crescer.
           </p>
-          <button
+          <BotaoIA
             onClick={gerarAnalise}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Analisando suas vendas...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Gerar análise do mês
-              </>
-            )}
-          </button>
+            carregando={loading}
+            label="Gerar análise do mês"
+            feature="analise"
+            className="w-full justify-center"
+          />
         </div>
       )}
     </div>

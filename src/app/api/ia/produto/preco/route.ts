@@ -17,16 +17,42 @@ interface ResponseIA {
 
 export async function POST(request: Request) {
   try {
-    const { nome, categoria, marca, descricao, precoCusto, userId } =
-      await request.json()
-
-    // 🔒 Auth
-    if (!userId) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { erro: 'Usuário não autenticado' },
+        { error: 'Não autenticado' },
         { status: 401 }
       )
     }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
+
+    const { nome, categoria, marca, descricao, precoCusto } =
+      await request.json()
 
     // ✨ Validações de entrada
     if (!nome || nome.trim().length < 3) {

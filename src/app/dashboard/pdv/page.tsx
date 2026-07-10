@@ -1553,6 +1553,7 @@ export default function PDVPage() {
                 onClick={handleCompletarComIA}
                 carregando={carregandoIA}
                 label="✨ Completar com IA"
+                feature="cadastro"
                 className="w-full justify-center"
               />
               {!cadastroNome.trim() && (

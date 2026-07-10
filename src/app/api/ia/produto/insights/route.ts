@@ -7,14 +7,37 @@ const LIMITE_DIARIO = 2
 
 export async function POST(request: Request) {
   try {
-    const { userId, periodo } = await request.json()
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
 
-    if (!userId) {
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
       return NextResponse.json(
-        { erro: 'Usuário não autenticado' },
+        { error: 'Token inválido ou expirado' },
         { status: 401 }
       )
     }
+
+    const userId = user.id
+    const { periodo } = await request.json()
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
