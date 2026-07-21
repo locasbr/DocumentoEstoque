@@ -137,6 +137,7 @@ export default function PDVPage() {
 
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastKeyTimeRef = useRef(0)
   const buscaInputRef = useRef<HTMLInputElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -412,6 +413,27 @@ export default function PDVPage() {
   // ══════════════════════════════════════════════════
 
   useEffect(() => {
+    const MAX_GAP_MS = 50
+    const PROCESS_DELAY_MS = 80
+    const MIN_LENGTH = 8
+
+    const processarBuffer = () => {
+      if (usbTimeoutRef.current) {
+        clearTimeout(usbTimeoutRef.current)
+        usbTimeoutRef.current = null
+      }
+
+      const code = usbBufferRef.current.trim()
+      usbBufferRef.current = ''
+
+      if (code.length < MIN_LENGTH) return
+
+      setUsbDetectado(true)
+      setTimeout(() => setUsbDetectado(false), 2000)
+      if (navigator.vibrate) navigator.vibrate(200)
+      handleCodigoBarrasLido(code)
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName?.toUpperCase()
       if (
@@ -426,29 +448,45 @@ export default function PDVPage() {
 
       if (e.key === 'Enter') {
         const code = usbBufferRef.current.trim()
-        if (code.length >= 8) {
+        if (code.length >= MIN_LENGTH) {
           e.preventDefault()
           e.stopPropagation()
-          setUsbDetectado(true)
-          setTimeout(() => setUsbDetectado(false), 2000)
-          if (navigator.vibrate) navigator.vibrate(200)
-          handleCodigoBarrasLido(code)
         }
-        usbBufferRef.current = ''
+        processarBuffer()
         return
       }
 
       if (e.key.length !== 1) {
         usbBufferRef.current = ''
+        lastKeyTimeRef.current = 0
+        if (usbTimeoutRef.current) {
+          clearTimeout(usbTimeoutRef.current)
+          usbTimeoutRef.current = null
+        }
         return
       }
 
+      const now = Date.now()
+      const gap = now - lastKeyTimeRef.current
+
+      if (gap > MAX_GAP_MS) {
+        if (usbTimeoutRef.current) {
+          clearTimeout(usbTimeoutRef.current)
+          usbTimeoutRef.current = null
+        }
+        usbBufferRef.current = ''
+      }
+
+      lastKeyTimeRef.current = now
+
       usbBufferRef.current += e.key
 
-      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
+      if (usbTimeoutRef.current) {
+        clearTimeout(usbTimeoutRef.current)
+      }
       usbTimeoutRef.current = setTimeout(() => {
-        usbBufferRef.current = ''
-      }, 100)
+        processarBuffer()
+      }, PROCESS_DELAY_MS)
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
