@@ -292,11 +292,36 @@ import { chamarIA } from '@/lib/gemini'
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 })
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
 
     // ✅ Cria client DENTRO da função (lazy init)
     const supabaseAdmin = createClient(
@@ -483,12 +508,36 @@ const LIMITE_DIARIO = 2
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-
-    if (!userId) {
-      return NextResponse.json({ erro: 'userId obrigatório' }, { status: 400 })
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -544,14 +593,37 @@ const LIMITE_DIARIO = 2
 
 export async function POST(request: Request) {
   try {
-    const { userId, periodo } = await request.json()
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
 
-    if (!userId) {
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
       return NextResponse.json(
-        { erro: 'Usuário não autenticado' },
+        { error: 'Token inválido ou expirado' },
         { status: 401 }
       )
     }
+
+    const userId = user.id
+    const { periodo } = await request.json()
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -896,16 +968,42 @@ interface ResponseIA {
 
 export async function POST(request: Request) {
   try {
-    const { nome, categoria, marca, descricao, precoCusto, userId } =
-      await request.json()
-
-    // 🔒 Auth
-    if (!userId) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { erro: 'Usuário não autenticado' },
+        { error: 'Não autenticado' },
         { status: 401 }
       )
     }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
+
+    const { nome, categoria, marca, descricao, precoCusto } =
+      await request.json()
 
     // ✨ Validações de entrada
     if (!nome || nome.trim().length < 3) {
@@ -1093,16 +1191,41 @@ interface ResponseIA {
 
 export async function POST(request: Request) {
   try {
-    const { sku, nomeOriginal, marca, descricaoOriginal, userId } =
-      await request.json()
-
-    // 🔒 Auth check
-    if (!userId) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
-        { erro: 'Usuário não autenticado' },
+        { error: 'Não autenticado' },
         { status: 401 }
       )
     }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const userId = user.id
+
+    const { sku, nomeOriginal, marca, descricaoOriginal } = await request.json()
 
     // ✨ NOVA REGRA: exige nome do produto (evita alucinação)
     if (!nomeOriginal || nomeOriginal.trim().length < 3) {
@@ -11856,6 +11979,7 @@ export default function PDVPage() {
                 onClick={handleCompletarComIA}
                 carregando={carregandoIA}
                 label="✨ Completar com IA"
+                feature="cadastro"
                 className="w-full justify-center"
               />
               {!cadastroNome.trim() && (
@@ -13411,6 +13535,7 @@ export default function NovoProdutoPage() {
               onClick={handleCompletarComIA}
               carregando={carregandoIAProduto}
               label="✨ Completar com IA (marca, descrição, categoria)"
+              feature="cadastro"
               className="w-full justify-center text-sm"
             />
             {!formData.nome.trim() && (
@@ -13539,6 +13664,7 @@ export default function NovoProdutoPage() {
                 onClick={handleSugerirPreco}
                 carregando={carregandoIAPreco}
                 label="✨ Sugerir preço com IA"
+                feature="preco"
                 className="w-full justify-center text-sm"
               />
               {(!formData.nome.trim() || formData.preco_custo <= 0) && (
@@ -14103,6 +14229,7 @@ const handleSelecionarPreco = (preco: number) => {
       onClick={handleSugerirPreco}
       carregando={carregandoIAPreco}
       label="✨ Sugerir preço com IA"
+      feature="preco"
       className="w-full justify-center text-sm"
     />
     {(!formData.nome?.trim() || formData.preco_custo <= 0) && (
@@ -20846,9 +20973,10 @@ export default function Alert({
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Sparkles, Loader2, TrendingUp, Lock } from 'lucide-react'
+import { Sparkles, TrendingUp, Lock } from 'lucide-react'
 import { useNotification } from '@/contexts/NotificationContext'
 import Link from 'next/link'
+import BotaoIA from '@/components/botao-ia'
 
 export default function AnaliseIA() {
   const [loading, setLoading] = useState(false)
@@ -20862,16 +20990,22 @@ export default function AnaliseIA() {
     setBloqueado(false)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         addNotification('Faça login novamente', 'error')
         return
       }
 
       const res = await fetch('/api/ia/analise-vendas', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({}),
       })
 
       const data = await res.json()
@@ -20975,36 +21109,26 @@ export default function AnaliseIA() {
       ) : analise ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-4">
           {renderAnalise(analise)}
-          <button
+          <BotaoIA
             onClick={gerarAnalise}
-            disabled={loading}
-            className="mt-4 text-sm text-purple-600 dark:text-purple-400 hover:underline font-medium"
-          >
-            🔄 Gerar nova análise
-          </button>
+            carregando={loading}
+            label="🔄 Gerar nova análise"
+            feature="analise"
+            className="mt-4 w-full justify-center text-sm"
+          />
         </div>
       ) : (
         <div className="text-center py-4">
           <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
             Deixe a IA analisar seus 30 dias de vendas e te dar sugestões práticas pra crescer.
           </p>
-          <button
+          <BotaoIA
             onClick={gerarAnalise}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Analisando suas vendas...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Gerar análise do mês
-              </>
-            )}
-          </button>
+            carregando={loading}
+            label="Gerar análise do mês"
+            feature="analise"
+            className="w-full justify-center"
+          />
         </div>
       )}
     </div>
@@ -21809,11 +21933,14 @@ import { Sparkles, Crown, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { usePlano } from '@/hooks/usePlano'
 
+type FeatureIA = 'cadastro' | 'preco' | 'analise'
+
 interface BotaoIAProps {
   onClick: () => void
   carregando?: boolean
   label?: string
   className?: string
+  feature?: FeatureIA
 }
 
 export default function BotaoIA({
@@ -21821,8 +21948,28 @@ export default function BotaoIA({
   carregando = false,
   label = '✨ Completar com IA',
   className = '',
+  feature = 'cadastro',
 }: BotaoIAProps) {
-  const { temIA, loading } = usePlano()
+  const {
+    temIACadastroAutomatico,
+    temIASugestaoPreco,
+    temIAAnaliseMensal,
+    loading,
+  } = usePlano()
+
+  const podeUsarIA =
+    feature === 'cadastro'
+      ? temIACadastroAutomatico
+      : feature === 'preco'
+        ? temIASugestaoPreco
+        : temIAAnaliseMensal
+
+  const textoUpsell =
+    feature === 'cadastro'
+      ? '👑 Cadastro automático — Plano Negócio'
+      : feature === 'preco'
+        ? '👑 Sugestão de preço — Plano Negócio'
+        : '👑 Análise com IA — Plano Profissional'
 
   // Loading do plano
   if (loading) {
@@ -21838,15 +21985,15 @@ export default function BotaoIA({
   }
 
   // 🔒 BLOQUEIO: sem plano Negócio
-  if (!temIA) {
+  if (!podeUsarIA) {
     return (
       <Link
         href="/assinar"
         className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/30 transition font-medium ${className}`}
-        title="Disponível no plano Negócio"
+        title={textoUpsell}
       >
         <Crown className="w-4 h-4" />
-        IA — Plano Negócio
+        {textoUpsell}
       </Link>
     )
   }
@@ -24684,18 +24831,23 @@ export function useIAPreco() {
     setCarregando(true)
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         addNotification('Usuário não autenticado', 'error')
         return null
       }
 
       const response = await fetch('/api/ia/produto/preco', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           ...params,
-          userId: userData.user.id,
         }),
       })
 
@@ -24783,18 +24935,23 @@ export function useIAProduto() {
     setCarregando(true)
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         addNotification('Usuário não autenticado', 'error')
         return null
       }
 
       const response = await fetch('/api/ia/produto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           ...params,
-          userId: userData.user.id,
         }),
       })
 

@@ -28,7 +28,7 @@ export function useIsAdmin() {
           .from('perfis')
           .select('is_admin')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
         setIsAdmin(perfil?.is_admin === true)
       } catch (error) {

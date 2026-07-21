@@ -18,7 +18,7 @@ export function useCupom() {
     const { data: perfil } = await supabase
       .from('perfis')
       .select('nome_negocio')
-      .single()
+      .maybeSingle()
 
     // Busca nome do usuário logado
     const { data: { user } } = await supabase.auth.getUser()

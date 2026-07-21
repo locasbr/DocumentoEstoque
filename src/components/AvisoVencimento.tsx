@@ -20,7 +20,7 @@ export default function AvisoVencimento() {
         .from('perfis')
         .select('plano, tipo_pagamento, plano_fim, tipo_plano')
         .eq('id', sessao.session.user.id)
-        .single()
+        .maybeSingle()
 
       // Só interessa: plano ativo, pago via PIX, com data de fim
       if (

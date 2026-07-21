@@ -47,23 +47,20 @@ export function useMembro(): UseMembro {
           .from('membros')
           .select('*')
           .eq('user_id', session.session.user.id)
-          .single()
+          .maybeSingle()
 
         if (queryError) {
-          // ✅ PGRST116 = "no rows found" — legítimo!
-          // User é dono do próprio negócio (signup novo, nunca foi convidado)
-          if (queryError.code === 'PGRST116') {
-            setMembro(null)
-            setSemMembrosRow(true) // confirma que NÃO TEM row (é dono)
-            setError(null)
-          } else {
-            // ❌ Outros erros (network, RLS, timeout) — NÃO assume isDono
-            console.error('Erro ao buscar membro:', queryError)
-            setMembro(null)
-            setSemMembrosRow(false) // deu erro real, NÃO confirma nada
-            setError(new Error(queryError.message))
-          }
-          setIsLoading(false)
+          console.error('Erro ao buscar membro:', queryError)
+          setMembro(null)
+          setSemMembrosRow(false)
+          setError(new Error(queryError.message))
+          return
+        }
+
+        if (!data) {
+          setMembro(null)
+          setSemMembrosRow(true)
+          setError(null)
           return
         }
 
@@ -91,7 +88,7 @@ export function useMembro(): UseMembro {
     error,
     // 🔒 isDono SÓ é true se:
     //    1. Tem row e nivel === 'dono', OU
-    //    2. Confirmou que NÃO TEM row (PGRST116)
+    //    2. Confirmou que NÃO TEM row
     // Se deu erro de rede/RLS/timeout, isDono = FALSE (defensivo!)
     isDono: membro?.nivel === 'dono' || semMembrosRow,
     isFuncionario: membro?.nivel === 'funcionario',

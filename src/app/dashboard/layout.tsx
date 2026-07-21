@@ -84,7 +84,7 @@ export default function DashboardLayout({
           .from('membros')
           .select('nivel')
           .eq('user_id', data.session.user.id)
-          .single()
+          .maybeSingle()
 
         const userLevel = membroData?.nivel ?? 'dono'
         userLevelRef.current = userLevel
@@ -104,7 +104,7 @@ export default function DashboardLayout({
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone')
           .eq('id', data.session.user.id)
-          .single()
+          .maybeSingle()
 
         if (perfil) {
           // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano/telefone

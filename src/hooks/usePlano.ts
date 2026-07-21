@@ -90,7 +90,7 @@ export function usePlano() {
         .from('membros')
         .select('dono_id, nivel')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (membro && membro.nivel === 'funcionario') {
         donoId = membro.dono_id
@@ -107,7 +107,7 @@ export function usePlano() {
       .from('perfis')
       .select('tipo_plano, is_admin')
       .eq('id', donoId)
-      .single()
+      .maybeSingle()
 
     if (perfil) {
       setTipoPlano((perfil.tipo_plano as TipoPlano) || 'profissional')
