@@ -39,6 +39,7 @@ import {
   Maximize2,
   Minimize2,
   Star,
+  UserPlus,   // 🆕
 } from 'lucide-react'
 import { formatarMoeda } from '@/lib/utils'
 
@@ -46,6 +47,13 @@ interface ItemCarrinho {
   produto_id: string
   quantidade: number
   preco_unitario: number
+}
+
+interface ClientePDV {
+  id: string
+  nome: string
+  telefone: string | null
+  endereco: string | null
 }
 
 interface VendaRecente {
@@ -121,6 +129,12 @@ export default function PDVPage() {
   const [skuParaCadastro, setSkuParaCadastro] = useState('')
 
   const [usbDetectado, setUsbDetectado] = useState(false)
+
+  // 🆕 Cliente vinculado à venda
+  const [clientes, setClientes] = useState<ClientePDV[]>([])
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClientePDV | null>(null)
+  const [mostrarSeletorCliente, setMostrarSeletorCliente] = useState(false)
+  const [buscaCliente, setBuscaCliente] = useState('')
 
   const [cadastroNome, setCadastroNome] = useState('')
   const [cadastroMarca, setCadastroMarca] = useState('')
@@ -219,6 +233,21 @@ export default function PDVPage() {
     fetchStatsDia()
     fetchTopVendidos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 🆕 Carrega clientes cadastrados
+  useEffect(() => {
+    const fetchClientes = async () => {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) return
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, nome, telefone, endereco')
+        .eq('usuario_id', userData.user.id)
+        .order('nome')
+      if (data) setClientes(data as ClientePDV[])
+    }
+    fetchClientes()
   }, [])
 
   const fetchProdutos = async () => {
@@ -522,6 +551,7 @@ export default function PDVPage() {
         modalCadastroRapido ||
         scannerAberto ||
         cupomAberto ||
+        mostrarSeletorCliente ||
         !!telaSucesso
 
       if (e.key === 'Escape') {
@@ -602,6 +632,7 @@ export default function PDVPage() {
     modalCadastroRapido,
     scannerAberto,
     cupomAberto,
+    mostrarSeletorCliente,
     mostrarAtalhos,
     addNotification,
     produtos,
@@ -617,6 +648,37 @@ export default function PDVPage() {
       return () => clearTimeout(timer)
     }
   }, [telaSucesso])
+
+  // 🆕 Atalhos do modal de pagamento: 1-4 escolhem forma, Enter confirma
+  useEffect(() => {
+    if (!modalPagamento) return
+
+    const handlePagamentoKeys = (e: KeyboardEvent) => {
+      // Não interfere se o usuário estiver digitando no campo de valor
+      const tag = document.activeElement?.tagName?.toUpperCase()
+      const digitandoValor = tag === 'INPUT'
+
+      // Teclas 1-4 escolhem a forma de pagamento
+      if (!digitandoValor && ['1', '2', '3', '4'].includes(e.key)) {
+        e.preventDefault()
+        const idx = parseInt(e.key, 10) - 1
+        const forma = FORMAS_PAGAMENTO[idx]
+        if (forma) setFormaPagamento(forma.value)
+        return
+      }
+
+      // Enter confirma a venda
+      if (e.key === 'Enter' && !processando) {
+        e.preventDefault()
+        e.stopPropagation()
+        processarVenda()
+      }
+    }
+
+    window.addEventListener('keydown', handlePagamentoKeys, true)
+    return () => window.removeEventListener('keydown', handlePagamentoKeys, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalPagamento, processando])
 
   // ══════════════════════════════════════════════════
   // CADASTRO RÁPIDO
@@ -802,11 +864,23 @@ export default function PDVPage() {
         return
       }
 
+      // 🆕 Vincula a venda ao cliente selecionado (se houver)
+      if (clienteSelecionado) {
+        await supabase
+          .from('vendas')
+          .update({ cliente_id: clienteSelecionado.id })
+          .eq('numero_venda', resultado.numero_venda)
+          .eq('usuario_id', userData.user.id)
+      }
+
       await gerarCupom({
         itens: resultado.itens,
         desconto: resultado.desconto,
         forma_pagamento: resultado.forma_pagamento,
         valor_recebido: parseFloat(valorRecebido) || undefined,
+        nome_cliente: clienteSelecionado?.nome,                       // 🆕
+        endereco_cliente: clienteSelecionado?.endereco || undefined,  // 🆕
+        telefone_cliente: clienteSelecionado?.telefone || undefined,  // 🆕
       })
 
       const novaVenda: VendaRecente = {
@@ -844,6 +918,7 @@ export default function PDVPage() {
       setDesconto('')
       setValorRecebido('')
       setModalPagamento(false)
+      setClienteSelecionado(null)   // 🆕
       setTimeout(() => {
         fetchProdutos()
         fetchStatsDia()
@@ -873,6 +948,44 @@ export default function PDVPage() {
     const matchCategoria = !categoriaFiltro || p.categoria === categoriaFiltro
     return matchFiltro && matchCategoria
   })
+
+  // 🆕 Clientes filtrados pela busca do modal
+  const clientesFiltrados = clientes.filter((c) =>
+    c.nome.toLowerCase().includes(buscaCliente.toLowerCase())
+  )
+
+  // 🆕 Bloco reutilizável: botão/label de vincular cliente
+  const BlocoCliente = () =>
+    clienteSelecionado ? (
+      <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <div className="flex items-center gap-2 min-w-0">
+          <UserPlus size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              {clienteSelecionado.nome}
+            </p>
+            {clienteSelecionado.telefone && (
+              <p className="text-xs text-gray-500 truncate">{clienteSelecionado.telefone}</p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => setClienteSelecionado(null)}
+          className="p-1 text-gray-400 hover:text-red-500 transition shrink-0"
+          title="Remover cliente"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    ) : (
+      <button
+        onClick={() => setMostrarSeletorCliente(true)}
+        className="w-full flex items-center justify-center gap-2 p-2.5 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 transition"
+      >
+        <UserPlus size={16} />
+        Vincular cliente (opcional)
+      </button>
+    )
 
   if (loading)
     return (
@@ -1155,6 +1268,9 @@ export default function PDVPage() {
               )}
             </div>
 
+            {/* 🆕 Vincular cliente (opcional) */}
+            <BlocoCliente />
+
             {carrinho.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
@@ -1335,6 +1451,11 @@ export default function PDVPage() {
           </div>
 
           <div className="px-3 py-3 border-t dark:border-gray-800">
+            {/* 🆕 Vincular cliente (opcional) — mobile */}
+            <div className="mb-2">
+              <BlocoCliente />
+            </div>
+
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-500">
                 {carrinho.length} produto(s) · {totalItens} un
@@ -1358,6 +1479,63 @@ export default function PDVPage() {
               >
                 Vender · {formatarMoeda(totalPagar)}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 MODAL DE SELEÇÃO DE CLIENTE */}
+      {mostrarSeletorCliente && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setMostrarSeletorCliente(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white">Selecionar cliente</h3>
+              <button
+                onClick={() => setMostrarSeletorCliente(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 border-b dark:border-gray-700">
+              <input
+                autoFocus
+                type="text"
+                value={buscaCliente}
+                onChange={(e) => setBuscaCliente(e.target.value)}
+                placeholder="Buscar por nome..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {clientesFiltrados.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setClienteSelecionado(c)
+                    setMostrarSeletorCliente(false)
+                    setBuscaCliente('')
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 border-b dark:border-gray-800 transition"
+                >
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{c.nome}</p>
+                  {c.telefone && <p className="text-xs text-gray-500">{c.telefone}</p>}
+                </button>
+              ))}
+
+              {clientesFiltrados.length === 0 && (
+                <p className="p-4 text-center text-sm text-gray-500">
+                  Nenhum cliente encontrado. Cadastre em &quot;Clientes&quot;.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1395,8 +1573,9 @@ export default function PDVPage() {
                 { tecla: 'F4', acao: 'Aplicar desconto' },
                 { tecla: 'F8', acao: 'Finalizar venda' },
                 { tecla: 'F10', acao: 'Remover último item' },
+                { tecla: '1-4', acao: 'Forma de pagamento (no modal)' },
+                { tecla: 'Enter', acao: 'Confirmar venda / leitor USB' },
                 { tecla: 'Esc', acao: 'Fechar modal / Limpar carrinho' },
-                { tecla: 'Enter', acao: 'Confirmar leitor USB' },
               ].map(({ tecla, acao }) => (
                 <div
                   key={tecla}
@@ -1458,16 +1637,19 @@ export default function PDVPage() {
                 Forma de pagamento
               </p>
               <div className="grid grid-cols-4 gap-2">
-                {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }) => (
+                {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }, idx) => (
                   <button
                     key={value}
                     onClick={() => setFormaPagamento(value)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
+                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
                       formaPagamento === value
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                         : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
                   >
+                    <kbd className="absolute top-1 right-1 text-[9px] px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono text-gray-600 dark:text-gray-300">
+                      {idx + 1}
+                    </kbd>
                     <Icon size={20} />
                     {label}
                   </button>
@@ -1501,33 +1683,33 @@ export default function PDVPage() {
                       Valor exato
                     </button>
                     {(() => {
-  const sugestoes = new Set<number>()
-  ;[5, 10, 20, 50, 100, 200].forEach((cedula) => {
-    const arredondado = Math.ceil(totalPagar / cedula) * cedula
-    const sugestao = cedula >= totalPagar ? cedula : arredondado
-    if (sugestao > totalPagar) sugestoes.add(sugestao)
-  })
-  return Array.from(sugestoes)
-    .sort((a, b) => a - b)
-    .slice(0, 6)
-    .map((sugestao) => {
-      const isAtivo = parseFloat(valorRecebido) === sugestao
-      return (
-        <button
-          key={sugestao}
-          type="button"
-          onClick={() => setValorRecebido(sugestao.toFixed(2))}
-          className={`py-3 text-sm font-bold rounded-xl border-2 transition ${
-            isAtivo
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 text-gray-700 dark:text-gray-300'
-          }`}
-        >
-          R$ {sugestao.toFixed(0)}
-        </button>
-      )
-    })
-})()}
+                      const sugestoes = new Set<number>()
+                      ;[5, 10, 20, 50, 100, 200].forEach((cedula) => {
+                        const arredondado = Math.ceil(totalPagar / cedula) * cedula
+                        const sugestao = cedula >= totalPagar ? cedula : arredondado
+                        if (sugestao > totalPagar) sugestoes.add(sugestao)
+                      })
+                      return Array.from(sugestoes)
+                        .sort((a, b) => a - b)
+                        .slice(0, 6)
+                        .map((sugestao) => {
+                          const isAtivo = parseFloat(valorRecebido) === sugestao
+                          return (
+                            <button
+                              key={sugestao}
+                              type="button"
+                              onClick={() => setValorRecebido(sugestao.toFixed(2))}
+                              className={`py-3 text-sm font-bold rounded-xl border-2 transition ${
+                                isAtivo
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 text-gray-700 dark:text-gray-300'
+                              }`}
+                            >
+                              R$ {sugestao.toFixed(0)}
+                            </button>
+                          )
+                        })
+                    })()}
                   </div>
                 </div>
 
@@ -1555,7 +1737,12 @@ export default function PDVPage() {
                   Processando...
                 </span>
               ) : (
-                `Confirmar · ${formatarMoeda(totalPagar)}`
+                <span className="flex items-center justify-center gap-2">
+                  Confirmar · {formatarMoeda(totalPagar)}
+                  <kbd className="text-[10px] px-1.5 py-0.5 bg-white/20 rounded font-mono">
+                    Enter
+                  </kbd>
+                </span>
               )}
             </button>
           </div>

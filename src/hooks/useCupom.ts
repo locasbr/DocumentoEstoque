@@ -8,11 +8,14 @@ export function useCupom() {
   const [cupomAberto, setCupomAberto] = useState(false)
   const [dadosCupom, setDadosCupom] = useState<DadosCupom | null>(null)
 
-  async function gerarCupom(params: {
+   async function gerarCupom(params: {
     itens: ItemCupom[]
     desconto?: number
     forma_pagamento: string
     valor_recebido?: number
+    nome_cliente?: string       // 🆕
+    endereco_cliente?: string   // 🆕
+    telefone_cliente?: string   // 🆕
   }) {
     // Busca nome do negócio do perfil
     const { data: perfil } = await supabase
@@ -46,6 +49,9 @@ export function useCupom() {
       nome_negocio: perfil?.nome_negocio || 'Meu Mercado',
       data: new Date(),
       operador: user?.email?.split('@')[0],
+      nome_cliente: params.nome_cliente,          // 🆕
+      endereco_cliente: params.endereco_cliente,  // 🆕
+      telefone_cliente: params.telefone_cliente,  // 🆕
     }
 
     setDadosCupom(dados)

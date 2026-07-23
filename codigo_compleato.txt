@@ -10563,6 +10563,7 @@ export default function PDVPage() {
 
   const usbBufferRef = useRef('')
   const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastKeyTimeRef = useRef(0)
   const buscaInputRef = useRef<HTMLInputElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -10838,6 +10839,27 @@ export default function PDVPage() {
   // ══════════════════════════════════════════════════
 
   useEffect(() => {
+    const MAX_GAP_MS = 50
+    const PROCESS_DELAY_MS = 80
+    const MIN_LENGTH = 8
+
+    const processarBuffer = () => {
+      if (usbTimeoutRef.current) {
+        clearTimeout(usbTimeoutRef.current)
+        usbTimeoutRef.current = null
+      }
+
+      const code = usbBufferRef.current.trim()
+      usbBufferRef.current = ''
+
+      if (code.length < MIN_LENGTH) return
+
+      setUsbDetectado(true)
+      setTimeout(() => setUsbDetectado(false), 2000)
+      if (navigator.vibrate) navigator.vibrate(200)
+      handleCodigoBarrasLido(code)
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName?.toUpperCase()
       if (
@@ -10852,29 +10874,45 @@ export default function PDVPage() {
 
       if (e.key === 'Enter') {
         const code = usbBufferRef.current.trim()
-        if (code.length >= 8) {
+        if (code.length >= MIN_LENGTH) {
           e.preventDefault()
           e.stopPropagation()
-          setUsbDetectado(true)
-          setTimeout(() => setUsbDetectado(false), 2000)
-          if (navigator.vibrate) navigator.vibrate(200)
-          handleCodigoBarrasLido(code)
         }
-        usbBufferRef.current = ''
+        processarBuffer()
         return
       }
 
       if (e.key.length !== 1) {
         usbBufferRef.current = ''
+        lastKeyTimeRef.current = 0
+        if (usbTimeoutRef.current) {
+          clearTimeout(usbTimeoutRef.current)
+          usbTimeoutRef.current = null
+        }
         return
       }
 
+      const now = Date.now()
+      const gap = now - lastKeyTimeRef.current
+
+      if (gap > MAX_GAP_MS) {
+        if (usbTimeoutRef.current) {
+          clearTimeout(usbTimeoutRef.current)
+          usbTimeoutRef.current = null
+        }
+        usbBufferRef.current = ''
+      }
+
+      lastKeyTimeRef.current = now
+
       usbBufferRef.current += e.key
 
-      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
+      if (usbTimeoutRef.current) {
+        clearTimeout(usbTimeoutRef.current)
+      }
       usbTimeoutRef.current = setTimeout(() => {
-        usbBufferRef.current = ''
-      }, 100)
+        processarBuffer()
+      }, PROCESS_DELAY_MS)
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
@@ -16429,7 +16467,7 @@ export default function DashboardLayout({
           .from('membros')
           .select('nivel')
           .eq('user_id', data.session.user.id)
-          .single()
+          .maybeSingle()
 
         const userLevel = membroData?.nivel ?? 'dono'
         userLevelRef.current = userLevel
@@ -16449,7 +16487,7 @@ export default function DashboardLayout({
           .from('perfis')
           .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone')
           .eq('id', data.session.user.id)
-          .single()
+          .maybeSingle()
 
         if (perfil) {
           // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano/telefone
@@ -21159,7 +21197,7 @@ export default function AvisoVencimento() {
         .from('perfis')
         .select('plano, tipo_pagamento, plano_fim, tipo_plano')
         .eq('id', sessao.session.user.id)
-        .single()
+        .maybeSingle()
 
       // Só interessa: plano ativo, pago via PIX, com data de fim
       if (
@@ -24737,7 +24775,7 @@ export function useCupom() {
     const { data: perfil } = await supabase
       .from('perfis')
       .select('nome_negocio')
-      .single()
+      .maybeSingle()
 
     // Busca nome do usuário logado
     const { data: { user } } = await supabase.auth.getUser()
@@ -25039,7 +25077,7 @@ export function useIsAdmin() {
           .from('perfis')
           .select('is_admin')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
         setIsAdmin(perfil?.is_admin === true)
       } catch (error) {
@@ -25107,23 +25145,20 @@ export function useMembro(): UseMembro {
           .from('membros')
           .select('*')
           .eq('user_id', session.session.user.id)
-          .single()
+          .maybeSingle()
 
         if (queryError) {
-          // ✅ PGRST116 = "no rows found" — legítimo!
-          // User é dono do próprio negócio (signup novo, nunca foi convidado)
-          if (queryError.code === 'PGRST116') {
-            setMembro(null)
-            setSemMembrosRow(true) // confirma que NÃO TEM row (é dono)
-            setError(null)
-          } else {
-            // ❌ Outros erros (network, RLS, timeout) — NÃO assume isDono
-            console.error('Erro ao buscar membro:', queryError)
-            setMembro(null)
-            setSemMembrosRow(false) // deu erro real, NÃO confirma nada
-            setError(new Error(queryError.message))
-          }
-          setIsLoading(false)
+          console.error('Erro ao buscar membro:', queryError)
+          setMembro(null)
+          setSemMembrosRow(false)
+          setError(new Error(queryError.message))
+          return
+        }
+
+        if (!data) {
+          setMembro(null)
+          setSemMembrosRow(true)
+          setError(null)
           return
         }
 
@@ -25151,7 +25186,7 @@ export function useMembro(): UseMembro {
     error,
     // 🔒 isDono SÓ é true se:
     //    1. Tem row e nivel === 'dono', OU
-    //    2. Confirmou que NÃO TEM row (PGRST116)
+    //    2. Confirmou que NÃO TEM row
     // Se deu erro de rede/RLS/timeout, isDono = FALSE (defensivo!)
     isDono: membro?.nivel === 'dono' || semMembrosRow,
     isFuncionario: membro?.nivel === 'funcionario',
@@ -25252,7 +25287,7 @@ export function usePlano() {
         .from('membros')
         .select('dono_id, nivel')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (membro && membro.nivel === 'funcionario') {
         donoId = membro.dono_id
@@ -25269,7 +25304,7 @@ export function usePlano() {
       .from('perfis')
       .select('tipo_plano, is_admin')
       .eq('id', donoId)
-      .single()
+      .maybeSingle()
 
     if (perfil) {
       setTipoPlano((perfil.tipo_plano as TipoPlano) || 'profissional')

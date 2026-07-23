@@ -27,6 +27,9 @@ export interface DadosCupom {
   nome_negocio?: string
   data: Date
   operador?: string
+  nome_cliente?: string        // 🆕
+  endereco_cliente?: string    // 🆕
+  telefone_cliente?: string    // 🆕
 }
 
 interface CupomProps {
@@ -53,6 +56,9 @@ export default function CupomImpressao({ dados, onFechar }: CupomProps) {
       `🧾 *CUPOM - ${nomeLoja}*`,
       `📅 ${dataFormatada} às ${horaFormatada}`,
       `Venda #${dados.numero_venda}`,
+      dados.nome_cliente ? `👤 Cliente: ${dados.nome_cliente}` : '',
+      dados.endereco_cliente ? `📍 ${dados.endereco_cliente}` : '',
+      dados.telefone_cliente ? `📞 ${dados.telefone_cliente}` : '',
       ``,
       `*ITENS:*`,
       ...dados.itens.map(
@@ -162,6 +168,22 @@ export default function CupomImpressao({ dados, onFechar }: CupomProps) {
                 )}
               </div>
 
+              {/* 🆕 Informações do Cliente (só aparece se houver cliente vinculado) */}
+              {dados.nome_cliente && (
+                <>
+                  <div className="border-t border-dashed border-gray-400 my-2" />
+                  <div className="mb-1 text-center">
+                    <p className="font-bold text-xs uppercase mb-1">Informações do Cliente</p>
+                    <p className="text-xs">{dados.nome_cliente}</p>
+                    {dados.endereco_cliente && (
+                      <p className="text-xs">{dados.endereco_cliente}</p>
+                    )}
+                    {dados.telefone_cliente && (
+                      <p className="text-xs">Fone: {dados.telefone_cliente}</p>
+                    )}
+                  </div>
+                </>
+              )}
               <div className="border-t border-dashed border-gray-400 my-2" />
 
               {/* Itens */}
