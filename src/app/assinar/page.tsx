@@ -210,8 +210,8 @@ function AssinarContent() {
 
   const contaNegocioLegada = tipoPlanoAtual === "negocio";
   const planoSelecionadoEhAtual = tipoPlanoAtual === planoSelecionado;
-  const isUpgrade =
-    tipoPlanoAtual === "iniciante" && planoSelecionado === "profissional";
+  // const isUpgrade =
+  //   tipoPlanoAtual === "iniciante" && planoSelecionado === "profissional";
   const estaTrocandoPlano =
     tipoPlanoAtual !== null && tipoPlanoAtual !== planoSelecionado;
 
