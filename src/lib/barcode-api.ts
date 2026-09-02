@@ -1,170 +1,329 @@
 // src/lib/barcode-api.ts
 
 export interface ProdutoBarcode {
-  nome: string
-  marca: string
-  descricao: string
-  categoria: string
-  imagem_url: string
-  encontrado: boolean
-  fonte: string
+  nome: string;
+  marca: string;
+  descricao: string;
+  categoria: string;
+  encontrado: boolean;
+  fonte: string;
+}
+
+type CategoriaProduto =
+  | "Alimentos"
+  | "Bebidas"
+  | "Limpeza"
+  | "Higiene"
+  | "Eletrônicos"
+  | "Utilidades"
+  | "Outros";
+
+interface ProdutoFacts {
+  product_name_pt?: string;
+  product_name_pt_BR?: string;
+  product_name_br?: string;
+  product_name_es?: string;
+  product_name?: string;
+  abbreviated_product_name?: string;
+  generic_name_pt?: string;
+  generic_name?: string;
+  ingredients_text_pt?: string;
+  brands?: string;
+  categories_tags?: string[];
+  categories?: string;
+  quantity?: string;
+  manufacturer?: string;
+}
+
+interface RespostaFacts {
+  status?: number;
+  product?: ProdutoFacts;
 }
 
 const RESULTADO_VAZIO: ProdutoBarcode = {
-  nome: '', marca: '', descricao: '',
-  categoria: '', imagem_url: '',
-  encontrado: false, fonte: '',
+  nome: "",
+  marca: "",
+  descricao: "",
+  categoria: "",
+  encontrado: false,
+  fonte: "",
+};
+
+const TIMEOUT_MS = 6000;
+
+function primeiroTexto(...valores: Array<unknown>): string {
+  for (const valor of valores) {
+    if (typeof valor === "string" && valor.trim()) {
+      return valor.trim();
+    }
+  }
+
+  return "";
 }
 
-// ─── Open Food Facts (alimentos) ──────────────────────────────────────────
-async function buscarOpenFoodFacts(codigo: string): Promise<ProdutoBarcode | null> {
+function primeiraMarca(marcas?: string): string {
+  if (!marcas) return "";
+
+  return marcas
+    .split(",")
+    .map((marca) => marca.trim())
+    .find(Boolean) ?? "";
+}
+
+function limitarTexto(texto: string, limite = 500): string {
+  const normalizado = texto.replace(/\s+/g, " ").trim();
+
+  if (normalizado.length <= limite) {
+    return normalizado;
+  }
+
+  return `${normalizado.slice(0, limite - 1).trim()}…`;
+}
+
+async function consultarFacts(
+  url: string,
+): Promise<RespostaFacts | null> {
   try {
-    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigo}.json`, {
-      signal: AbortSignal.timeout(6000),
-    })
-    const data = await res.json()
-    if (data.status !== 1 || !data.product) return null
+    const resposta = await fetch(url, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: {
+        Accept: "application/json",
+      },
+    });
 
-    const p = data.product
-    const nome = p.product_name_pt || p.product_name_pt_BR || p.product_name_br ||
-                 p.product_name_es || p.product_name || p.abbreviated_product_name ||
-                 p.generic_name_pt || ''
-    const marca = p.brands?.split(',')[0]?.trim() || ''
-    const nomeCompleto = nome && marca && !nome.toLowerCase().includes(marca.toLowerCase())
-      ? `${nome} - ${marca}` : nome || marca
-
-    if (!nomeCompleto) return null
-
-    return {
-      nome: nomeCompleto,
-      marca,
-      descricao: p.generic_name_pt || p.generic_name || p.ingredients_text_pt || '',
-      categoria: mapearCategoria(p.categories_tags?.[0] || p.categories || ''),
-      imagem_url: p.image_front_small_url || p.image_front_url || p.image_small_url || '',
-      encontrado: true,
-      fonte: 'Open Food Facts',
+    if (!resposta.ok) {
+      return null;
     }
+
+    const dados = (await resposta.json()) as RespostaFacts;
+
+    if (dados.status !== 1 || !dados.product) {
+      return null;
+    }
+
+    return dados;
   } catch {
-    return null
+    return null;
   }
 }
 
-// ─── Open Beauty Facts (cosméticos / higiene) ─────────────────────────────
-async function buscarOpenBeautyFacts(codigo: string): Promise<ProdutoBarcode | null> {
-  try {
-    const res = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${codigo}.json`, {
-      signal: AbortSignal.timeout(6000),
-    })
-    const data = await res.json()
-    if (data.status !== 1 || !data.product) return null
+function criarResultado(
+  produto: ProdutoFacts,
+  fonte: string,
+  categoriaFixa?: CategoriaProduto,
+): ProdutoBarcode | null {
+  const nome = primeiroTexto(
+    produto.product_name_pt,
+    produto.product_name_pt_BR,
+    produto.product_name_br,
+    produto.product_name_es,
+    produto.product_name,
+    produto.abbreviated_product_name,
+    produto.generic_name_pt,
+    produto.generic_name,
+  );
 
-    const p = data.product
-    const nome = p.product_name_pt || p.product_name || ''
-    const marca = p.brands?.split(',')[0]?.trim() || ''
-    const nomeCompleto = nome && marca ? `${nome} - ${marca}` : nome || marca
+  const marca = primeiraMarca(produto.brands);
 
-    if (!nomeCompleto) return null
-
-    return {
-      nome: nomeCompleto,
-      marca,
-      descricao: p.generic_name || p.ingredients_text_pt || '',
-      categoria: 'Higiene',
-      imagem_url: p.image_front_small_url || p.image_url || '',
-      encontrado: true,
-      fonte: 'Open Beauty Facts',
-    }
-  } catch {
-    return null
+  if (!nome && !marca) {
+    return null;
   }
+
+  const descricao = primeiroTexto(
+    produto.generic_name_pt,
+    produto.generic_name,
+    produto.ingredients_text_pt,
+  );
+
+  const categoriaOriginal =
+    produto.categories_tags?.[0] ||
+    produto.categories ||
+    "";
+
+  return {
+    nome: nome || marca,
+    marca,
+    descricao: limitarTexto(descricao),
+    categoria:
+      categoriaFixa || mapearCategoria(categoriaOriginal),
+    encontrado: true,
+    fonte,
+  };
 }
 
-// ─── Open Products Facts (produtos de consumo geral: limpeza, inseticidas etc.) ──
-async function buscarOpenProductsFacts(codigo: string): Promise<ProdutoBarcode | null> {
-  try {
-    const res = await fetch(`https://world.openproductsfacts.org/api/v0/product/${codigo}.json`, {
-      signal: AbortSignal.timeout(6000),
-    })
-    const data = await res.json()
-    if (data.status !== 1 || !data.product) return null
+// Open Food Facts: alimentos e bebidas
+async function buscarOpenFoodFacts(
+  codigo: string,
+): Promise<ProdutoBarcode | null> {
+  const dados = await consultarFacts(
+    `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(
+      codigo,
+    )}.json`,
+  );
 
-    const p = data.product
-    const nome = p.product_name_pt || p.product_name || ''
-    const marca = p.brands?.split(',')[0]?.trim() || ''
-    const nomeCompleto = nome && marca ? `${nome} - ${marca}` : nome || marca
-
-    if (!nomeCompleto) return null
-
-    const descricaoCompleta = [
-      p.generic_name,
-      p.quantity,
-      p.categories,
-      p.manufacturer,
-    ].filter(Boolean).join(' | ')
-
-    return {
-      nome: nomeCompleto,
-      marca,
-      descricao: descricaoCompleta || nomeCompleto,
-      categoria: mapearCategoria(p.categories_tags?.[0] || p.categories || ''),
-      imagem_url: p.image_front_small_url || p.image_front_url || p.image_url || '',
-      encontrado: true,
-      fonte: 'Open Products Facts',
-    }
-  } catch {
-    return null
+  if (!dados?.product) {
+    return null;
   }
+
+  return criarResultado(
+    dados.product,
+    "Open Food Facts",
+  );
 }
 
-// ─── Função principal (busca em paralelo nas 3 fontes gratuitas) ───────────
-export async function buscarProdutoPorBarcode(codigo: string): Promise<ProdutoBarcode> {
-  const codigoLimpo = codigo.trim().replace(/\s/g, '')
-  if (!codigoLimpo) return RESULTADO_VAZIO
+// Open Beauty Facts: cosméticos e higiene
+async function buscarOpenBeautyFacts(
+  codigo: string,
+): Promise<ProdutoBarcode | null> {
+  const dados = await consultarFacts(
+    `https://world.openbeautyfacts.org/api/v0/product/${encodeURIComponent(
+      codigo,
+    )}.json`,
+  );
 
-  const [foodFacts, beautyFacts, productsFacts] = await Promise.all([
+  if (!dados?.product) {
+    return null;
+  }
+
+  return criarResultado(
+    dados.product,
+    "Open Beauty Facts",
+    "Higiene",
+  );
+}
+
+// Open Products Facts: produtos de consumo geral
+async function buscarOpenProductsFacts(
+  codigo: string,
+): Promise<ProdutoBarcode | null> {
+  const dados = await consultarFacts(
+    `https://world.openproductsfacts.org/api/v0/product/${encodeURIComponent(
+      codigo,
+    )}.json`,
+  );
+
+  if (!dados?.product) {
+    return null;
+  }
+
+  const resultado = criarResultado(
+    dados.product,
+    "Open Products Facts",
+  );
+
+  if (!resultado) {
+    return null;
+  }
+
+  const descricaoCompleta = [
+    dados.product.generic_name,
+    dados.product.quantity,
+    dados.product.categories,
+    dados.product.manufacturer,
+  ]
+    .filter(
+      (valor): valor is string =>
+        typeof valor === "string" &&
+        Boolean(valor.trim()),
+    )
+    .map((valor) => valor.trim())
+    .join(" | ");
+
+  return {
+    ...resultado,
+    descricao: limitarTexto(
+      descricaoCompleta || resultado.descricao,
+    ),
+  };
+}
+
+// Busca nas três fontes gratuitas em paralelo
+export async function buscarProdutoPorBarcode(
+  codigo: string,
+): Promise<ProdutoBarcode> {
+  const codigoLimpo = codigo
+    .trim()
+    .replace(/\s+/g, "");
+
+  if (!codigoLimpo) {
+    return { ...RESULTADO_VAZIO };
+  }
+
+  const resultados = await Promise.allSettled([
     buscarOpenFoodFacts(codigoLimpo),
     buscarOpenBeautyFacts(codigoLimpo),
     buscarOpenProductsFacts(codigoLimpo),
-  ])
+  ]);
 
-  const resultado = foodFacts || beautyFacts || productsFacts
-  return resultado || RESULTADO_VAZIO
+  for (const resultado of resultados) {
+    if (
+      resultado.status === "fulfilled" &&
+      resultado.value?.encontrado
+    ) {
+      return resultado.value;
+    }
+  }
+
+  return {
+    ...RESULTADO_VAZIO,
+  };
 }
 
-// ─── Mapeamento de categorias (expansivo) ──────────────────────────────────
-function mapearCategoria(tag: string): string {
-  const t = tag.toLowerCase()
-  if (t.match(/beverage|drink|agua|suco|refri|soda|juice|water|cerveja|vinho/))
-    return 'Bebidas'
-  if (t.match(/dairy|leite|queijo|iogurte|manteiga|cream|milk|cheese/))
-    return 'Laticínios'
-  if (t.match(/meat|carne|frango|peixe|chicken|fish|beef|pork|bacon/))
-    return 'Carnes'
-  if (t.match(/clean|limpeza|detergente|sabão|alvejante|multiuso|amaciante/))
-    return 'Limpeza'
-  if (t.match(/hygiene|higiene|sabonete|shampoo|dental|desodorante|body/))
-    return 'Higiene'
-  if (t.match(/bread|pao|biscoito|bolo|padaria|bakery|snack|cracker/))
-    return 'Padaria'
-  if (t.match(/frozen|congelado|frio|cold cut|sorvete/))
-    return 'Frios/Congelados'
-  if (t.match(/fruit|vegeta|horta|salad|produce|legume|verdura/))
-    return 'Hortifruti'
-  if (t.match(/rice|bean|pasta|grain|arroz|feijão|macarrão|cereal/))
-    return 'Grãos & Massas'
-  if (t.match(/oil|oleo|vinegar|condiment|sauce|molho|tempero/))
-    return 'Condimentos'
-  if (t.match(/candy|chocolate|sweet|doce|balas/))
-    return 'Doces'
-  if (t.match(/insecticide|pesticide|inseticida|repelente/))
-    return 'Controle de Pragas'
-  if (t.match(/pet|dog|cat|rão/))
-    return 'Petshop'
-  if (t.match(/automotive|auto|carro|veiculo/))
-    return 'Automotivo'
-  if (t.match(/tool|ferramenta|utilidade/))
-    return 'Ferramentas'
-  if (t.match(/toy|brinquedo/))
-    return 'Brinquedos'
-  return 'Outros'
+function mapearCategoria(
+  categoriaOriginal: string,
+): CategoriaProduto {
+  const categoria = categoriaOriginal
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (
+    /beverage|drink|agua|suco|refri|refrigerante|soda|juice|water|cerveja|vinho/.test(
+      categoria,
+    )
+  ) {
+    return "Bebidas";
+  }
+
+  if (
+    /clean|limpeza|detergente|sabao|alvejante|multiuso|amaciante|insecticide|pesticide|inseticida|repelente/.test(
+      categoria,
+    )
+  ) {
+    return "Limpeza";
+  }
+
+  if (
+    /hygiene|higiene|sabonete|shampoo|dental|desodorante|body|beauty|cosmetic/.test(
+      categoria,
+    )
+  ) {
+    return "Higiene";
+  }
+
+  if (
+    /electronic|eletronico|eletrica|electric|bateria|battery|charger|carregador/.test(
+      categoria,
+    )
+  ) {
+    return "Eletrônicos";
+  }
+
+  if (
+    /tool|ferramenta|utilidade|utensil|household|kitchen|cozinha/.test(
+      categoria,
+    )
+  ) {
+    return "Utilidades";
+  }
+
+  if (
+    /food|alimento|dairy|leite|queijo|iogurte|manteiga|cream|milk|cheese|meat|carne|frango|peixe|chicken|fish|beef|pork|bacon|bread|pao|biscoito|bolo|padaria|bakery|snack|cracker|frozen|congelado|frio|cold cut|sorvete|fruit|vegeta|horta|salad|produce|legume|verdura|rice|bean|pasta|grain|arroz|feijao|macarrao|cereal|oil|oleo|vinegar|condiment|sauce|molho|tempero|candy|chocolate|sweet|doce|bala/.test(
+      categoria,
+    )
+  ) {
+    return "Alimentos";
+  }
+
+  return "Outros";
 }

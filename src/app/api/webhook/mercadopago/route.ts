@@ -1,261 +1,254 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { enviarConfirmacaoPagamento } from '@/lib/email'
 
-// 🔧 Força rota dinâmica (webhook não pode ser pré-renderizado)
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+type PlanoInterno = 'iniciante' | 'profissional' | 'negocio'
+
+interface WebhookBody {
+  type?: string
+  action?: string
+  data?: { id?: string | number }
+}
+
+function isPlanoInterno(valor: string): valor is PlanoInterno {
+  return valor === 'iniciante' || valor === 'profissional' || valor === 'negocio'
+}
+
+function somarUmMes(base: Date): Date {
+  const resultado = new Date(base)
+  resultado.setMonth(resultado.getMonth() + 1)
+  return resultado
+}
+
+function respostaOk() {
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(req: NextRequest) {
-  // ✅ Cria o client DENTRO da função (lazy initialization)
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
+
+  if (!supabaseUrl || !serviceRoleKey || !accessToken) {
+    console.error('Configuração ausente no webhook Mercado Pago')
+    return NextResponse.json({ ok: false }, { status: 500 })
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 
   try {
-    const body = await req.json()
-    console.log('📨 Webhook MP recebido:', {
-      type: body.type,
-      action: body.action,
-      id: body.data?.id,
-    })
+    let body: WebhookBody
+    try {
+      body = (await req.json()) as WebhookBody
+    } catch {
+      return respostaOk()
+    }
 
-    // ══════════════════════════════════════════════════
-    // 💸 PAGAMENTO ÚNICO (PIX / Cartão de crédito avulso)
-    // ══════════════════════════════════════════════════
     const isPayment =
       body.type === 'payment' ||
       body.action === 'payment.created' ||
       body.action === 'payment.updated'
 
     if (isPayment) {
-      const paymentId = body.data?.id
-      if (!paymentId) {
-        console.warn('⚠️ Payment sem ID, ignorando')
-        return NextResponse.json({ ok: true })
-      }
+      const paymentId = String(body.data?.id ?? '').trim()
+      if (!paymentId) return respostaOk()
 
-      console.log(`💸 Processando pagamento ${paymentId}`)
-
-      const paymentResponse = await fetch(
-        `https://api.mercadopago.com/v1/payments/${paymentId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
-          },
-        }
+      const mpResponse = await fetch(
+        `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       )
 
-      if (!paymentResponse.ok) {
-        console.error(
-          `❌ Erro ao buscar payment ${paymentId}:`,
-          paymentResponse.status
-        )
-        return NextResponse.json({ ok: true })
+      if (!mpResponse.ok) {
+        console.error('Falha ao consultar pagamento:', paymentId, mpResponse.status)
+        return NextResponse.json({ ok: false }, { status: 502 })
       }
 
-      const payment = await paymentResponse.json()
-      const [userId, tipoPlano] = (payment.external_reference || '').split('|')
+      const payment = (await mpResponse.json()) as {
+        id?: string | number
+        status?: string
+        external_reference?: string
+        payment_method_id?: string
+      }
 
-      // ✅ Só ativa se aprovado E tem userId
-      if (payment.status === 'approved' && userId) {
-        const planoFim = new Date()
-        planoFim.setMonth(planoFim.getMonth() + 1)
+      if (String(payment.id ?? '') !== paymentId || payment.status !== 'approved') {
+        return respostaOk()
+      }
 
-        const planoFinal = tipoPlano || 'profissional'
+      const [userId, planoRecebido] = (payment.external_reference ?? '').split('|')
+      if (!userId || !isPlanoInterno(planoRecebido)) {
+        console.error('Referência externa inválida no pagamento:', paymentId)
+        return respostaOk()
+      }
 
-        const { error } = await supabase
+      const { data: perfil, error: perfilError } = await supabase
+        .from('perfis')
+        .select('plano, tipo_plano, plano_fim, tipo_pagamento, subscription_id')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (perfilError) throw perfilError
+      if (!perfil) return respostaOk()
+
+      if (
+        planoRecebido === 'negocio' &&
+        perfil.tipo_plano !== 'negocio'
+      ) {
+        console.error('Tentativa de ativação nova do plano Negócio:', paymentId)
+        return respostaOk()
+      }
+
+      const { error: claimError } = await supabase
+        .from('pagamentos_processados')
+        .insert({
+          mercado_pago_id: paymentId,
+          tipo_evento: 'payment.approved',
+          user_id: userId,
+          tipo_plano: planoRecebido,
+        })
+
+      if (claimError?.code === '23505') return respostaOk()
+      if (claimError) throw claimError
+
+      try {
+        const agora = new Date()
+        const fimAtual = perfil.plano_fim ? new Date(perfil.plano_fim) : null
+        const base =
+          fimAtual && !Number.isNaN(fimAtual.getTime()) && fimAtual > agora
+            ? fimAtual
+            : agora
+        const novoPlanoFim = somarUmMes(base)
+
+        const recorrente = Boolean(perfil.subscription_id)
+        const tipoPagamento = recorrente
+          ? 'cartao'
+          : payment.payment_method_id === 'pix'
+            ? 'pix'
+            : 'cartao'
+
+        const { error: updateError } = await supabase
           .from('perfis')
           .update({
             plano: 'ativo',
-            tipo_plano: planoFinal,
-            plano_fim: planoFim.toISOString(),
-            tipo_pagamento: payment.payment_method_id === 'pix' ? 'pix' : 'cartao',
+            tipo_plano: planoRecebido,
+            plano_fim: novoPlanoFim.toISOString(),
+            tipo_pagamento: tipoPagamento,
           })
           .eq('id', userId)
 
-        if (error) {
-          console.error('❌ Erro ao ativar plano via pagamento:', error)
-        } else {
-          console.log(`✅ Plano ${planoFinal} ATIVADO pro user ${userId}`)
+        if (updateError) throw updateError
 
-          // 🆕 ENVIA EMAIL DE CONFIRMAÇÃO
-          await enviarEmailConfirmacao(supabase, userId, planoFinal)
-        }
-      } else {
-        console.log(
-          `ℹ️ Pagamento ${paymentId} status=${payment.status} — não ativado`
-        )
+        await enviarEmailConfirmacao(supabase, userId, planoRecebido)
+      } catch (error) {
+        await supabase
+          .from('pagamentos_processados')
+          .delete()
+          .eq('mercado_pago_id', paymentId)
+        throw error
       }
 
-      return NextResponse.json({ ok: true })
+      return respostaOk()
     }
 
-    // ══════════════════════════════════════════════════
-    // 🔄 ASSINATURA RECORRENTE (preapproval — cartão)
-    // ══════════════════════════════════════════════════
     const isSubscription =
       body.type === 'subscription_preapproval' ||
       body.action === 'subscription_preapproval.created' ||
       body.action === 'subscription_preapproval.updated'
 
     if (isSubscription) {
-      const subscriptionId = body.data?.id
-      if (!subscriptionId) {
-        console.warn('⚠️ Subscription sem ID, ignorando')
-        return NextResponse.json({ ok: true })
-      }
+      const subscriptionId = String(body.data?.id ?? '').trim()
+      if (!subscriptionId) return respostaOk()
 
-      console.log(`🔄 Processando assinatura ${subscriptionId}`)
-
-      const subResponse = await fetch(
-        `https://api.mercadopago.com/preapproval/${subscriptionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
-          },
-        }
+      const mpResponse = await fetch(
+        `https://api.mercadopago.com/preapproval/${encodeURIComponent(subscriptionId)}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       )
 
-      if (!subResponse.ok) {
-        console.error(
-          `❌ Erro ao buscar subscription ${subscriptionId}:`,
-          subResponse.status
-        )
-        return NextResponse.json({ ok: true })
+      if (!mpResponse.ok) {
+        console.error('Falha ao consultar assinatura:', subscriptionId, mpResponse.status)
+        return NextResponse.json({ ok: false }, { status: 502 })
       }
 
-      const subscription = await subResponse.json()
-      const [userId, tipoPlano] = (subscription.external_reference || '').split(
-        '|'
-      )
+      const subscription = (await mpResponse.json()) as {
+        id?: string
+        status?: string
+        external_reference?: string
+      }
 
-      if (subscription.status === 'authorized' && userId) {
-        const planoFim = new Date()
-        planoFim.setMonth(planoFim.getMonth() + 1)
+      if (subscription.id !== subscriptionId) return respostaOk()
 
-        const planoFinal = tipoPlano || 'profissional'
+      const [userId, planoRecebido] = (subscription.external_reference ?? '').split('|')
+      if (!userId || !isPlanoInterno(planoRecebido)) return respostaOk()
 
-        // 🆕 Verifica se já era ativo (pra não mandar email duplicado em renovação)
-        const { data: perfilAntigo } = await supabase
-          .from('perfis')
-          .select('plano, subscription_id')
-          .eq('id', userId)
-          .single()
+      const { data: perfil, error: perfilError } = await supabase
+        .from('perfis')
+        .select('tipo_plano, subscription_id')
+        .eq('id', userId)
+        .maybeSingle()
 
-        const eraAtivo = perfilAntigo?.plano === 'ativo'
-        const mesmaAssinatura = perfilAntigo?.subscription_id === subscriptionId
+      if (perfilError) throw perfilError
+      if (!perfil) return respostaOk()
+      if (planoRecebido === 'negocio' && perfil.tipo_plano !== 'negocio') {
+        return respostaOk()
+      }
 
+      if (subscription.status === 'authorized') {
         const { error } = await supabase
           .from('perfis')
-          .update({
-            plano: 'ativo',
-            tipo_plano: planoFinal,
-            plano_fim: planoFim.toISOString(),
-            tipo_pagamento: 'cartao',
-            subscription_id: subscriptionId,
-          })
+          .update({ subscription_id: subscriptionId, tipo_pagamento: 'cartao' })
           .eq('id', userId)
-
-        if (error) {
-          console.error('❌ Erro ao ativar plano via assinatura:', error)
-        } else {
-          console.log(
-            `✅ Assinatura ${planoFinal} ATIVADA pro user ${userId} (sub: ${subscriptionId})`
-          )
-
-          // 🆕 Só envia email se for nova assinatura (não em renovação automática)
-          if (!eraAtivo || !mesmaAssinatura) {
-            await enviarEmailConfirmacao(supabase, userId, planoFinal)
-          } else {
-            console.log(`📧 Email pulado (renovação automática)`)
-          }
-        }
-      } else {
-        console.log(
-          `ℹ️ Subscription ${subscriptionId} status=${subscription.status} — não ativada`
-        )
+        if (error) throw error
       }
 
-      return NextResponse.json({ ok: true })
+      if (
+        subscription.status === 'cancelled' ||
+        subscription.status === 'paused'
+      ) {
+        const { error } = await supabase
+          .from('perfis')
+          .update({ tipo_pagamento: null })
+          .eq('id', userId)
+          .eq('subscription_id', subscriptionId)
+        if (error) throw error
+      }
+
+      // A autorização da assinatura não ativa nem renova o plano.
+      // A ativação ocorre somente quando o payment correspondente fica approved.
+      return respostaOk()
     }
 
-    // ══════════════════════════════════════════════════
-    // 🔴 CANCELAMENTO DE ASSINATURA
-    // ══════════════════════════════════════════════════
-    const isSubscriptionCancelled =
-      body.action === 'subscription_preapproval.cancelled' ||
-      body.action === 'subscription_preapproval.paused'
-
-    if (isSubscriptionCancelled) {
-      const subscriptionId = body.data?.id
-      if (!subscriptionId) {
-        return NextResponse.json({ ok: true })
-      }
-
-      console.log(`🔴 Assinatura ${subscriptionId} cancelada/pausada`)
-
-      // Acha o perfil pelo subscription_id e remove o método de pagamento recorrente
-      const { error } = await supabase
-        .from('perfis')
-        .update({
-          tipo_pagamento: null,
-        })
-        .eq('subscription_id', subscriptionId)
-
-      if (error) {
-        console.error('❌ Erro ao processar cancelamento:', error)
-      } else {
-        console.log(
-          `✅ Cancelamento registrado para subscription ${subscriptionId}`
-        )
-      }
-
-      return NextResponse.json({ ok: true })
-    }
-
-    // ══════════════════════════════════════════════════
-    // ⚠️ Evento desconhecido — só loga e retorna OK
-    // ══════════════════════════════════════════════════
-    console.log(`ℹ️ Evento ignorado: type=${body.type} action=${body.action}`)
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    console.error('❌ Erro fatal no webhook:', err)
-    // ✅ SEMPRE retorna 200 pro MP não ficar reenviando
-    return NextResponse.json({ ok: true })
+    return respostaOk()
+  } catch (error: unknown) {
+    console.error('Erro no webhook Mercado Pago:', error)
+    return NextResponse.json({ ok: false }, { status: 500 })
   }
 }
 
-// ════════════════════════════════════════════════════
-// 📧 HELPER: Envia email de confirmação de pagamento
-// ════════════════════════════════════════════════════
 async function enviarEmailConfirmacao(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
-  tipoPlano: string
+  tipoPlano: PlanoInterno,
 ) {
   try {
-    // Busca dados do user pra enviar email
-    const { data: { user } } = await supabase.auth.admin.getUserById(userId)
-    if (!user?.email) {
-      console.warn(`⚠️ Email do user ${userId} não encontrado, pulando notificação`)
-      return
-    }
+    const {
+      data: { user },
+    } = await supabase.auth.admin.getUserById(userId)
 
-    // Busca nome do negócio (pra personalizar o "Olá")
+    if (!user?.email) return
+
     const { data: perfil } = await supabase
       .from('perfis')
       .select('nome_negocio')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     const nome = perfil?.nome_negocio || user.user_metadata?.nome_completo || ''
-
     await enviarConfirmacaoPagamento(user.email, nome, tipoPlano)
-    console.log(`📧 Email de confirmação enviado pra ${user.email}`)
-  } catch (err) {
-    console.error('❌ Erro ao enviar email de confirmação:', err)
-    // Não relança o erro — não queremos quebrar o webhook se o email falhar
+  } catch (error: unknown) {
+    console.error('Erro ao enviar confirmação de pagamento:', error)
   }
 }

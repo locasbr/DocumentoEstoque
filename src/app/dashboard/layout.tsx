@@ -1,193 +1,307 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import Navbar from '@/components/navbar'
-import Sidebar from '@/components/sidebar'
-import SearchCommand from '@/components/search-command'
-import Loading from '@/components/loading'
-import TrialBanner from '@/components/trial-banner'
-import AvisoVencimento from '@/components/AvisoVencimento'
-import ModalCompletarPerfil from '@/components/modal-completar-perfil'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+
 import AdminWarningBanner from '@/components/admin-warning-banner'
-const RESTRICTED_ROUTES = [
-  '/dashboard$',
+import AvisoVencimento from '@/components/AvisoVencimento'
+import Loading from '@/components/loading'
+import ModalCompletarPerfil from '@/components/modal-completar-perfil'
+import Navbar from '@/components/navbar'
+import SearchCommand from '@/components/search-command'
+import Sidebar from '@/components/sidebar'
+import TrialBanner from '@/components/trial-banner'
+import { supabase } from '@/lib/supabase'
+
+type NivelUsuario = 'dono' | 'funcionario'
+type TipoPlano = 'iniciante' | 'profissional' | 'negocio'
+type StatusPlano = 'trial' | 'ativo' | 'expirado'
+
+interface MembroAcesso {
+  nivel: string | null
+  status: string | null
+  dono_id: string | null
+}
+
+interface PerfilAcesso {
+  plano: string | null
+  tipo_plano: string | null
+  trial_fim: string | null
+  plano_fim: string | null
+  tipo_pagamento: string | null
+  is_admin: boolean | null
+  telefone: string | null
+}
+
+const ROTAS_RESTRITAS_FUNCIONARIO = [
+  '/dashboard',
   '/dashboard/produtos',
+  '/dashboard/perdas',
+  '/dashboard/reposicao',
   '/dashboard/relatorios',
   '/dashboard/alertas',
   '/dashboard/equipe',
   '/dashboard/clientes',
-]
+  '/dashboard/admin',
+] as const
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+const UM_DIA_EM_MS = 86_400_000
+
+function rotaRestritaParaFuncionario(pathname: string): boolean {
+  return ROTAS_RESTRITAS_FUNCIONARIO.some((rota) => {
+    if (rota === '/dashboard') return pathname === rota
+    return pathname === rota || pathname.startsWith(`${rota}/`)
+  })
+}
+
+function dataValida(valor: string | null | undefined): Date | null {
+  if (!valor) return null
+
+  const data = new Date(valor)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
+function isTipoPlano(valor: unknown): valor is TipoPlano {
+  return (
+    valor === 'iniciante' ||
+    valor === 'profissional' ||
+    valor === 'negocio'
+  )
+}
+
+function isStatusPlano(valor: unknown): valor is StatusPlano {
+  return valor === 'trial' || valor === 'ativo' || valor === 'expirado'
+}
+
+function urlAssinatura(perfil: PerfilAcesso): string {
+  const plano = isTipoPlano(perfil.tipo_plano)
+    ? `&plano=${perfil.tipo_plano}`
+    : ''
+
+  return `/assinar?renovar=1${plano}`
+}
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+
   const [isLoading, setIsLoading] = useState(true)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [mostrarBanner, setMostrarBanner] = useState(false)
-  // 🆕 NOVO: estado pra forçar completar perfil
   const [precisaCompletarPerfil, setPrecisaCompletarPerfil] = useState(false)
-  const initialCheckDone = useRef(false)
-  const userLevelRef = useRef<string>('dono')
 
-  // ══════════ AUTH LISTENER ══════════
+  const verificacaoInicialConcluida = useRef(false)
+  const nivelUsuarioRef = useRef<NivelUsuario>('dono')
+  const redirecionandoRef = useRef(false)
+
+  const redirecionar = useCallback(
+    (destino: string) => {
+      if (redirecionandoRef.current) return
+
+      redirecionandoRef.current = true
+      router.replace(destino)
+    },
+    [router],
+  )
+
+  const verificarAcesso = useCallback(async () => {
+    if (verificacaoInicialConcluida.current) return
+
+    setIsLoading(true)
+    setPrecisaCompletarPerfil(false)
+    setDiasRestantes(null)
+    setMostrarBanner(false)
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        redirecionar('/login')
+        return
+      }
+
+      const { data: membroData, error: membroError } = await supabase
+        .from('membros')
+        .select('nivel, status, dono_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (membroError) {
+        console.error('Erro ao verificar vínculo do usuário:', membroError)
+        redirecionar('/login')
+        return
+      }
+
+      const membro = membroData as MembroAcesso | null
+      const nivelUsuario: NivelUsuario =
+        membro?.nivel === 'funcionario' ? 'funcionario' : 'dono'
+
+      if (nivelUsuario === 'funcionario' && membro?.status !== 'ativo') {
+        await supabase.auth.signOut()
+        redirecionar('/login')
+        return
+      }
+
+      const donoId =
+        nivelUsuario === 'funcionario' &&
+        typeof membro?.dono_id === 'string' &&
+        membro.dono_id.trim()
+          ? membro.dono_id
+          : user.id
+
+      nivelUsuarioRef.current = nivelUsuario
+
+      if (
+        nivelUsuario === 'funcionario' &&
+        rotaRestritaParaFuncionario(pathname)
+      ) {
+        redirecionar('/dashboard/pdv')
+        return
+      }
+
+      const { data: perfilData, error: perfilError } = await supabase
+        .from('perfis')
+        .select(
+          'plano, tipo_plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone',
+        )
+        .eq('id', donoId)
+        .maybeSingle()
+
+      if (perfilError) {
+        console.error('Erro ao verificar perfil:', perfilError)
+        redirecionar('/login')
+        return
+      }
+
+      const perfil = perfilData as PerfilAcesso | null
+
+      if (!perfil) {
+        console.error('Perfil da conta não encontrado:', donoId)
+        redirecionar('/login')
+        return
+      }
+
+      if (perfil.is_admin === true) {
+        verificacaoInicialConcluida.current = true
+        setIsLoading(false)
+        return
+      }
+
+      if (
+        nivelUsuario === 'dono' &&
+        (!perfil.telefone || !perfil.telefone.trim())
+      ) {
+        setPrecisaCompletarPerfil(true)
+      }
+
+      const agora = new Date()
+      const statusPlano = isStatusPlano(perfil.plano)
+        ? perfil.plano
+        : null
+
+      if (!statusPlano || statusPlano === 'expirado') {
+        redirecionar(urlAssinatura(perfil))
+        return
+      }
+
+      if (statusPlano === 'trial') {
+        const trialFim = dataValida(perfil.trial_fim)
+
+        if (!trialFim || trialFim.getTime() <= agora.getTime()) {
+          redirecionar(urlAssinatura(perfil))
+          return
+        }
+
+        const dias = Math.max(
+          0,
+          Math.ceil((trialFim.getTime() - agora.getTime()) / UM_DIA_EM_MS),
+        )
+
+        setDiasRestantes(dias)
+        setMostrarBanner(dias <= 5)
+      }
+
+      if (statusPlano === 'ativo') {
+        const planoFim = dataValida(perfil.plano_fim)
+
+        // Todo período pago precisa ter uma data final válida.
+        // PIX exige renovação manual. Cartão também é bloqueado se a
+        // cobrança aprovada ainda não renovou plano_fim no webhook.
+        if (!planoFim || planoFim.getTime() <= agora.getTime()) {
+          redirecionar(urlAssinatura(perfil))
+          return
+        }
+      }
+
+      verificacaoInicialConcluida.current = true
+      setIsLoading(false)
+    } catch (error: unknown) {
+      console.error('Erro inesperado ao verificar acesso:', error)
+      redirecionar('/login')
+    }
+  }, [pathname, redirecionar])
+
+  useEffect(() => {
+    void verificarAcesso()
+  }, [verificarAcesso])
+
+  useEffect(() => {
+    if (
+      verificacaoInicialConcluida.current &&
+      nivelUsuarioRef.current === 'funcionario' &&
+      rotaRestritaParaFuncionario(pathname)
+    ) {
+      redirecionar('/dashboard/pdv')
+    }
+  }, [pathname, redirecionar])
+
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        initialCheckDone.current = false
-        router.push('/login')
-      }
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('Sessão renovada automaticamente')
+        verificacaoInicialConcluida.current = false
+        redirecionandoRef.current = false
+        redirecionar('/login')
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [router])
-
-  // ══════════ AUTH CHECK ══════════
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (initialCheckDone.current) {
-        if (userLevelRef.current === 'funcionario') {
-          const isRestricted = RESTRICTED_ROUTES.some((route) =>
-            new RegExp(`^${route}`).test(pathname)
-          )
-          if (isRestricted) router.push('/dashboard/pdv')
-        }
-        return
-      }
-
-      try {
-        let { data } = await supabase.auth.getSession()
-
-        if (!data.session) {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          const retry = await supabase.auth.getSession()
-          data = retry.data
-        }
-
-        if (!data.session) {
-          router.push('/login')
-          return
-        }
-
-        // ── Verifica nível do membro ──
-        const { data: membroData } = await supabase
-          .from('membros')
-          .select('nivel')
-          .eq('user_id', data.session.user.id)
-          .maybeSingle()
-
-        const userLevel = membroData?.nivel ?? 'dono'
-        userLevelRef.current = userLevel
-
-        if (userLevel === 'funcionario') {
-          const isRestricted = RESTRICTED_ROUTES.some((route) =>
-            new RegExp(`^${route}`).test(pathname)
-          )
-          if (isRestricted) {
-            router.push('/dashboard/pdv')
-            return
-          }
-        }
-
-        // ── Verifica plano/trial/telefone ──
-        const { data: perfil } = await supabase
-          .from('perfis')
-          .select('plano, trial_fim, plano_fim, tipo_pagamento, is_admin, telefone')
-          .eq('id', data.session.user.id)
-          .maybeSingle()
-
-        if (perfil) {
-          // ✅ BYPASS DE ADMIN: pula toda verificação de trial/plano/telefone
-          if (perfil.is_admin === true) {
-            console.log('🛡️ Admin detectado - acesso liberado sem restrições')
-            initialCheckDone.current = true
-            setIsLoading(false)
-            return
-          }
-
-          // 🆕 NOVO: Se NÃO tem telefone, força completar perfil
-          // (só pra dono, não pra funcionário)
-          if (
-            userLevel === 'dono' &&
-            (!perfil.telefone || perfil.telefone === '')
-          ) {
-            console.log('📱 Usuário sem WhatsApp cadastrado - bloqueando acesso')
-            setPrecisaCompletarPerfil(true)
-            initialCheckDone.current = true
-            setIsLoading(false)
-            return
-          }
-
-          const agora = new Date()
-          const trialFim = perfil.trial_fim
-            ? new Date(perfil.trial_fim)
-            : null
-
-          if (perfil.plano === 'expirado') {
-            router.push('/assinar')
-            return
-          }
-
-          if (perfil.plano === 'trial' && trialFim && trialFim < agora) {
-            router.push('/assinar')
-            return
-          }
-
-          if (perfil.plano === 'trial' && trialFim) {
-            const dias = Math.ceil(
-              (trialFim.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24)
-            )
-            setDiasRestantes(dias)
-            if (dias >= 0 && dias <= 5) setMostrarBanner(true)
-          }
-        }
-
-        initialCheckDone.current = true
-        setIsLoading(false)
-      } catch (error) {
-        console.error('Error checking auth:', error)
-        router.push('/login')
-      }
-    }
-
-    checkAuth()
-  }, [router, pathname])
+  }, [redirecionar])
 
   if (isLoading) return <Loading />
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <Navbar />
       <Sidebar />
       <SearchCommand />
 
-      <main className="md:ml-56 pt-20 px-4 md:px-6 pb-24 md:pb-6">
-        <AdminWarningBanner />
-        <AvisoVencimento />
-        {mostrarBanner && diasRestantes !== null && (
-          <TrialBanner diasRestantes={diasRestantes} />
-        )}
+      <main className="min-w-0 pt-20 md:ml-56">
+        <div className="mx-auto w-full max-w-[1600px] px-4 pb-28 sm:px-5 md:px-6 md:pb-8 lg:px-8">
+          <div className="space-y-3">
+            <AdminWarningBanner />
+            <AvisoVencimento />
+            {mostrarBanner && diasRestantes !== null && (
+              <TrialBanner diasRestantes={diasRestantes} />
+            )}
+          </div>
 
-        {children}
+          <div className="mt-4 min-w-0">{children}</div>
+        </div>
       </main>
 
-      {/* 🆕 NOVO: Modal de completar perfil (bloqueante) */}
       {precisaCompletarPerfil && (
         <ModalCompletarPerfil
           onComplete={() => {
             setPrecisaCompletarPerfil(false)
-            // Recarrega a página pra pegar o perfil atualizado
-            window.location.reload()
+            verificacaoInicialConcluida.current = false
+            redirecionandoRef.current = false
+            void verificarAcesso()
           }}
         />
       )}

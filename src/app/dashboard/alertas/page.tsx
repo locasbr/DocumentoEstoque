@@ -1,921 +1,656 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { Alerta } from '@/lib/types'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import {
   AlertCircle,
   AlertTriangle,
-  Trash2,
-  CheckCircle2,
-  Search,
-  ArrowUpDown,
-  Radio,
-  Package,
-  Sparkles,
-  X,
-  Bell,
-  TrendingDown,
-  PackageCheck,
   ArrowRight,
+  ArrowUpDown,
+  Bell,
+  Check,
+  CheckCircle2,
   Loader2,
-} from 'lucide-react'
-import { formatarData } from '@/lib/utils'
-import { useNotification } from '@/contexts/NotificationContext'
+  Package,
+  PackageCheck,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 
-type Filtro = 'todos' | 'nao_visualizados' | 'visualizados'
-type Ordenacao = 'recente' | 'antigo' | 'urgencia'
+import PageHeader from "@/components/page-header";
+import { useNotification } from "@/contexts/NotificationContext";
+import { supabase } from "@/lib/supabase";
+import type { Alerta } from "@/lib/types";
+import { formatarData } from "@/lib/utils";
 
-// ════════════════════════════════════════════════════
-// 🎨 SKELETON LOADER
-// ════════════════════════════════════════════════════
-function SkeletonAlerta() {
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 animate-pulse">
-      <div className="flex items-start gap-4">
-        <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-800 flex-shrink-0" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3" />
-          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
-          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
-        </div>
-        <div className="w-20 h-8 bg-gray-200 dark:bg-gray-800 rounded" />
-      </div>
-    </div>
-  )
+type Filtro = "todos" | "nao_visualizados" | "visualizados";
+type Ordenacao = "recente" | "antigo" | "urgencia";
+type CorKPI = "blue" | "red" | "amber" | "green";
+
+interface ModalState {
+  titulo: string;
+  descricao: string;
+  textoBotao: string;
+  cor: "red" | "green";
+  onConfirmar: () => Promise<void>;
 }
 
-// ════════════════════════════════════════════════════
-// 🗑️ MODAL DE CONFIRMAÇÃO CUSTOM
-// ════════════════════════════════════════════════════
-interface ModalConfirmacao {
-  titulo: string
-  descricao: string
-  textoBotao: string
-  cor: 'red' | 'green'
-  onConfirmar: () => void
+interface KPIProps {
+  label: string;
+  value: number;
+  icon: LucideIcon;
+  cor: CorKPI;
+  destaque?: boolean;
+}
+
+const PALETA: Record<CorKPI, { bg: string; text: string; border: string }> = {
+  blue: {
+    bg: "bg-blue-100 dark:bg-blue-900/30",
+    text: "text-blue-600 dark:text-blue-400",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  red: {
+    bg: "bg-red-100 dark:bg-red-900/30",
+    text: "text-red-600 dark:text-red-400",
+    border: "border-red-200 dark:border-red-800",
+  },
+  amber: {
+    bg: "bg-amber-100 dark:bg-amber-900/30",
+    text: "text-amber-600 dark:text-amber-400",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  green: {
+    bg: "bg-emerald-100 dark:bg-emerald-900/30",
+    text: "text-emerald-600 dark:text-emerald-400",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+};
+
+function KPICard({ label, value, icon: Icon, cor, destaque = false }: KPIProps) {
+  const palette = PALETA[cor];
+
+  return (
+    <article
+      className={`rounded-xl border bg-white p-4 dark:bg-gray-900 ${
+        destaque ? palette.border : "border-gray-200 dark:border-gray-800"
+      }`}
+    >
+      <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${palette.bg}`}>
+        <Icon aria-hidden="true" className={`h-4 w-4 ${palette.text}`} />
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+    </article>
+  );
+}
+
+function SkeletonAlerta() {
+  return (
+    <div className="animate-pulse rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-start gap-4">
+        <div className="h-10 w-10 rounded-lg bg-gray-200 dark:bg-gray-800" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="h-3 w-1/2 rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="h-3 w-1/4 rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ModalConfirmacao({
   modal,
+  processando,
   onFechar,
 }: {
-  modal: ModalConfirmacao | null
-  onFechar: () => void
+  modal: ModalState | null;
+  processando: boolean;
+  onFechar: () => void;
 }) {
-  if (!modal) return null
+  useEffect(() => {
+    if (!modal) return;
 
-  const corBotao =
-    modal.cor === 'red'
-      ? 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
-      : 'bg-green-600 hover:bg-green-700 shadow-green-600/30'
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !processando) onFechar();
+    };
 
-  const corIcon =
-    modal.cor === 'red'
-      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-      : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [modal, processando, onFechar]);
+
+  if (!modal) return null;
+
+  const perigo = modal.cor === "red";
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
-      onClick={onFechar}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !processando) onFechar();
+      }}
     >
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-slideUp"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-alerta-titulo"
+        aria-describedby="modal-alerta-descricao"
+        className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900"
       >
-        <div className="flex items-start gap-4 mb-5">
+        <div className="flex items-start gap-4">
           <div
-            className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${corIcon}`}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+              perigo
+                ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+            }`}
           >
-            {modal.cor === 'red' ? (
-              <Trash2 className="w-6 h-6" />
-            ) : (
-              <CheckCircle2 className="w-6 h-6" />
-            )}
+            {perigo ? <Trash2 className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
           </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+          <div className="min-w-0 flex-1">
+            <h2 id="modal-alerta-titulo" className="text-lg font-bold text-gray-900 dark:text-white">
               {modal.titulo}
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+            </h2>
+            <p id="modal-alerta-descricao" className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               {modal.descricao}
             </p>
           </div>
           <button
+            type="button"
+            aria-label="Fechar"
+            disabled={processando}
             onClick={onFechar}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex gap-3">
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
           <button
+            type="button"
+            disabled={processando}
             onClick={onFechar}
-            className="flex-1 py-2.5 px-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition"
+            className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Cancelar
           </button>
           <button
-            onClick={() => {
-              modal.onConfirmar()
-              onFechar()
-            }}
-            className={`flex-1 py-2.5 px-4 text-white font-semibold rounded-xl transition shadow-lg ${corBotao}`}
+            type="button"
+            disabled={processando}
+            onClick={() => void modal.onConfirmar()}
+            className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${
+              perigo ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
           >
-            {modal.textoBotao}
+            {processando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {processando ? "Processando..." : modal.textoBotao}
           </button>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
-        .animate-slideUp { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-      `}</style>
     </div>
-  )
+  );
 }
 
-// ════════════════════════════════════════════════════
-// 📊 KPI CARD
-// ════════════════════════════════════════════════════
-function KPICard({
-  label,
-  value,
-  icon: Icon,
-  cor,
-  destaque,
-}: {
-  label: string
-  value: number
-  icon: typeof Bell
-  cor: 'blue' | 'red' | 'yellow' | 'green'
-  destaque?: boolean
-}) {
-  const cores = {
-    blue: {
-      bg: 'bg-blue-100 dark:bg-blue-900/30',
-      text: 'text-blue-600 dark:text-blue-400',
-      border: 'border-blue-200 dark:border-blue-800',
-    },
-    red: {
-      bg: 'bg-red-100 dark:bg-red-900/30',
-      text: 'text-red-600 dark:text-red-400',
-      border: 'border-red-200 dark:border-red-800',
-    },
-    yellow: {
-      bg: 'bg-yellow-100 dark:bg-yellow-900/30',
-      text: 'text-yellow-600 dark:text-yellow-400',
-      border: 'border-yellow-200 dark:border-yellow-800',
-    },
-    green: {
-      bg: 'bg-green-100 dark:bg-green-900/30',
-      text: 'text-green-600 dark:text-green-400',
-      border: 'border-green-200 dark:border-green-800',
-    },
-  }
-  const c = cores[cor]
-
-  return (
-    <div
-      className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
-        destaque ? c.border : 'border-gray-200 dark:border-gray-800'
-      }`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className={`w-9 h-9 rounded-lg ${c.bg} flex items-center justify-center`}>
-          <Icon className={`w-4 h-4 ${c.text}`} />
-        </div>
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
-      <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-// ════════════════════════════════════════════════════
-// 🎯 COMPONENTE PRINCIPAL
-// ════════════════════════════════════════════════════
 export default function AlertasPage() {
-  const { addNotification } = useNotification()
+  const { addNotification } = useNotification();
 
-  const [alertas, setAlertas] = useState<Alerta[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filtro, setFiltro] = useState<Filtro>('nao_visualizados')
-  const [busca, setBusca] = useState('')
-  const [ordenacao, setOrdenacao] = useState<Ordenacao>('recente')
-  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
-  const [modal, setModal] = useState<ModalConfirmacao | null>(null)
-  const [processando, setProcessando] = useState(false)
-  const [novoAlertaPiscando, setNovoAlertaPiscando] = useState(false)
+  const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<Filtro>("nao_visualizados");
+  const [busca, setBusca] = useState("");
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>("urgencia");
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [processando, setProcessando] = useState(false);
+  const [realtimeAtivo, setRealtimeAtivo] = useState(false);
 
-  // ────────────────────────────────────────────────
-  // 📡 FETCH + REALTIME
-  // ────────────────────────────────────────────────
   const fetchAlertas = useCallback(async () => {
+    setErroCarregamento(null);
+
     try {
       const { data, error } = await supabase
-        .from('alertas')
-        .select('*, produto:produto_id(*)')
-        .order('criado_em', { ascending: false })
+        .from("alertas")
+        .select("*, produto:produto_id(*)")
+        .order("criado_em", { ascending: false });
 
-      if (!error && data) {
-        setAlertas(data)
+      if (error) {
+        console.error("Erro ao carregar alertas:", error);
+        setErroCarregamento("Não foi possível carregar os alertas.");
+        return;
       }
+
+      setAlertas((data as Alerta[] | null) ?? []);
     } catch (error) {
-      console.error('Erro ao buscar alertas:', error)
-      addNotification('Erro ao carregar alertas', 'error')
+      console.error("Erro inesperado ao carregar alertas:", error);
+      setErroCarregamento("Ocorreu um erro inesperado ao carregar os alertas.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [addNotification])
+  }, []);
 
   useEffect(() => {
-    fetchAlertas()
+    void fetchAlertas();
 
-    const subscription = supabase
-      .channel('alertas')
+    const canal = supabase
+      .channel("alertas-dashboard")
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'alertas' },
-        (payload) => {
-          fetchAlertas()
-          // Pisca o indicador "Ao vivo" pra mostrar que chegou novo
-          if (payload.eventType === 'INSERT') {
-            setNovoAlertaPiscando(true)
-            setTimeout(() => setNovoAlertaPiscando(false), 2000)
-          }
-        }
+        "postgres_changes",
+        { event: "*", schema: "public", table: "alertas" },
+        () => void fetchAlertas(),
       )
-      .subscribe()
+      .subscribe((status) => setRealtimeAtivo(status === "SUBSCRIBED"));
 
     return () => {
-      subscription.unsubscribe()
-    }
-  }, [fetchAlertas])
+      void supabase.removeChannel(canal);
+    };
+  }, [fetchAlertas]);
 
-  // ────────────────────────────────────────────────
-  // 🔢 STATS
-  // ────────────────────────────────────────────────
+  useEffect(() => {
+    setSelecionados(new Set());
+  }, [filtro, busca, ordenacao]);
+
   const stats = useMemo(() => {
-    const total = alertas.length
-    const naoVistos = alertas.filter((a) => !a.visualizado)
-    const criticos = naoVistos.filter((a) => a.tipo_alerta === 'estoque_critico').length
-    const baixos = naoVistos.filter((a) => a.tipo_alerta === 'estoque_baixo').length
+    const pendentes = alertas.filter((alerta) => !alerta.visualizado);
+
     return {
-      total,
-      naoVistos: naoVistos.length,
-      criticos,
-      baixos,
-    }
-  }, [alertas])
+      total: alertas.length,
+      pendentes: pendentes.length,
+      criticos: pendentes.filter((alerta) => alerta.tipo_alerta === "estoque_critico").length,
+      baixos: pendentes.filter((alerta) => alerta.tipo_alerta === "estoque_baixo").length,
+    };
+  }, [alertas]);
 
-  // ────────────────────────────────────────────────
-  // 🔍 FILTROS + BUSCA + ORDENAÇÃO
-  // ────────────────────────────────────────────────
   const alertasFiltrados = useMemo(() => {
-    let resultado = alertas
+    const termo = busca.trim().toLocaleLowerCase("pt-BR");
 
-    // Filtro de status
-    if (filtro === 'nao_visualizados') {
-      resultado = resultado.filter((a) => !a.visualizado)
-    } else if (filtro === 'visualizados') {
-      resultado = resultado.filter((a) => a.visualizado)
-    }
+    return alertas
+      .filter((alerta) => {
+        if (filtro === "nao_visualizados" && alerta.visualizado) return false;
+        if (filtro === "visualizados" && !alerta.visualizado) return false;
+        if (termo && !alerta.produto?.nome?.toLocaleLowerCase("pt-BR").includes(termo)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const dataA = new Date(a.criado_em).getTime() || 0;
+        const dataB = new Date(b.criado_em).getTime() || 0;
 
-    // Busca por nome
-    if (busca.trim()) {
-      const termo = busca.toLowerCase()
-      resultado = resultado.filter((a) =>
-        a.produto?.nome?.toLowerCase().includes(termo)
-      )
-    }
-
-    // Ordenação
-    resultado = [...resultado].sort((a, b) => {
-      if (ordenacao === 'antigo') {
-        return new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime()
-      }
-      if (ordenacao === 'urgencia') {
-        // Críticos primeiro
-        if (a.tipo_alerta === b.tipo_alerta) {
-          return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+        if (ordenacao === "antigo") return dataA - dataB;
+        if (ordenacao === "urgencia" && a.tipo_alerta !== b.tipo_alerta) {
+          return a.tipo_alerta === "estoque_critico" ? -1 : 1;
         }
-        return a.tipo_alerta === 'estoque_critico' ? -1 : 1
-      }
-      // recente (default)
-      return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-    })
+        return dataB - dataA;
+      });
+  }, [alertas, busca, filtro, ordenacao]);
 
-    return resultado
-  }, [alertas, filtro, busca, ordenacao])
+  const todosSelecionados =
+    alertasFiltrados.length > 0 &&
+    alertasFiltrados.every((alerta) => selecionados.has(alerta.id));
 
-  // ────────────────────────────────────────────────
-  // ✅ AÇÕES
-  // ────────────────────────────────────────────────
-  const handleMarcarComoVisto = async (id: string) => {
-    setProcessando(true)
+  const atualizarLocalmente = (ids: string[], visualizado: boolean) => {
+    const conjunto = new Set(ids);
+    setAlertas((atuais) =>
+      atuais.map((alerta) =>
+        conjunto.has(alerta.id) ? { ...alerta, visualizado } : alerta,
+      ),
+    );
+  };
+
+  const marcarComoVistos = async (ids: string[]) => {
+    if (ids.length === 0) return;
+
+    setProcessando(true);
     try {
       const { error } = await supabase
-        .from('alertas')
+        .from("alertas")
         .update({ visualizado: true })
-        .eq('id', id)
+        .in("id", ids);
 
-      if (!error) {
-        addNotification('✅ Marcado como visualizado', 'success', 2000)
-        fetchAlertas()
-      } else {
-        addNotification('Erro ao atualizar', 'error')
+      if (error) {
+        console.error("Erro ao marcar alertas:", error);
+        addNotification("Não foi possível marcar os alertas.", "error");
+        return;
       }
-    } catch {
-      addNotification('Erro ao atualizar', 'error')
+
+      atualizarLocalmente(ids, true);
+      setSelecionados(new Set());
+      setModal(null);
+      addNotification("Alertas marcados como visualizados.", "success", 2200);
     } finally {
-      setProcessando(false)
+      setProcessando(false);
     }
-  }
+  };
 
-  const handleDeletar = (id: string, nome: string) => {
-    setModal({
-      titulo: 'Deletar alerta?',
-      descricao: `O alerta de "${nome}" será removido permanentemente. Essa ação não pode ser desfeita.`,
-      textoBotao: 'Deletar',
-      cor: 'red',
-      onConfirmar: async () => {
-        setProcessando(true)
-        try {
-          const { error } = await supabase.from('alertas').delete().eq('id', id)
-          if (!error) {
-            addNotification('🗑️ Alerta removido', 'success', 2000)
-            fetchAlertas()
-          } else {
-            addNotification('Erro ao deletar', 'error')
-          }
-        } catch {
-          addNotification('Erro ao deletar', 'error')
-        } finally {
-          setProcessando(false)
-        }
-      },
-    })
-  }
+  const excluirAlertas = async (ids: string[]) => {
+    if (ids.length === 0) return;
 
-  const handleMarcarTodosComoVistos = () => {
-    const naoVistos = alertas.filter((a) => !a.visualizado)
-    if (naoVistos.length === 0) {
-      addNotification('Nada pra marcar', 'info', 2000)
-      return
+    setProcessando(true);
+    try {
+      const { error } = await supabase.from("alertas").delete().in("id", ids);
+
+      if (error) {
+        console.error("Erro ao excluir alertas:", error);
+        addNotification("Não foi possível excluir os alertas.", "error");
+        return;
+      }
+
+      const conjunto = new Set(ids);
+      setAlertas((atuais) => atuais.filter((alerta) => !conjunto.has(alerta.id)));
+      setSelecionados(new Set());
+      setModal(null);
+      addNotification("Alertas removidos.", "success", 2200);
+    } finally {
+      setProcessando(false);
     }
+  };
 
-    setModal({
-      titulo: `Marcar ${naoVistos.length} como lidos?`,
-      descricao: `Todos os alertas não visualizados serão marcados como lidos.`,
-      textoBotao: 'Marcar todos',
-      cor: 'green',
-      onConfirmar: async () => {
-        setProcessando(true)
-        try {
-          const ids = naoVistos.map((a) => a.id)
-          const { error } = await supabase
-            .from('alertas')
-            .update({ visualizado: true })
-            .in('id', ids)
-
-          if (!error) {
-            addNotification(
-              `✅ ${naoVistos.length} alerta(s) marcado(s) como lido(s)`,
-              'success',
-              3000
-            )
-            fetchAlertas()
-          } else {
-            addNotification('Erro ao marcar', 'error')
-          }
-        } catch {
-          addNotification('Erro ao marcar', 'error')
-        } finally {
-          setProcessando(false)
-        }
-      },
-    })
-  }
-
-  // ────────────────────────────────────────────────
-  // ☑️ SELEÇÃO MÚLTIPLA
-  // ────────────────────────────────────────────────
   const toggleSelecao = (id: string) => {
-    const novo = new Set(selecionados)
-    if (novo.has(id)) novo.delete(id)
-    else novo.add(id)
-    setSelecionados(novo)
-  }
+    setSelecionados((atuais) => {
+      const proximo = new Set(atuais);
+      proximo.has(id) ? proximo.delete(id) : proximo.add(id);
+      return proximo;
+    });
+  };
 
   const toggleSelecionarTodos = () => {
-    if (selecionados.size === alertasFiltrados.length) {
-      setSelecionados(new Set())
-    } else {
-      setSelecionados(new Set(alertasFiltrados.map((a) => a.id)))
+    setSelecionados((atuais) => {
+      const proximo = new Set(atuais);
+      if (todosSelecionados) {
+        alertasFiltrados.forEach((alerta) => proximo.delete(alerta.id));
+      } else {
+        alertasFiltrados.forEach((alerta) => proximo.add(alerta.id));
+      }
+      return proximo;
+    });
+  };
+
+  const abrirConfirmacaoMarcarTodos = () => {
+    const ids = alertas.filter((alerta) => !alerta.visualizado).map((alerta) => alerta.id);
+    if (ids.length === 0) {
+      addNotification("Não existem alertas pendentes.", "info", 1800);
+      return;
     }
-  }
-
-  const handleMarcarSelecionados = () => {
-    if (selecionados.size === 0) return
 
     setModal({
-      titulo: `Marcar ${selecionados.size} como lidos?`,
-      descricao: `Os alertas selecionados serão marcados como visualizados.`,
-      textoBotao: 'Marcar',
-      cor: 'green',
-      onConfirmar: async () => {
-        setProcessando(true)
-        try {
-          const { error } = await supabase
-            .from('alertas')
-            .update({ visualizado: true })
-            .in('id', Array.from(selecionados))
+      titulo: `Marcar ${ids.length} alerta(s) como visualizados?`,
+      descricao: "Os alertas continuarão no histórico, mas deixarão de aparecer como pendentes.",
+      textoBotao: "Marcar todos",
+      cor: "green",
+      onConfirmar: () => marcarComoVistos(ids),
+    });
+  };
 
-          if (!error) {
-            addNotification(`✅ ${selecionados.size} marcado(s)`, 'success', 2000)
-            setSelecionados(new Set())
-            fetchAlertas()
-          }
-        } catch {
-          addNotification('Erro ao marcar', 'error')
-        } finally {
-          setProcessando(false)
-        }
-      },
-    })
-  }
-
-  const handleDeletarSelecionados = () => {
-    if (selecionados.size === 0) return
-
-    setModal({
-      titulo: `Deletar ${selecionados.size} alerta(s)?`,
-      descricao: `Os alertas selecionados serão removidos permanentemente. Essa ação não pode ser desfeita.`,
-      textoBotao: 'Deletar todos',
-      cor: 'red',
-      onConfirmar: async () => {
-        setProcessando(true)
-        try {
-          const { error } = await supabase
-            .from('alertas')
-            .delete()
-            .in('id', Array.from(selecionados))
-
-          if (!error) {
-            addNotification(`🗑️ ${selecionados.size} removido(s)`, 'success', 2000)
-            setSelecionados(new Set())
-            fetchAlertas()
-          }
-        } catch {
-          addNotification('Erro ao deletar', 'error')
-        } finally {
-          setProcessando(false)
-        }
-      },
-    })
-  }
-
-  // ────────────────────────────────────────────────
-  // 🎨 RENDER
-  // ────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {/* ══════════ HEADER ══════════ */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="hidden sm:flex w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 items-center justify-center shadow-lg shadow-orange-500/30 flex-shrink-0">
-            <Bell className="w-6 h-6 text-white" />
+    <div className="min-w-0 space-y-6 overflow-x-clip pb-8">
+      <PageHeader
+        eyebrow="ATENÇÃO DO ESTOQUE"
+        title="Alertas"
+        description="Veja os produtos que estão zerados ou abaixo do estoque mínimo e tome uma ação."
+        icon={Bell}
+        actions={
+          stats.pendentes > 0 ? (
+            <button
+              type="button"
+              onClick={abrirConfirmacaoMarcarTodos}
+              disabled={processando}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Marcar todos como vistos
+            </button>
+          ) : undefined
+        }
+      />
+
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className={`h-2 w-2 rounded-full ${realtimeAtivo ? "bg-emerald-500" : "bg-gray-400"}`} />
+        {realtimeAtivo ? "Atualização automática ativa" : "Conectando atualização automática"}
+      </div>
+
+      {erroCarregamento && (
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="flex-1">
+            <p>{erroCarregamento}</p>
+            <button type="button" onClick={() => void fetchAlertas()} className="mt-2 text-xs font-semibold underline">
+              Tentar novamente
+            </button>
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-                Alertas de Estoque
-              </h1>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  novoAlertaPiscando
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 scale-110'
-                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+        </div>
+      )}
+
+      <section aria-label="Indicadores dos alertas" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KPICard label="Alertas pendentes" value={stats.pendentes} icon={Bell} cor={stats.pendentes > 0 ? "amber" : "green"} destaque={stats.pendentes > 0} />
+        <KPICard label="Produtos zerados" value={stats.criticos} icon={AlertCircle} cor={stats.criticos > 0 ? "red" : "green"} destaque={stats.criticos > 0} />
+        <KPICard label="Abaixo do mínimo" value={stats.baixos} icon={AlertTriangle} cor={stats.baixos > 0 ? "amber" : "green"} destaque={stats.baixos > 0} />
+        <KPICard label="Total no histórico" value={stats.total} icon={Package} cor="blue" />
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-col gap-3 lg:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar por nome do produto..."
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            />
+            {busca && (
+              <button type="button" aria-label="Limpar busca" onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+            {[
+              { id: "nao_visualizados" as const, label: "Pendentes", count: stats.pendentes },
+              { id: "todos" as const, label: "Todos", count: stats.total },
+              { id: "visualizados" as const, label: "Vistos", count: stats.total - stats.pendentes },
+            ].map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => setFiltro(item.id)}
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold ${
+                  filtro === item.id
+                    ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white"
+                    : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                 }`}
               >
-                <Radio
-                  className={`w-2.5 h-2.5 ${
-                    novoAlertaPiscando ? 'animate-pulse' : ''
-                  }`}
-                />
-                {novoAlertaPiscando ? 'Novo!' : 'Ao vivo'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Monitore produtos com estoque baixo ou crítico em tempo real
-            </p>
+                {item.label}
+                <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] dark:bg-gray-700">{item.count}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="relative sm:min-w-[175px]">
+            <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <select
+              value={ordenacao}
+              onChange={(event) => setOrdenacao(event.target.value as Ordenacao)}
+              aria-label="Ordenar alertas"
+              className="w-full appearance-none rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            >
+              <option value="urgencia">Por urgência</option>
+              <option value="recente">Mais recentes</option>
+              <option value="antigo">Mais antigos</option>
+            </select>
           </div>
         </div>
+      </section>
 
-        {stats.naoVistos > 0 && (
-          <button
-            onClick={handleMarcarTodosComoVistos}
-            disabled={processando}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-semibold rounded-lg transition text-sm disabled:opacity-50"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Marcar todos como lidos
-          </button>
-        )}
-      </div>
-
-      {/* ══════════ KPIs ══════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard label="Total" value={stats.total} icon={Bell} cor="blue" />
-        <KPICard
-          label="Não vistos"
-          value={stats.naoVistos}
-          icon={Sparkles}
-          cor="yellow"
-          destaque={stats.naoVistos > 0}
-        />
-        <KPICard
-          label="Críticos"
-          value={stats.criticos}
-          icon={AlertCircle}
-          cor="red"
-          destaque={stats.criticos > 0}
-        />
-        <KPICard
-          label="Baixo estoque"
-          value={stats.baixos}
-          icon={TrendingDown}
-          cor="yellow"
-        />
-      </div>
-
-      {/* ══════════ TOOLBAR ══════════ */}
-      <div className="flex flex-col lg:flex-row gap-3">
-        {/* Busca */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nome do produto..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
-          />
-          {busca && (
-            <button
-              onClick={() => setBusca('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Filtros */}
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg overflow-x-auto">
-          {[
-            { id: 'nao_visualizados' as const, label: 'Não vistos', count: stats.naoVistos },
-            { id: 'todos' as const, label: 'Todos', count: stats.total },
-            { id: 'visualizados' as const, label: 'Vistos', count: stats.total - stats.naoVistos },
-          ].map(({ id, label, count }) => (
-            <button
-              key={id}
-              onClick={() => setFiltro(id)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-                filtro === id
-                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              {label}
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                  filtro === id
-                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Ordenação */}
-        <div className="relative">
-          <select
-            value={ordenacao}
-            onChange={(e) => setOrdenacao(e.target.value as Ordenacao)}
-            className="appearance-none pl-9 pr-8 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer"
-          >
-            <option value="recente">Mais recentes</option>
-            <option value="antigo">Mais antigos</option>
-            <option value="urgencia">Por urgência</option>
-          </select>
-          <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        </div>
-      </div>
-
-      {/* ══════════ BULK ACTIONS ══════════ */}
       {selecionados.size > 0 && (
-        <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl animate-slideDown">
-          <div className="flex items-center gap-2 text-sm">
-            <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <span className="font-semibold text-blue-900 dark:text-blue-100">
-              {selecionados.size} selecionado(s)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">{selecionados.size} selecionado(s)</span>
+          <div className="flex flex-wrap gap-2">
             <button
-              onClick={handleMarcarSelecionados}
-              disabled={processando}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
+              type="button"
+              onClick={() =>
+                setModal({
+                  titulo: "Marcar selecionados como visualizados?",
+                  descricao: "Os alertas selecionados continuarão no histórico.",
+                  textoBotao: "Marcar",
+                  cor: "green",
+                  onConfirmar: () => marcarComoVistos(Array.from(selecionados)),
+                })
+              }
+              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Marcar como lidos
+              Marcar como vistos
             </button>
             <button
-              onClick={handleDeletarSelecionados}
-              disabled={processando}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
+              type="button"
+              onClick={() =>
+                setModal({
+                  titulo: "Excluir alertas selecionados?",
+                  descricao: "Esta ação remove os alertas do histórico e não pode ser desfeita.",
+                  textoBotao: "Excluir",
+                  cor: "red",
+                  onConfirmar: () => excluirAlertas(Array.from(selecionados)),
+                })
+              }
+              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Deletar
+              Excluir
             </button>
-            <button
-              onClick={() => setSelecionados(new Set())}
-              className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium px-2"
-            >
+            <button type="button" onClick={() => setSelecionados(new Set())} className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-white/70 dark:text-gray-300 dark:hover:bg-gray-900/30">
               Cancelar
             </button>
           </div>
         </div>
       )}
 
-      {/* ══════════ LISTA / SKELETON / EMPTY ══════════ */}
       {loading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <SkeletonAlerta key={i} />
-          ))}
-        </div>
+        <div className="space-y-3">{Array.from({ length: 3 }).map((_, index) => <SkeletonAlerta key={index} />)}</div>
       ) : alertasFiltrados.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
-          <div className="inline-flex w-16 h-16 rounded-2xl bg-green-100 dark:bg-green-900/30 items-center justify-center mb-4">
-            <PackageCheck className="w-8 h-8 text-green-600 dark:text-green-400" />
+        <div className="rounded-xl border border-gray-200 bg-white px-5 py-16 text-center dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+            <PackageCheck className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <h3 className="font-bold text-gray-900 dark:text-white mb-1">
-            {busca
-              ? 'Nenhum alerta encontrado'
-              : filtro === 'nao_visualizados'
-              ? 'Tudo em ordem! ✨'
-              : 'Nenhum alerta ainda'}
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            {busca
-              ? `Nenhum produto encontrado com "${busca}"`
-              : filtro === 'nao_visualizados'
-              ? 'Você não tem alertas pendentes. Estoques saudáveis!'
-              : 'Quando produtos atingirem o estoque mínimo, vão aparecer aqui.'}
+          <h2 className="font-bold text-gray-900 dark:text-white">
+            {busca ? "Nenhum alerta encontrado" : filtro === "nao_visualizados" ? "Nenhuma pendência no momento" : "Nenhum alerta no histórico"}
+          </h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500 dark:text-gray-400">
+            {busca ? "Tente buscar por outro produto." : "Os alertas de estoque baixo ou zerado aparecerão aqui."}
           </p>
-          {busca && (
-            <button
-              onClick={() => setBusca('')}
-              className="mt-4 text-sm text-green-600 dark:text-green-400 font-semibold hover:underline"
-            >
-              Limpar busca
-            </button>
-          )}
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Checkbox "selecionar todos" */}
-          <div className="flex items-center gap-2 px-1">
-            <button
-              onClick={toggleSelecionarTodos}
-              className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
-            >
-              <div
-                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition ${
-                  selecionados.size === alertasFiltrados.length &&
-                  alertasFiltrados.length > 0
-                    ? 'bg-blue-600 border-blue-600'
-                    : 'border-gray-300 dark:border-gray-600'
-                }`}
-              >
-                {selecionados.size === alertasFiltrados.length &&
-                  alertasFiltrados.length > 0 && (
-                    <CheckCircle2 className="w-3 h-3 text-white" />
-                  )}
-              </div>
-              {selecionados.size === alertasFiltrados.length
-                ? 'Desmarcar todos'
-                : 'Selecionar todos'}
+          <div className="flex items-center justify-between px-1">
+            <button type="button" onClick={toggleSelecionarTodos} className="inline-flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+              <span className={`flex h-5 w-5 items-center justify-center rounded border-2 ${todosSelecionados ? "border-blue-600 bg-blue-600" : "border-gray-300 dark:border-gray-600"}`}>
+                {todosSelecionados && <Check className="h-3.5 w-3.5 text-white" />}
+              </span>
+              {todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
             </button>
-            <span className="text-xs text-gray-400">·</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {alertasFiltrados.length} resultado(s)
-            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{alertasFiltrados.length} resultado(s)</span>
           </div>
 
-          {/* Cards de alerta */}
-          {alertasFiltrados.map((alerta, idx) => {
-            const isCritico = alerta.tipo_alerta === 'estoque_critico'
-            const isSelecionado = selecionados.has(alerta.id)
+          {alertasFiltrados.map((alerta) => {
+            const critico = alerta.tipo_alerta === "estoque_critico";
+            const selecionado = selecionados.has(alerta.id);
+            const atual = alerta.produto?.quantidade_atual;
+            const minimo = alerta.produto?.quantidade_minima;
 
             return (
-              <div
+              <article
                 key={alerta.id}
-                className={`group relative bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all hover:shadow-md ${
-                  alerta.visualizado
-                    ? 'border-gray-200 dark:border-gray-800 opacity-70'
-                    : isCritico
-                    ? 'border-red-200 dark:border-red-900/50 shadow-sm shadow-red-500/5'
-                    : 'border-yellow-200 dark:border-yellow-900/50 shadow-sm shadow-yellow-500/5'
-                } ${isSelecionado ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''}`}
-                style={{ animation: `slideUp 0.3s ease-out ${idx * 30}ms backwards` }}
+                className={`rounded-xl border bg-white p-4 dark:bg-gray-900 ${
+                  selecionado
+                    ? "border-blue-400 ring-2 ring-blue-500/20 dark:border-blue-700"
+                    : alerta.visualizado
+                      ? "border-gray-200 opacity-70 dark:border-gray-800"
+                      : critico
+                        ? "border-red-200 dark:border-red-900/60"
+                        : "border-amber-200 dark:border-amber-900/60"
+                }`}
               >
-                {/* Barra lateral de urgência */}
-                {!alerta.visualizado && (
-                  <div
-                    className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${
-                      isCritico ? 'bg-red-500' : 'bg-yellow-500'
-                    }`}
-                  />
-                )}
-
-                <div className="flex items-start gap-3 md:gap-4">
-                  {/* Checkbox */}
-                  <button
-                    onClick={() => toggleSelecao(alerta.id)}
-                    className={`flex-shrink-0 mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition ${
-                      isSelecionado
-                        ? 'bg-blue-600 border-blue-600'
-                        : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
-                    }`}
-                  >
-                    {isSelecionado && <CheckCircle2 className="w-3 h-3 text-white" />}
+                <div className="flex items-start gap-3">
+                  <button type="button" aria-label={`Selecionar alerta de ${alerta.produto?.nome ?? "produto"}`} aria-pressed={selecionado} onClick={() => toggleSelecao(alerta.id)} className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${selecionado ? "border-blue-600 bg-blue-600" : "border-gray-300 dark:border-gray-600"}`}>
+                    {selecionado && <Check className="h-3.5 w-3.5 text-white" />}
                   </button>
 
-                  {/* Ícone */}
-                  <div
-                    className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-                      isCritico
-                        ? 'bg-red-100 dark:bg-red-900/30'
-                        : 'bg-yellow-100 dark:bg-yellow-900/30'
-                    }`}
-                  >
-                    {isCritico ? (
-                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                    ) : (
-                      <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                    )}
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${critico ? "bg-red-100 dark:bg-red-900/30" : "bg-amber-100 dark:bg-amber-900/30"}`}>
+                    {critico ? <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" /> : <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
                   </div>
 
-                  {/* Conteúdo */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white break-words">
-                          {alerta.produto?.nome || 'Produto removido'}
-                        </h3>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              isCritico
-                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                            }`}
-                          >
-                            {isCritico ? '🔴 Crítico' : '🟡 Baixo'}
-                          </span>
-                          {alerta.visualizado && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                              ✓ Visualizado
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="break-words text-sm font-bold text-gray-900 dark:text-white">{alerta.produto?.nome ?? "Produto removido"}</h2>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${critico ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}>
+                        {critico ? "Estoque zerado" : "Abaixo do mínimo"}
+                      </span>
+                      {alerta.visualizado && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">Visualizado</span>}
                     </div>
 
-                    {/* Quantidades */}
-                    <div className="flex items-center gap-4 mt-3 text-xs">
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Atual: </span>
-                        <span
-                          className={`font-bold text-base ${
-                            isCritico
-                              ? 'text-red-600 dark:text-red-400'
-                              : 'text-yellow-600 dark:text-yellow-400'
-                          }`}
-                        >
-                          {alerta.produto?.quantidade_atual ?? '?'}
-                        </span>
-                      </div>
-                      <div className="text-gray-300 dark:text-gray-700">/</div>
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Mínimo: </span>
-                        <span className="font-bold text-base text-gray-700 dark:text-gray-300">
-                          {alerta.produto?.quantidade_minima ?? '?'}
-                        </span>
-                      </div>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                      <span className="text-gray-500 dark:text-gray-400">Atual: <strong className={critico ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}>{atual ?? "?"}</strong></span>
+                      <span className="text-gray-500 dark:text-gray-400">Mínimo: <strong className="text-gray-800 dark:text-gray-200">{minimo ?? "?"}</strong></span>
+                      <span className="text-gray-400">{formatarData(alerta.criado_em)}</span>
                     </div>
-
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      {formatarData(alerta.criado_em)}
-                    </p>
                   </div>
 
-                 {/* Ações */}
-                  <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                     {alerta.produto?.id && (
                       <Link
                         href={`/dashboard/estoque/movimento?tipo=entrada&produto=${alerta.produto.id}`}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-md hover:shadow-green-500/30 text-white text-xs font-semibold rounded-lg transition whitespace-nowrap"
-                        title="Repor estoque"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                       >
-                        <Package className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Repor</span>
-                        <ArrowRight className="w-3 h-3" />
+                        <Package className="h-3.5 w-3.5" />
+                        Repor
+                        <ArrowRight className="h-3 w-3" />
                       </Link>
                     )}
                     {!alerta.visualizado && (
-                      <button
-                        onClick={() => handleMarcarComoVisto(alerta.id)}
-                        disabled={processando}
-                        className="p-2 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition disabled:opacity-50"
-                        title="Marcar como visualizado"
-                      >
-                        <CheckCircle2 size={18} />
+                      <button type="button" aria-label="Marcar como visualizado" disabled={processando} onClick={() => void marcarComoVistos([alerta.id])} className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30">
+                        <CheckCircle2 className="h-4 w-4" />
                       </button>
                     )}
                     <button
-                      onClick={() =>
-                        handleDeletar(alerta.id, alerta.produto?.nome || 'item')
-                      }
+                      type="button"
+                      aria-label="Excluir alerta"
                       disabled={processando}
-                      className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition disabled:opacity-50"
-                      title="Deletar alerta"
+                      onClick={() =>
+                        setModal({
+                          titulo: "Excluir alerta?",
+                          descricao: `O alerta de “${alerta.produto?.nome ?? "produto"}” será removido do histórico.`,
+                          textoBotao: "Excluir",
+                          cor: "red",
+                          onConfirmar: () => excluirAlertas([alerta.id]),
+                        })
+                      }
+                      className="rounded-lg p-2 text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/30"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
-              </div>
-            )
+              </article>
+            );
           })}
         </div>
       )}
 
-      {/* ══════════ LOADING OVERLAY ══════════ */}
       {processando && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full shadow-2xl text-sm font-semibold">
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-2xl dark:bg-white dark:text-gray-900">
+          <Loader2 className="h-4 w-4 animate-spin" />
           Processando...
         </div>
       )}
 
-      {/* ══════════ MODAL ══════════ */}
-      <ModalConfirmacao modal={modal} onFechar={() => setModal(null)} />
-
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slideDown {
-          animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-      `}</style>
+      <ModalConfirmacao
+        modal={modal}
+        processando={processando}
+        onFechar={() => {
+          if (!processando) setModal(null);
+        }}
+      />
     </div>
-  )
+  );
 }

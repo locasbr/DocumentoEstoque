@@ -1,179 +1,149 @@
 'use client'
 
-import { HelpCircle, Lock, Shield } from 'lucide-react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import {
+  CreditCard,
+  Loader2,
   LogOut,
-  Menu,
   Moon,
-  Sun,
-  Home,
   Package,
-  BarChart3,
-  ShoppingCart,
-  AlertCircle,
-  TrendingUp,
-  Users,
-  UserCircle,
+  Sun,
 } from 'lucide-react'
-import { useState } from 'react'
-import { useTheme } from '@/contexts/ThemeContext'
-import { useMembro } from '@/hooks/useMembro'
-import { usePlano } from '@/hooks/usePlano'
-import { useIsAdmin } from '@/hooks/useIsAdmin'
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/produtos', label: 'Produtos', icon: Package, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/estoque', label: 'Estoque', icon: BarChart3, requiredLevel: null, planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/pdv', label: 'PDV', icon: ShoppingCart, requiredLevel: null, planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: TrendingUp, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/alertas', label: 'Alertas', icon: AlertCircle, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/vendas', label: 'Vendas', icon: ShoppingCart, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/equipe', label: 'Equipe', icon: Users, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/perfil', label: 'Perfil', icon: UserCircle, requiredLevel: null, planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/clientes', label: 'Clientes', icon: Users, requiredLevel: 'dono', planoBloqueio: 'iniciante', apenasAdmin: false },
-  { href: '/dashboard/ajuda', label: 'Ajuda', icon: HelpCircle, requiredLevel: null, planoBloqueio: null, apenasAdmin: false },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, requiredLevel: 'dono', planoBloqueio: null, apenasAdmin: true }, // 🆕
-]
+import { useTheme } from '@/contexts/ThemeContext'
+import { supabase } from '@/lib/supabase'
 
 export default function Navbar() {
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
-  const { isDono } = useMembro()
-  const { isIniciante } = usePlano()
-  const { isAdmin } = useIsAdmin() // 🆕
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const [saindo, setSaindo] = useState(false)
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+    if (saindo) {
+      return
+    }
+
+    setSaindo(true)
+
+    try {
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        console.error(
+          'Erro ao encerrar sessão:',
+          error
+        )
+
+        setSaindo(false)
+        return
+      }
+
+      router.replace('/login')
+      router.refresh()
+    } catch (error: unknown) {
+      console.error(
+        'Erro inesperado ao encerrar sessão:',
+        error
+      )
+
+      setSaindo(false)
+    }
   }
-
-  const isBloqueadoPorPlano = (planoBloqueio: string | null) => {
-    if (planoBloqueio === 'iniciante' && isIniciante) return true
-    return false
-  }
-
-  const filteredNavItems = navItems.filter(item => {
-    // 🆕 Esconde itens de admin pra não-admins
-    if (item.apenasAdmin && !isAdmin) return false
-
-    if (item.requiredLevel === null) return true
-    if (item.requiredLevel === 'dono') return isDono
-    return false
-  })
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 shadow-md dark:shadow-lg dark:shadow-black/20 border-b dark:border-gray-800">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+    <nav className="fixed inset-x-0 top-0 z-40 h-14 border-b border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex h-full items-center justify-between px-4 md:px-6">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 rounded-lg text-gray-900 transition-colors hover:text-emerald-600 dark:text-white dark:hover:text-emerald-400"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+            <Package
+              aria-hidden="true"
+              className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+            />
+          </span>
+
+          <span className="hidden truncate text-lg sm:inline">
+            EstoqueSystem
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-1 sm:gap-2">
           <Link
-            href="/dashboard"
-            className="font-bold text-xl text-primary"
+            href="/assinar"
+            className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white sm:px-3"
           >
-            📦 EstoqueSystem
+            <CreditCard
+              aria-hidden="true"
+              className="h-5 w-5"
+            />
+
+            <span className="hidden text-sm font-medium md:inline">
+              Meu plano
+            </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title={`Ativar ${theme === 'light' ? 'dark' : 'light'} mode`}
-            >
-              {theme === 'light' ? (
-                <Moon size={20} className="text-gray-600 dark:text-gray-400" />
-              ) : (
-                <Sun size={20} className="text-yellow-500" />
-              )}
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            >
-              <LogOut size={20} />
-              Sair
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={
+              theme === 'light'
+                ? 'Ativar modo escuro'
+                : 'Ativar modo claro'
+            }
+            title={
+              theme === 'light'
+                ? 'Ativar modo escuro'
+                : 'Ativar modo claro'
+            }
+            className="rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+          >
+            {theme === 'light' ? (
+              <Moon
+                aria-hidden="true"
+                className="h-5 w-5"
+              />
+            ) : (
+              <Sun
+                aria-hidden="true"
+                className="h-5 w-5 text-amber-500"
+              />
+            )}
+          </button>
 
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2"
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={saindo}
+            aria-label={
+              saindo
+                ? 'Encerrando sessão'
+                : 'Sair da conta'
+            }
+            title="Sair da conta"
+            className="inline-flex items-center gap-2 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 sm:px-3"
           >
-            <Menu size={24} />
+            {saindo ? (
+              <Loader2
+                aria-hidden="true"
+                className="h-5 w-5 animate-spin"
+              />
+            ) : (
+              <LogOut
+                aria-hidden="true"
+                className="h-5 w-5"
+              />
+            )}
+
+            <span className="hidden text-sm font-medium sm:inline">
+              {saindo ? 'Saindo...' : 'Sair'}
+            </span>
           </button>
         </div>
-
-        {mobileMenuOpen && (
-          <div className="md:hidden pb-4 space-y-1 border-t dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 max-h-96 overflow-y-auto">
-            {filteredNavItems.map(({ href, label, icon: Icon, planoBloqueio, apenasAdmin }) => {
-              const bloqueado = isBloqueadoPorPlano(planoBloqueio)
-
-              if (bloqueado) {
-                return (
-                  <Link
-                    key={href}
-                    href="/assinar"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block w-full text-left px-4 py-3 text-gray-400 dark:text-gray-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 rounded transition-colors font-medium flex items-center gap-3"
-                  >
-                    <Icon size={18} />
-                    <span className="flex-1">{label}</span>
-                    <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded">PRO</span>
-                    <Lock size={12} className="text-yellow-500" />
-                  </Link>
-                )
-              }
-
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`block w-full text-left px-4 py-3 rounded transition-colors font-medium flex items-center gap-3 ${
-                    apenasAdmin
-                      ? 'text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/10' // 🆕 Admin destacado
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  <Icon size={18} />
-                  {label}
-                  {apenasAdmin && (
-                    <span className="text-[10px] font-bold bg-yellow-500 text-white px-1.5 py-0.5 rounded ml-auto">
-                      ADMIN
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-
-            <hr className="dark:border-gray-700 my-2" />
-
-            <button
-              onClick={() => {
-                toggleTheme()
-                setMobileMenuOpen(false)
-              }}
-              className="block w-full text-left px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors font-medium h-12 flex items-center"
-            >
-              {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
-            </button>
-
-            <button
-              onClick={() => {
-                handleLogout()
-                setMobileMenuOpen(false)
-              }}
-              className="block w-full text-left px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors font-medium h-12 flex items-center gap-2"
-            >
-              <LogOut size={18} />
-              Sair
-            </button>
-          </div>
-        )}
       </div>
     </nav>
   )

@@ -1,504 +1,986 @@
-'use client'
+"use client";
 
-import BotaoIA from '@/components/botao-ia'
-import SugestaoPrecoIA from '@/components/sugestao-preco-ia'
-import { useIAPreco, type SugestaoPreco } from '@/hooks/useIAPreco'
-import { buscarProdutoPorBarcode, ProdutoBarcode } from '@/lib/barcode-api'
-import BarcodeProductModal from '@/components/barcode-product-modal'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { uploadProductImage, deleteProductImage } from '@/lib/image-utils'
-import Alert from '@/components/alerts'
-import ImageUploader from '@/components/image-uploader'
-import BarcodeScanner from '@/components/barcode-scanner'
-import { useNotification } from '@/contexts/NotificationContext'
-import { ArrowLeft, Camera, Calendar, AlertTriangle } from 'lucide-react'
-import { Produto } from '@/lib/types'
-import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  CalendarDays,
+  Camera,
+  CircleDollarSign,
+  Clock3,
+  Loader2,
+  Package,
+  QrCode,
+  RefreshCw,
+  Save,
+  Tag,
+  Warehouse,
+} from "lucide-react";
 
-export default function EditarProdutoPage() {
-  const router = useRouter()
-  const params = useParams()
-  const { addNotification } = useNotification()
-  const id = params?.id as string | undefined
+import Alert from "@/components/alerts";
+import BarcodeProductModal from "@/components/barcode-product-modal";
+import BarcodeScanner from "@/components/barcode-scanner";
+import PageHeader from "@/components/page-header";
+import { useNotification } from "@/contexts/NotificationContext";
+import {
+  buscarProdutoPorBarcode,
+  type ProdutoBarcode,
+} from "@/lib/barcode-api";
+import { supabase } from "@/lib/supabase";
+import type { MovimentoEstoque, Produto } from "@/lib/types";
+import { formatarMoeda } from "@/lib/utils";
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [imagemUpload, setImagemUpload] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [scannerAberto, setScannerAberto] = useState(false)
+interface FormProduto {
+  nome: string;
+  descricao: string;
+  marca: string;
+  sku: string;
+  categoria: string;
+  quantidade_minima: number;
+  preco_custo: number;
+  preco_venda: number;
+  data_validade: string;
+  ativo: boolean;
+}
 
-  const [formData, setFormData] = useState<Produto | null>(null)
-  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
-  const [barcodeDetectado, setBarcodeDetectado] = useState('')
-  const [produtoBarcode, setProdutoBarcode] = useState<ProdutoBarcode | null>(null)
-  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
+const CATEGORIAS = [
+  "Alimentos",
+  "Bebidas",
+  "Limpeza",
+  "Higiene",
+  "Eletrônicos",
+  "Utilidades",
+  "Outros",
+] as const;
 
-  // ✨ IA de preço
-const { sugerirPreco, carregando: carregandoIAPreco } = useIAPreco()
-const [sugestaoPreco, setSugestaoPreco] = useState<SugestaoPreco | null>(null)
+function numeroSeguro(valor: unknown): number {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? Math.max(numero, 0) : 0;
+}
 
-const handleSugerirPreco = async () => {
-  if (!formData) return
-  const sugestao = await sugerirPreco({
-    nome: formData.nome,
-    categoria: formData.categoria,
-    descricao: formData.descricao,
-    precoCusto: formData.preco_custo,
-  })
-  if (sugestao) {
-    setSugestaoPreco(sugestao)
+function dataValida(valor?: string | null): Date | null {
+  if (!valor) return null;
+  const data = new Date(`${valor.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function formatarDataHora(valor: string): string {
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return "Data não informada";
+
+  return data.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function descricaoMovimento(movimento: MovimentoEstoque): string {
+  const motivo = movimento.motivo?.trim();
+  if (!motivo) return "Sem motivo informado";
+  if (motivo.startsWith("PDV-") || motivo.startsWith("PDV -")) {
+    return "Venda rápida";
   }
+  return motivo;
 }
 
-const handleSelecionarPreco = (preco: number) => {
-  setFormData((prev) =>
-    prev ? { ...prev, preco_venda: preco } : null
-  )
-  setSugestaoPreco(null)
+function formDoProduto(produto: Produto): FormProduto {
+  return {
+    nome: produto.nome ?? "",
+    descricao: produto.descricao ?? "",
+    marca: produto.marca ?? "",
+    sku: produto.sku ?? "",
+    categoria: produto.categoria ?? "",
+    quantidade_minima: numeroSeguro(produto.quantidade_minima),
+    preco_custo: numeroSeguro(produto.preco_custo),
+    preco_venda: numeroSeguro(produto.preco_venda),
+    data_validade: produto.data_validade?.slice(0, 10) ?? "",
+    ativo: produto.ativo !== false,
+  };
 }
+
+export default function ProdutoPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { addNotification } = useNotification();
+  const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
+  const [produto, setProduto] = useState<Produto | null>(null);
+  const [formData, setFormData] = useState<FormProduto | null>(null);
+  const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [recarregando, setRecarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
+  const [scannerAberto, setScannerAberto] = useState(false);
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false);
+  const [barcodeDetectado, setBarcodeDetectado] = useState("");
+  const [produtoBarcode, setProdutoBarcode] =
+    useState<ProdutoBarcode | null>(null);
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false);
+
+  const carregarProduto = useCallback(
+    async (mostrarFeedback = false) => {
+      if (!id) {
+        setErro("ID do produto não encontrado.");
+        setLoading(false);
+        return;
+      }
+
+      mostrarFeedback ? setRecarregando(true) : setLoading(true);
+      setErro("");
+
+      try {
+        const [produtoRes, movimentosRes] = await Promise.all([
+          supabase.from("produtos").select("*").eq("id", id).single(),
+          supabase
+            .from("movimentos_estoque")
+            .select("*")
+            .eq("produto_id", id)
+            .order("criado_em", { ascending: false })
+            .limit(10),
+        ]);
+
+        if (produtoRes.error || !produtoRes.data) {
+          console.error("Erro ao carregar produto:", produtoRes.error);
+          setProduto(null);
+          setFormData(null);
+          setErro("Produto não encontrado ou sem permissão de acesso.");
+          return;
+        }
+
+        const produtoCarregado = produtoRes.data as Produto;
+        setProduto(produtoCarregado);
+        setFormData(formDoProduto(produtoCarregado));
+        setMovimentos(
+          (movimentosRes.data as MovimentoEstoque[] | null) ?? [],
+        );
+
+        if (movimentosRes.error) {
+          console.error(
+            "Erro ao carregar movimentações do produto:",
+            movimentosRes.error,
+          );
+        }
+
+        if (mostrarFeedback) {
+          addNotification("Produto atualizado.", "success", 1800);
+        }
+      } catch (error) {
+        console.error("Erro inesperado ao carregar produto:", error);
+        setErro("Ocorreu um erro inesperado ao carregar o produto.");
+      } finally {
+        setLoading(false);
+        setRecarregando(false);
+      }
+    },
+    [addNotification, id],
+  );
 
   useEffect(() => {
-    if (!id) {
-      setLoading(false)
-      setError('ID do produto não encontrado')
-      return
+    void carregarProduto();
+  }, [carregarProduto]);
+
+  const estoqueAtual = numeroSeguro(produto?.quantidade_atual);
+  const estoqueMinimo = numeroSeguro(formData?.quantidade_minima);
+  const precoCusto = numeroSeguro(formData?.preco_custo);
+  const precoVenda = numeroSeguro(formData?.preco_venda);
+  const valorEmEstoque = estoqueAtual * precoCusto;
+  const resultadoUnitario = precoVenda - precoCusto;
+  const margem =
+    precoVenda > 0 ? ((precoVenda - precoCusto) / precoVenda) * 100 : null;
+
+  const situacao = useMemo(() => {
+    if (!formData?.ativo) {
+      return {
+        label: "Inativo",
+        classe:
+          "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+      };
     }
-
-    const fetchProduto = async () => {
-      try {
-        const { data, error: fetchError } = await supabase
-          .from('produtos')
-          .select('*')
-          .eq('id', id)
-          .single()
-
-        if (!fetchError && data) {
-          setFormData(data)
-          setError('')
-        } else {
-          setError('Produto não encontrado')
-        }
-      } catch (err) {
-        setError('Erro ao carregar produto')
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
+    if (estoqueAtual <= 0) {
+      return {
+        label: "Estoque zerado",
+        classe:
+          "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+      };
     }
+    if (estoqueMinimo > 0 && estoqueAtual < estoqueMinimo) {
+      return {
+        label: "Abaixo do mínimo",
+        classe:
+          "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+      };
+    }
+    return {
+      label: "Estoque adequado",
+      classe:
+        "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    };
+  }, [estoqueAtual, estoqueMinimo, formData?.ativo]);
 
-    fetchProduto()
-  }, [id])
+  const validadeInfo = useMemo(() => {
+    const validade = dataValida(formData?.data_validade);
+    if (!validade) return null;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    if (!formData) return
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const diasRestantes = Math.ceil(
+      (validade.getTime() - hoje.getTime()) / 86_400_000,
+    );
 
-    const { name, value } = e.target
-    setFormData((prev) =>
-      prev
+    return { diasRestantes, vencido: diasRestantes < 0 };
+  }, [formData?.data_validade]);
+
+  const handleInputChange = (
+    event: ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
+  ) => {
+    if (!formData) return;
+
+    const { name, value } = event.target;
+    const numerico =
+      name === "quantidade_minima" ||
+      name === "preco_custo" ||
+      name === "preco_venda";
+
+    setFormData((atual) =>
+      atual
         ? {
-            ...prev,
-            [name]: name.includes('quantidade') || name.includes('preco') ? parseFloat(value) || 0 : value,
+            ...atual,
+            [name]: numerico ? numeroSeguro(value) : value,
           }
-        : null
-    )
-  }
+        : null,
+    );
+  };
 
-  const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            nome: produto.nome || prev.nome,
-            descricao: produto.descricao || prev.descricao,
-            categoria: produto.categoria || prev.categoria,
-          }
-        : null
-    )
-    setBarcodeModalAberto(false)
-    addNotification('\u2705 Formulário preenchido automaticamente!', 'success', 2000)
-  }
+  const handleAtivoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setFormData((atual) =>
+      atual ? { ...atual, ativo: event.target.checked } : null,
+    );
+  };
 
-  const handleImageSelected = async (file: File) => {
-    if (!formData || !id) {
-      addNotification('Erro: ID do produto não encontrado', 'error')
-      return
-    }
+  const handleCodigoBarrasLido = async (codigo: string) => {
+    if (!formData) return;
+
+    const codigoLimpo = codigo.trim();
+    if (!codigoLimpo) return;
+
+    setScannerAberto(false);
+    setBarcodeDetectado(codigoLimpo);
+    setBarcodeModalAberto(true);
+    setBuscandoBarcode(true);
+    setProdutoBarcode(null);
+    setFormData((atual) =>
+      atual ? { ...atual, sku: codigoLimpo } : null,
+    );
+
     try {
-      setImagemUpload(true)
-      // Se existe imagem anterior, deletar ela
-      if (formData.imagem_url) {
-        await deleteProductImage(formData.imagem_url)
-      }
-      const result = await uploadProductImage(file, id)
-      if (!result) {
-        addNotification('Erro ao enviar imagem', 'error')
-        return
-      }
-      setFormData((prev) =>
-        prev
-          ? {
-              ...prev,
-              imagem_url: result.path,
-            }
-          : null
-      )
-      addNotification('Imagem atualizada com sucesso!', 'success', 2000)
-    } catch (err) {
-      addNotification('Erro ao enviar imagem', 'error')
-      console.error(err)
+      const resultado = await buscarProdutoPorBarcode(codigoLimpo);
+      setProdutoBarcode(resultado);
+    } catch (error) {
+      console.error("Erro ao consultar código de barras:", error);
+      setBarcodeModalAberto(false);
+      addNotification(
+        "Não foi possível consultar o código. O SKU foi preenchido manualmente.",
+        "warning",
+        3500,
+      );
     } finally {
-      setImagemUpload(false)
+      setBuscandoBarcode(false);
     }
-  }
+  };
 
-  const handleCodigoBarrasLido = async (codigoBarras: string) => {
-    setScannerAberto(false)
-    setBarcodeDetectado(codigoBarras)
-    setBarcodeModalAberto(true)
-    setBuscandoBarcode(true)
-    setProdutoBarcode(null)
+  const handleConfirmarBarcode = (resultado: ProdutoBarcode) => {
+    setFormData((atual) =>
+      atual
+        ? {
+            ...atual,
+            nome: resultado.nome || atual.nome,
+            descricao: resultado.descricao || atual.descricao,
+            categoria: resultado.categoria || atual.categoria,
+            marca:
+              "marca" in resultado && typeof resultado.marca === "string"
+                ? resultado.marca || atual.marca
+                : atual.marca,
+          }
+        : null,
+    );
+    setBarcodeModalAberto(false);
+    addNotification("Dados encontrados foram aplicados.", "success", 2000);
+  };
 
-    // Preenche SKU imediatamente
-    setFormData((prev) => (prev ? { ...prev, sku: codigoBarras } : null))
+  const validar = (): string | null => {
+    if (!formData) return "Produto não carregado.";
+    if (!formData.nome.trim()) return "Informe o nome do produto.";
+    if (!formData.sku.trim()) return "Informe o SKU ou código de barras.";
+    if (formData.quantidade_minima < 0)
+      return "O estoque mínimo não pode ser negativo.";
+    if (formData.preco_custo < 0)
+      return "O preço de custo não pode ser negativo.";
+    if (formData.preco_venda <= 0)
+      return "Informe um preço de venda maior que zero.";
+    return null;
+  };
 
-    // Busca informações na API
-    const resultado = await buscarProdutoPorBarcode(codigoBarras)
-    setProdutoBarcode(resultado)
-    setBuscandoBarcode(false)
-  }
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!formData || !produto || !id || salvando) return;
 
-  // ── Calcula info de validade para avisos visuais ──
-  const getValidadeInfo = () => {
-    if (!formData?.data_validade) return null
-    const hoje = new Date()
-    hoje.setHours(0, 0, 0, 0)
-    const validade = new Date(formData.data_validade + 'T00:00:00')
-    const diffMs = validade.getTime() - hoje.getTime()
-    const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-    return { diasRestantes, vencido: diasRestantes < 0 }
-  }
+    setErro("");
+    setSucesso("");
 
-  const validadeInfo = getValidadeInfo()
+    const validacao = validar();
+    if (validacao) {
+      setErro(validacao);
+      addNotification(validacao, "warning", 3000);
+      return;
+    }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData) return
-
-    setError('')
-    setSaving(true)
+    setSalvando(true);
 
     try {
-      // Prepara dados — converte data_validade vazia em null
       const dadosParaSalvar = {
-        ...formData,
+        nome: formData.nome.trim(),
+        descricao: formData.descricao.trim() || null,
+        marca: formData.marca.trim(),
+        sku: formData.sku.trim(),
+        categoria: formData.categoria || null,
+        quantidade_minima: Math.trunc(formData.quantidade_minima),
+        preco_custo: Number(formData.preco_custo.toFixed(2)),
+        preco_venda: Number(formData.preco_venda.toFixed(2)),
         data_validade: formData.data_validade || null,
-      }
+        ativo: formData.ativo,
+      };
 
-      const { error: updateError } = await supabase
-        .from('produtos')
+      const { data, error: updateError } = await supabase
+        .from("produtos")
         .update(dadosParaSalvar)
-        .eq('id', id)
+        .eq("id", id)
+        .select("*")
+        .single();
 
       if (updateError) {
-        setError(updateError.message)
-        addNotification('Erro ao atualizar produto', 'error')
-        return
+        console.error("Erro ao atualizar produto:", updateError);
+
+        if (
+          updateError.code === "23505" ||
+          updateError.message.toLocaleLowerCase("pt-BR").includes("sku")
+        ) {
+          setErro("Este SKU ou código de barras já está cadastrado.");
+          addNotification("SKU já cadastrado.", "warning", 3000);
+          return;
+        }
+
+        setErro("Não foi possível atualizar o produto. Tente novamente.");
+        addNotification("Erro ao atualizar produto.", "error");
+        return;
       }
 
-      setSuccess('Produto atualizado com sucesso!')
-      addNotification('\u2705 Produto atualizado!', 'success', 3000)
-      setTimeout(() => {
-        router.push('/dashboard/produtos')
-      }, 1500)
-    } catch (err) {
-      setError('Erro ao atualizar produto. Tente novamente.')
-      addNotification('Erro ao atualizar produto', 'error')
-      console.error(err)
+      const produtoAtualizado = data as Produto;
+      setProduto(produtoAtualizado);
+      setFormData(formDoProduto(produtoAtualizado));
+      setSucesso("Produto atualizado com sucesso.");
+      addNotification("Produto atualizado.", "success", 2200);
+
+      router.refresh();
+    } catch (error) {
+      console.error("Erro inesperado ao atualizar produto:", error);
+      setErro("Ocorreu um erro inesperado. Tente novamente.");
+      addNotification("Erro inesperado ao atualizar produto.", "error");
     } finally {
-      setSaving(false)
+      setSalvando(false);
     }
-  }
+  };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Carregando...</div>
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+        <span className="sr-only">Carregando produto</span>
+      </div>
+    );
   }
 
-  if (!formData) {
+  if (!produto || !formData) {
     return (
-      <div>
-        <Alert message={error || 'Produto não encontrado'} type="error" />
+      <div className="mx-auto max-w-xl space-y-5 py-12">
+        <Alert message={erro || "Produto não encontrado."} type="error" />
         <Link
           href="/dashboard/produtos"
-          className="btn-outline mt-4 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+          className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900"
         >
-          Voltar
+          <ArrowLeft className="h-4 w-4" />
+          Voltar para produtos
         </Link>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/produtos" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-          <ArrowLeft size={20} className="text-gray-700 dark:text-gray-300" />
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Editar Produto</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">{formData.nome}</p>
-        </div>
-      </div>
-
-      {error && <Alert message={error} type="error" />}
-      {success && <Alert message={success} type="success" />}
-
-      <div className="card max-w-2xl dark:bg-gray-900 dark:border-gray-800">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Seção de Imagem */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-3">
-              Imagem do Produto
-            </label>
-            <ImageUploader onImageSelected={handleImageSelected} />
-          </div>
-
-          <hr className="dark:border-gray-700" />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                Nome *
-              </label>
-              <input
-                type="text"
-                name="nome"
-                value={formData.nome}
-                onChange={handleInputChange}
-                required
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-                placeholder="Nome do produto"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                SKU *
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="sku"
-                  value={formData.sku}
-                  onChange={handleInputChange}
-                  required
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 flex-1"
-                  placeholder="Código SKU"
-                />
-                <button
-                  type="button"
-                  onClick={() => setScannerAberto(true)}
-                  className="btn-primary px-3 flex items-center gap-2 whitespace-nowrap"
-                  title="Ler código de barras"
-                >
-                  <Camera size={18} />
-                  <span className="hidden sm:inline">Câmera</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-              Descrição
-            </label>
-            <textarea
-              name="descricao"
-              value={formData.descricao || ''}
-              onChange={handleInputChange}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-              rows={3}
-              placeholder="Descrição do produto"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                Categoria
-              </label>
-              <select
-                name="categoria"
-                value={formData.categoria}
-                onChange={handleInputChange}
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-              >
-                <option value="">Selecionar categoria</option>
-                <option value="Alimentos">Alimentos</option>
-                <option value="Bebidas">Bebidas</option>
-                <option value="Limpeza">Limpeza</option>
-                <option value="Higiene">Higiene</option>
-                <option value="Eletrônicos">Eletrônicos</option>
-                <option value="Outros">Outros</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                Quantidade Atual
-              </label>
-              <input
-                type="number"
-                name="quantidade_atual"
-                value={formData.quantidade_atual}
-                onChange={handleInputChange}
-                min="0"
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-                placeholder="0"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                Quantidade Mínima
-              </label>
-              <input
-                type="number"
-                name="quantidade_minima"
-                value={formData.quantidade_minima}
-                onChange={handleInputChange}
-                min="0"
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-                placeholder="10"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2">
-                Preço de Custo (R$)
-              </label>
-              <input
-                type="number"
-                name="preco_custo"
-                value={formData.preco_custo}
-                onChange={handleInputChange}
-                min="0"
-                step="0.01"
-                className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50"
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-
-          <div>
-  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-    Preço de Venda (R$) *
-  </label>
-  <input
-    type="number"
-    name="preco_venda"
-    value={formData.preco_venda}
-    onChange={handleInputChange}
-    step="0.01"
-    min="0"
-    required
-    className="input-field w-full mt-1"
-  />
-
-  {/* ✨ BOTÃO IA — Sugestão de preço */}
-  <div className="mt-2">
-    <BotaoIA
-      onClick={handleSugerirPreco}
-      carregando={carregandoIAPreco}
-      label="✨ Sugerir preço com IA"
-      feature="preco"
-      className="w-full justify-center text-sm"
-    />
-    {(!formData.nome?.trim() || formData.preco_custo <= 0) && (
-      <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-1">
-        ⚠️ Preencha o nome e o preço de custo primeiro
-      </p>
-    )}
-  </div>
-
-  {/* ✨ Painel de sugestões */}
-  {sugestaoPreco && (
-    <SugestaoPrecoIA
-      sugestao={sugestaoPreco}
-      onSelecionar={handleSelecionarPreco}
-      onFechar={() => setSugestaoPreco(null)}
-    />
-  )}
-</div>
-
-          {/* ══════════ DATA DE VALIDADE ══════════ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-50 mb-2 flex items-center gap-2">
-              <Calendar size={16} className="text-gray-400" />
-              Data de Validade
-            </label>
-            <input
-              type="date"
-              name="data_validade"
-              value={formData.data_validade || ''}
-              onChange={handleInputChange}
-              className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-            />
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-              Deixe em branco se o produto não tem validade
-            </p>
-
-            {/* Aviso: produto já vencido */}
-            {validadeInfo && validadeInfo.vencido && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-700 dark:text-red-400 font-medium">
-                  Atenção: este produto está vencido (há {Math.abs(validadeInfo.diasRestantes)} dias)
-                </p>
-              </div>
-            )}
-
-            {/* Aviso: vence em até 7 dias */}
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes <= 7 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
-                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
-                  Aviso: este produto vence em {validadeInfo.diasRestantes} dia(s)
-                </p>
-              </div>
-            )}
-
-            {/* Info: vence em 8-30 dias */}
-            {validadeInfo && !validadeInfo.vencido && validadeInfo.diasRestantes > 7 && validadeInfo.diasRestantes <= 30 && (
-              <div className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-                <Calendar size={16} className="text-yellow-500 flex-shrink-0" />
-                <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                  Validade: {validadeInfo.diasRestantes} dias restantes
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button type="submit" disabled={saving || imagemUpload} className="btn-primary">
-              {saving ? 'Salvando...' : 'Atualizar Produto'}
-            </button>
+    <div className="mx-auto min-w-0 max-w-6xl space-y-6 overflow-x-clip pb-10">
+      <PageHeader
+        eyebrow="DETALHES DO PRODUTO"
+        title={produto.nome}
+        description={`SKU: ${produto.sku}`}
+        icon={Package}
+        actions={
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/dashboard/produtos"
-              className="btn-outline dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             >
-              Cancelar
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Link>
+            <button
+              type="button"
+              onClick={() => void carregarProduto(true)}
+              disabled={recarregando}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${recarregando ? "animate-spin" : ""}`}
+              />
+              Atualizar
+            </button>
+            <Link
+              href={`/dashboard/estoque/movimento?tipo=entrada&produto=${id}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              <ArrowDown className="h-4 w-4" />
+              Entrada
+            </Link>
+            <Link
+              href={`/dashboard/estoque/movimento?tipo=saida&produto=${id}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900"
+            >
+              <ArrowUp className="h-4 w-4" />
+              Saída
             </Link>
           </div>
+        }
+      />
+
+      {erro && <Alert message={erro} type="error" />}
+      {sucesso && <Alert message={sucesso} type="success" />}
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <article className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <Warehouse className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Estoque atual
+          </p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+            {estoqueAtual}
+          </p>
+          <span
+            className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${situacao.classe}`}
+          >
+            {situacao.label}
+          </span>
+        </article>
+
+        <article className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Estoque mínimo
+          </p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+            {estoqueMinimo}
+          </p>
+          <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+            Base para alertas e reposição
+          </p>
+        </article>
+
+        <article className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <CircleDollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Valor em estoque
+          </p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+            {formatarMoeda(valorEmEstoque)}
+          </p>
+          <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+            Quantidade atual × custo atual
+          </p>
+        </article>
+
+        <article className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <CalendarDays className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Validade
+          </p>
+          <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white">
+            {formData.data_validade
+              ? new Date(
+                  `${formData.data_validade}T00:00:00`,
+                ).toLocaleDateString("pt-BR")
+              : "Não informada"}
+          </p>
+          {validadeInfo && (
+            <p
+              className={`mt-2 text-[11px] font-semibold ${
+                validadeInfo.vencido
+                  ? "text-red-600 dark:text-red-400"
+                  : validadeInfo.diasRestantes <= 7
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              {validadeInfo.vencido
+                ? `Vencido há ${Math.abs(validadeInfo.diasRestantes)} dia(s)`
+                : `${validadeInfo.diasRestantes} dia(s) restantes`}
+            </p>
+          )}
+        </article>
+      </section>
+
+      <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+        <strong>Saldo protegido:</strong> a quantidade atual não é editada nesta
+        página. Use Entrada ou Saída para que toda alteração fique registrada no
+        histórico.
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form onSubmit={handleSubmit} className="min-w-0 space-y-5">
+          <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <Tag className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  Informações do produto
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Edite identificação, classificação e descrição.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="nome" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Nome *
+                </label>
+                <input
+                  id="nome"
+                  name="nome"
+                  value={formData.nome}
+                  onChange={handleInputChange}
+                  maxLength={255}
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="sku" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  SKU ou código de barras *
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <QrCode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      id="sku"
+                      name="sku"
+                      value={formData.sku}
+                      onChange={handleInputChange}
+                      maxLength={100}
+                      required
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setScannerAberto(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    <Camera className="h-4 w-4" />
+                    <span className="hidden sm:inline">Ler</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="marca" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Marca
+                </label>
+                <input
+                  id="marca"
+                  name="marca"
+                  value={formData.marca}
+                  onChange={handleInputChange}
+                  maxLength={120}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="categoria" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Categoria
+                </label>
+                <select
+                  id="categoria"
+                  name="categoria"
+                  value={formData.categoria}
+                  onChange={handleInputChange}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                >
+                  <option value="">Sem categoria</option>
+                  {CATEGORIAS.map((categoria) => (
+                    <option key={categoria} value={categoria}>
+                      {categoria}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="descricao" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                Descrição
+              </label>
+              <textarea
+                id="descricao"
+                name="descricao"
+                value={formData.descricao}
+                onChange={handleInputChange}
+                maxLength={500}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Warehouse className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  Configuração do estoque
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Ajuste o mínimo. O saldo muda pelas movimentações.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Quantidade atual
+                </p>
+                <div className="rounded-xl border border-gray-200 bg-gray-100 px-3 py-3 text-sm font-bold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                  {estoqueAtual} unidade(s)
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Use os botões Entrada e Saída no topo.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="quantidade_minima" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Estoque mínimo
+                </label>
+                <input
+                  id="quantidade_minima"
+                  name="quantidade_minima"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={formData.quantidade_minima}
+                  onChange={handleInputChange}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Produto ativo
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Produtos inativos deixam de aparecer nos fluxos operacionais.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={formData.ativo}
+                onChange={handleAtivoChange}
+                className="h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </label>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <CircleDollarSign className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  Preços
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Os relatórios usam os valores atuais como estimativa.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="preco_custo" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Preço de custo
+                </label>
+                <input
+                  id="preco_custo"
+                  name="preco_custo"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.preco_custo}
+                  onChange={handleInputChange}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="preco_venda" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Preço de venda *
+                </label>
+                <input
+                  id="preco_venda"
+                  name="preco_venda"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={formData.preco_venda}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 rounded-xl bg-gray-50 p-4 dark:bg-gray-800/60 sm:grid-cols-3">
+              <div>
+                <p className="text-[10px] uppercase text-gray-400">Custo</p>
+                <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white">
+                  {formatarMoeda(precoCusto)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-gray-400">
+                  Resultado unitário
+                </p>
+                <p
+                  className={`mt-1 text-sm font-bold ${
+                    resultadoUnitario < 0
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-gray-900 dark:text-white"
+                  }`}
+                >
+                  {formatarMoeda(resultadoUnitario)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-gray-400">
+                  Margem estimada
+                </p>
+                <p
+                  className={`mt-1 text-sm font-bold ${
+                    margem !== null && margem < 0
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-emerald-600 dark:text-emerald-400"
+                  }`}
+                >
+                  {margem === null ? "Não calculada" : `${margem.toFixed(1)}%`}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                <CalendarDays className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  Validade
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Deixe em branco quando o produto não possuir vencimento.
+                </p>
+              </div>
+            </div>
+
+            <input
+              name="data_validade"
+              type="date"
+              value={formData.data_validade}
+              onChange={handleInputChange}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:max-w-xs"
+            />
+
+            {validadeInfo && (
+              <div
+                className={`mt-4 flex items-start gap-3 rounded-xl border p-3 text-sm ${
+                  validadeInfo.vencido
+                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+                    : validadeInfo.diasRestantes <= 7
+                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+                      : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300"
+                }`}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  {validadeInfo.vencido
+                    ? `Produto vencido há ${Math.abs(validadeInfo.diasRestantes)} dia(s).`
+                    : `Faltam ${validadeInfo.diasRestantes} dia(s) para a validade.`}
+                </p>
+              </div>
+            )}
+          </section>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-800 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setFormData(formDoProduto(produto));
+                setErro("");
+                setSucesso("");
+              }}
+              disabled={salvando}
+              className="rounded-xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300"
+            >
+              Descartar alterações
+            </button>
+            <button
+              type="submit"
+              disabled={salvando}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {salvando ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-5 w-5" />
+                  Salvar alterações
+                </>
+              )}
+            </button>
+          </div>
         </form>
+
+        <aside className="min-w-0 space-y-5">
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <header className="border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <Clock3 className="h-4 w-4 text-gray-500" />
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  Movimentações recentes
+                </h2>
+              </div>
+            </header>
+
+            {movimentos.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Nenhuma movimentação registrada
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Entradas e saídas aparecerão aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {movimentos.map((movimento) => {
+                  const entrada = movimento.tipo_movimento === "entrada";
+
+                  return (
+                    <article key={movimento.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                            entrada
+                              ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+                              : "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                          }`}
+                        >
+                          {entrada ? (
+                            <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUp className="h-4 w-4" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">
+                              {entrada ? "Entrada" : "Saída"}
+                            </p>
+                            <p
+                              className={`text-sm font-bold ${
+                                entrada
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              {entrada ? "+" : "-"}
+                              {movimento.quantidade}
+                            </p>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                            {descricaoMovimento(movimento)}
+                          </p>
+                          <p className="mt-1 text-[10px] text-gray-400">
+                            {formatarDataHora(movimento.criado_em)}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+              <Link
+                href={`/dashboard/estoque?produto=${id}`}
+                className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Ver todas as movimentações
+              </Link>
+            </div>
+          </section>
+        </aside>
       </div>
 
-      {/* Modal barcode produto */}
+      {scannerAberto && (
+        <BarcodeScanner
+          onDetected={handleCodigoBarrasLido}
+          onClose={() => setScannerAberto(false)}
+        />
+      )}
+
       {barcodeModalAberto && produtoBarcode !== null && (
         <BarcodeProductModal
           codigo={barcodeDetectado}
@@ -509,13 +991,19 @@ const handleSelecionarPreco = (preco: number) => {
         />
       )}
 
-      {/* Scanner de código de barras */}
-      {scannerAberto && (
-        <BarcodeScanner
-          onDetected={handleCodigoBarrasLido}
-          onClose={() => setScannerAberto(false)}
-        />
+      {barcodeModalAberto && buscandoBarcode && produtoBarcode === null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-600" />
+            <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">
+              Consultando código de barras...
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {barcodeDetectado}
+            </p>
+          </div>
+        </div>
       )}
     </div>
-  )
+  );
 }

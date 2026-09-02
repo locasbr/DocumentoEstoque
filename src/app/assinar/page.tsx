@@ -1,484 +1,617 @@
-'use client'
+"use client";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
-import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import Loading from '@/components/loading'
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  CheckCircle,
-  Sparkles,
-  Crown,
-  Zap,
-  Shield,
+  AlertCircle,
   ArrowLeft,
+  CheckCircle2,
+  CreditCard,
+  Loader2,
   MessageCircle,
-} from 'lucide-react'
-import Link from 'next/link'
+  ShieldCheck,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+
+import Loading from "@/components/loading";
+import { supabase } from "@/lib/supabase";
+
+type PlanoDisponivel = "iniciante" | "profissional";
+type TipoPlanoInterno = PlanoDisponivel | "negocio";
+type TipoPagamentoAtual = "pix" | "cartao" | null;
 
 interface Beneficio {
-  texto: string
-  bold?: boolean
-  ia?: boolean
-  soon?: boolean
+  texto: string;
+  destaque?: boolean;
+  ia?: boolean;
 }
 
 interface Plano {
-  id: 'iniciante' | 'profissional' | 'negocio'
-  nome: string
-  descricao: string
-  preco: number
-  icon: typeof Zap
-  cor: string
-  corBorda: string
-  corIcon: string
-  corBotao: string
-  destaque?: boolean
-  beneficios: Beneficio[]
+  id: PlanoDisponivel;
+  nome: string;
+  descricao: string;
+  preco: number;
+  icon: LucideIcon;
+  destaque?: boolean;
+  beneficios: Beneficio[];
 }
+
+interface RespostaPagamento {
+  init_point?: string;
+  error?: string;
+}
+
+const WHATSAPP_SUPORTE = "5522999467499";
 
 const PLANOS: Plano[] = [
   {
-    id: 'iniciante',
-    nome: 'Iniciante',
-    descricao: 'Pra quem tá começando',
+    id: "iniciante",
+    nome: "Iniciante",
+    descricao: "Para organizar um estoque pequeno com clareza.",
     preco: 39.9,
     icon: Zap,
-    cor: 'gray',
-    corBorda: 'border-gray-300 dark:border-gray-700',
-    corIcon: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
-    corBotao: 'bg-gray-700 hover:bg-gray-800',
     beneficios: [
-      { texto: 'Até 100 produtos', bold: true },
-      { texto: '1 usuário' },
-      { texto: 'PDV completo' },
-      { texto: 'Leitor de código de barras' },
-      { texto: 'Alertas de estoque baixo' },
-      { texto: 'Relatórios básicos' },
-      { texto: 'Suporte por email' },
+      { texto: "Até 100 produtos", destaque: true },
+      { texto: "1 usuário" },
+      { texto: "Cadastro de produtos" },
+      { texto: "Entradas e saídas" },
+      { texto: "Alertas de estoque baixo e zerado" },
+      { texto: "Lista de reposição" },
+      { texto: "Controle de perdas e avarias" },
+      { texto: "Venda rápida" },
+      { texto: "Relatórios básicos" },
+      { texto: "Suporte por e-mail" },
     ],
   },
   {
-    id: 'profissional',
-    nome: 'Profissional',
-    descricao: 'Pro mercadinho que cresce',
+    id: "profissional",
+    nome: "Profissional",
+    descricao: "Para controlar o estoque e tomar decisões com mais informação.",
     preco: 79.9,
     icon: Sparkles,
-    cor: 'green',
-    corBorda: 'border-green-500',
-    corIcon: 'bg-gradient-to-br from-green-500 to-emerald-600 text-white',
-    corBotao: 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-xl hover:shadow-green-500/40',
     destaque: true,
     beneficios: [
-      { texto: 'Produtos ilimitados', bold: true },
-      { texto: 'Até 3 usuários' },
-      { texto: 'Clientes + Fiado', bold: true },
-      { texto: 'Controle de validade' },
-      { texto: 'Relatórios avançados (lucro/margem)' },
-      { texto: 'Importar via CSV', bold: true },
-      { texto: 'Exportação CSV' },
-      { texto: 'Cupom via WhatsApp' },
-      { texto: 'Análise mensal com IA', bold: true, ia: true },
-      { texto: 'Suporte prioritário WhatsApp', bold: true },
+      { texto: "Produtos ilimitados", destaque: true },
+      { texto: "Tudo do plano Iniciante" },
+      { texto: "Clientes e fiado", destaque: true },
+      { texto: "Controle de validade" },
+      { texto: "Relatórios completos" },
+      { texto: "Importação e exportação CSV" },
+      { texto: "Cupom pelo WhatsApp" },
+      { texto: "Raio-X Inteligente do estoque", destaque: true, ia: true },
+      { texto: "Suporte prioritário" },
     ],
   },
-  {
-    id: 'negocio',
-    nome: 'Negócio',
-    descricao: 'Pro mercadinho consolidado',
-    preco: 149.9,
-    icon: Crown,
-    cor: 'purple',
-    corBorda: 'border-purple-500',
-    corIcon: 'bg-gradient-to-br from-purple-500 to-pink-600 text-white',
-    corBotao: 'bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-xl hover:shadow-purple-500/40',
-    beneficios: [
-      { texto: 'Tudo do Profissional', bold: true },
-      { texto: 'Até 10 usuários' },
-      { texto: 'Histórico estendido (24 meses)' },
-      { texto: 'IA pra cadastro automático', bold: true, ia: true },
-      { texto: 'IA pra sugestão de preço', bold: true, ia: true },
-      { texto: 'Catálogo público da loja', soon: true },
-      { texto: 'Suporte VIP por WhatsApp', bold: true },
-    ],
-  },
-]
+];
+
+function isPlanoDisponivel(valor: string | null): valor is PlanoDisponivel {
+  return valor === "iniciante" || valor === "profissional";
+}
+
+function isTipoPlanoInterno(valor: unknown): valor is TipoPlanoInterno {
+  return valor === "iniciante" || valor === "profissional" || valor === "negocio";
+}
+
+function formatarPreco(valor: number): string {
+  return valor.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 function AssinarContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [loading, setLoading] = useState(true)
-  const [processando, setProcessando] = useState<string | null>(null)
-  const [userId, setUserId] = useState('')
-  const [userEmail, setUserEmail] = useState('')
-  const [tipoPlanoAtual, setTipoPlanoAtual] = useState<string | null>(null)
-  const [planoSelecionado, setPlanoSelecionado] = useState<string>('profissional')
-  const [tipoPagamento, setTipoPagamento] = useState<'pix' | 'assinatura'>('assinatura')
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const statusPagamento = searchParams.get('pagamento')
-  const planoParam = searchParams.get('plano')
-  const querRenovar = searchParams.get('renovar') === '1'
+  const [loading, setLoading] = useState(true);
+  const [processando, setProcessando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [tipoPlanoAtual, setTipoPlanoAtual] =
+    useState<TipoPlanoInterno | null>(null);
+  const [tipoPagamentoAtual, setTipoPagamentoAtual] =
+    useState<TipoPagamentoAtual>(null);
+  const [planoAtivo, setPlanoAtivo] = useState(false);
+  const [planoSelecionado, setPlanoSelecionado] =
+    useState<PlanoDisponivel>("profissional");
+  const [planoIndisponivelNaUrl, setPlanoIndisponivelNaUrl] =
+    useState(false);
+
+  const statusPagamento = searchParams.get("pagamento");
+  const planoParam = searchParams.get("plano");
+  const querRenovar = searchParams.get("renovar") === "1";
 
   useEffect(() => {
-    const verificar = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!data.session) {
-        router.push('/login')
-        return
-      }
+    let ativo = true;
 
-      setUserId(data.session.user.id)
-      setUserEmail(data.session.user.email ?? '')
+    async function verificar() {
+      setLoading(true);
+      setErro("");
 
-      const { data: perfil } = await supabase
-        .from('perfis')
-        .select('plano, tipo_plano')
-        .eq('id', data.session.user.id)
-        .single()
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (
-        perfil?.plano === 'ativo' &&
-        perfil?.tipo_plano === 'negocio' &&
-        !querRenovar
-      ) {
-        router.push('/dashboard')
-        return
-      }
-
-      const planoVindoDaUrl =
-        planoParam && ['iniciante', 'profissional', 'negocio'].includes(planoParam)
-          ? planoParam
-          : null
-
-      // Quando vem do banner de renovação, a URL manda na seleção inicial.
-      if (querRenovar && planoVindoDaUrl) {
-        setPlanoSelecionado(planoVindoDaUrl)
-      } else if (planoVindoDaUrl) {
-        setPlanoSelecionado(planoVindoDaUrl)
-      } else if (perfil?.tipo_plano) {
-        // Ou sugere upgrade lógico
-        setTipoPlanoAtual(perfil.tipo_plano)
-        if (perfil.tipo_plano === 'iniciante') {
-          setPlanoSelecionado('profissional')
-        } else if (perfil.tipo_plano === 'profissional') {
-          setPlanoSelecionado('negocio')
+        if (userError || !user) {
+          router.replace("/login");
+          return;
         }
-      }
 
-      if (perfil?.tipo_plano) {
-        setTipoPlanoAtual(perfil.tipo_plano)
-      }
+        const { data: perfil, error: perfilError } = await supabase
+          .from("perfis")
+          .select("plano, tipo_plano, tipo_pagamento")
+          .eq("id", user.id)
+          .maybeSingle();
 
-      setLoading(false)
+        if (!ativo) return;
+
+        if (perfilError) {
+          console.error("Erro ao consultar plano:", perfilError);
+          setErro("Não foi possível confirmar seu plano atual.");
+        }
+
+        const planoAtual = isTipoPlanoInterno(perfil?.tipo_plano)
+          ? perfil.tipo_plano
+          : null;
+
+        const pagamentoAtual: TipoPagamentoAtual =
+          perfil?.tipo_pagamento === "pix" ||
+          perfil?.tipo_pagamento === "cartao"
+            ? perfil.tipo_pagamento
+            : null;
+
+        setTipoPlanoAtual(planoAtual);
+        setTipoPagamentoAtual(pagamentoAtual);
+        setPlanoAtivo(perfil?.plano === "ativo");
+        setPlanoIndisponivelNaUrl(planoParam === "negocio");
+
+        if (isPlanoDisponivel(planoParam)) {
+          setPlanoSelecionado(planoParam);
+        } else if (planoAtual === "iniciante") {
+          setPlanoSelecionado("profissional");
+        } else if (planoAtual === "profissional") {
+          setPlanoSelecionado("profissional");
+        }
+
+        if (
+          perfil?.plano === "ativo" &&
+          planoAtual === "negocio" &&
+          !querRenovar
+        ) {
+          router.replace("/dashboard");
+        }
+      } catch (error: unknown) {
+        console.error("Erro ao carregar assinatura:", error);
+        if (ativo) setErro("Ocorreu um erro ao carregar os planos.");
+      } finally {
+        if (ativo) setLoading(false);
+      }
     }
-    verificar()
-  }, [router, planoParam])
 
-  const handlePagar = async () => {
-    setProcessando(planoSelecionado)
+    void verificar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [planoParam, querRenovar, router]);
+
+  const planoExibido = useMemo(
+    () =>
+      PLANOS.find((plano) => plano.id === planoSelecionado) ?? PLANOS[1],
+    [planoSelecionado],
+  );
+
+  const contaNegocioLegada = tipoPlanoAtual === "negocio";
+  const planoSelecionadoEhAtual = tipoPlanoAtual === planoSelecionado;
+  const isUpgrade =
+    tipoPlanoAtual === "iniciante" && planoSelecionado === "profissional";
+  const estaTrocandoPlano =
+    tipoPlanoAtual !== null && tipoPlanoAtual !== planoSelecionado;
+
+  // Preserva somente o tratamento das assinaturas antigas já existentes.
+  // Nenhuma nova compra será enviada para a rota de assinatura.
+  const assinaturaRecorrenteLegadaAtiva =
+    planoAtivo &&
+    tipoPagamentoAtual === "cartao" &&
+    tipoPlanoAtual !== "negocio";
+
+  const renovacaoAutomaticaLegadaAtiva =
+    assinaturaRecorrenteLegadaAtiva && planoSelecionadoEhAtual;
+
+  const downgradeProfissionalParaIniciante =
+    planoAtivo &&
+    tipoPlanoAtual === "profissional" &&
+    planoSelecionado === "iniciante";
+
+  const trocaComAssinaturaRecorrenteLegada =
+    assinaturaRecorrenteLegadaAtiva && estaTrocandoPlano;
+
+  const suporteRequerido =
+    contaNegocioLegada ||
+    downgradeProfissionalParaIniciante ||
+    trocaComAssinaturaRecorrenteLegada;
+
+  const mensagemSuporte = contaNegocioLegada
+    ? "Olá, quero gerenciar meu plano Negócio legado no EstoqueSystem."
+    : downgradeProfissionalParaIniciante
+      ? "Olá, quero mudar do plano Profissional para o Iniciante ao final do período já pago."
+      : "Olá, quero solicitar uma mudança de plano no EstoqueSystem.";
+
+  const linkSuporte = `https://wa.me/${WHATSAPP_SUPORTE}?text=${encodeURIComponent(
+    mensagemSuporte,
+  )}`;
+
+  const handlePagar = useCallback(async () => {
+    if (processando) return;
+
+    if (suporteRequerido) {
+      setErro("Esta alteração precisa ser solicitada pelo WhatsApp.");
+      return;
+    }
+
+    if (renovacaoAutomaticaLegadaAtiva) {
+      setErro("Sua assinatura atual possui renovação automática.");
+      return;
+    }
+
+    if (planoSelecionadoEhAtual && !querRenovar) return;
+
+    setProcessando(true);
+    setErro("");
+
     try {
-      const endpoint = tipoPagamento === 'pix' ? '/api/pagamento/criar' : '/api/pagamento/assinatura'
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          userEmail,
-          tipoPlano: planoSelecionado,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (data.init_point) {
-        window.location.href = data.init_point
-      } else {
-        alert('Erro ao criar pagamento. Tente novamente.')
+      if (sessionError || !session?.access_token) {
+        setErro("Sua sessão expirou. Entre novamente para continuar.");
+        return;
       }
-    } catch {
-      alert('Erro ao processar pagamento.')
+
+      const response = await fetch("/api/pagamento/criar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ tipoPlano: planoSelecionado }),
+      });
+
+      let data: RespostaPagamento;
+
+      try {
+        data = (await response.json()) as RespostaPagamento;
+      } catch {
+        setErro("O servidor retornou uma resposta inválida.");
+        return;
+      }
+
+      if (!response.ok || !data.init_point) {
+        setErro(data.error || "Não foi possível criar o pagamento.");
+        return;
+      }
+
+      window.location.assign(data.init_point);
+    } catch (error: unknown) {
+      console.error("Erro ao processar pagamento:", error);
+      setErro("Não foi possível processar o pagamento. Tente novamente.");
     } finally {
-      setProcessando(null)
+      setProcessando(false);
     }
-  }
+  }, [
+    planoSelecionado,
+    planoSelecionadoEhAtual,
+    processando,
+    querRenovar,
+    renovacaoAutomaticaLegadaAtiva,
+    suporteRequerido,
+  ]);
 
-  if (loading) return <Loading />
-
-  const isUpgrade = tipoPlanoAtual === 'iniciante' || tipoPlanoAtual === 'profissional'
-  const planoAtual = PLANOS.find((p) => p.id === planoSelecionado)
-  const tituloHeader = isUpgrade ? 'Faça upgrade do seu plano' : 'Escolha seu plano'
-  const subtituloHeader = isUpgrade
-    ? `Você está no plano ${tipoPlanoAtual === 'iniciante' ? 'Iniciante' : 'Profissional'}. Desbloqueie mais recursos!`
-    : 'Sem fidelidade. Cancele quando quiser.'
-  const planoRenovacao = querRenovar && planoSelecionado ? PLANOS.find((p) => p.id === planoSelecionado) : null
+  if (loading) return <Loading />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 py-8 md:py-12 px-4 relative overflow-hidden">
-      {/* Decoração de fundo */}
-      <div className="absolute top-20 -right-32 w-96 h-96 bg-green-300/10 dark:bg-green-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-20 -left-32 w-96 h-96 bg-purple-300/10 dark:bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative max-w-6xl mx-auto">
-        {/* Banners de status */}
-        {statusPagamento === 'falhou' && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center text-red-700 dark:text-red-300 font-medium">
-            ❌ Pagamento não concluído. Tente novamente.
-          </div>
-        )}
-        {statusPagamento === 'pendente' && (
-          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl text-center text-yellow-700 dark:text-yellow-300 font-medium">
-            ⏳ Pagamento pendente. Assim que confirmado, seu acesso será liberado.
-          </div>
+    <main className="min-h-screen bg-gray-50 px-4 py-8 dark:bg-gray-950 md:py-12">
+      <div className="mx-auto max-w-5xl">
+        {statusPagamento === "falhou" && (
+          <Aviso tipo="erro">
+            O pagamento não foi concluído. Revise os dados e tente novamente.
+          </Aviso>
         )}
 
-        {isUpgrade && (
-          <div className="mb-6">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Voltar pro dashboard
-            </Link>
-          </div>
+        {statusPagamento === "pendente" && (
+          <Aviso tipo="aviso">
+            O pagamento está pendente. O acesso será atualizado após a
+            confirmação.
+          </Aviso>
         )}
 
-        {/* Header */}
-        <div className="text-center mb-10 md:mb-12">
-          {querRenovar && planoRenovacao && (
-            <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-amber-200 dark:border-amber-800">
-              🔄 Renovação do seu plano {planoRenovacao.nome}
-            </div>
-          )}
-          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 dark:from-green-500/20 dark:to-emerald-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-4 py-1.5 rounded-full mb-4 border border-green-500/20">
-            {isUpgrade ? '🚀 Upgrade disponível' : '🔒 Período de teste encerrou'}
-          </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-3">
-            {tituloHeader}
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            {subtituloHeader}
-          </p>
+        {(erro || planoIndisponivelNaUrl) && (
+          <Aviso tipo="info">
+            {erro ||
+              "O plano Negócio não está disponível para novas compras. Escolha Iniciante ou Profissional."}
+          </Aviso>
+        )}
+
+        <div className="mb-8">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para o dashboard
+          </Link>
         </div>
 
-        {/* Grid de planos */}
-        <div className="grid md:grid-cols-3 gap-6 mb-10">
+        <header className="mx-auto mb-10 max-w-2xl text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
+            PLANOS DO ESTOQUESYSTEM
+          </p>
+          <h1 className="mt-3 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl">
+            Escolha o nível de controle ideal
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-gray-600 dark:text-gray-400 md:text-lg">
+            Comece organizando o estoque e avance quando precisar de validade,
+            relatórios completos e recursos inteligentes.
+          </p>
+        </header>
+
+        <section
+          aria-label="Planos disponíveis"
+          className="grid gap-6 md:grid-cols-2"
+        >
           {PLANOS.map((plano) => {
-            const Icon = plano.icon
-            const isSelected = planoSelecionado === plano.id
-            const isCurrent = tipoPlanoAtual === plano.id && !querRenovar
+            const Icon = plano.icon;
+            const selecionado = planoSelecionado === plano.id;
+            const atual = tipoPlanoAtual === plano.id && !querRenovar;
 
             return (
               <button
                 key={plano.id}
-                onClick={() => !isCurrent && setPlanoSelecionado(plano.id)}
-                disabled={isCurrent}
-                className={`group relative h-full text-left bg-white dark:bg-gray-900 rounded-3xl p-7 transition-all ${
-                  isSelected
-                    ? `border-2 ${plano.corBorda} shadow-2xl scale-105`
-                    : `border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:-translate-y-1`
-                } ${plano.destaque && !isSelected ? 'md:scale-[1.02]' : ''} ${
-                  isCurrent ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-xl'
+                type="button"
+                onClick={() => {
+                  if (!contaNegocioLegada) {
+                    setPlanoSelecionado(plano.id);
+                    setErro("");
+                    setPlanoIndisponivelNaUrl(false);
+                  }
+                }}
+                disabled={contaNegocioLegada}
+                aria-pressed={selecionado}
+                className={`relative h-full rounded-2xl border-2 bg-white p-6 text-left transition dark:bg-gray-900 md:p-7 ${
+                  selecionado
+                    ? plano.id === "profissional"
+                      ? "border-emerald-500 shadow-xl shadow-emerald-500/10"
+                      : "border-gray-700 shadow-lg dark:border-gray-300"
+                    : "border-gray-200 hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:hover:border-gray-700"
+                } ${
+                  contaNegocioLegada
+                    ? "cursor-not-allowed opacity-70"
+                    : "cursor-pointer"
                 }`}
               >
-                {/* Glow do plano selecionado */}
-                {isSelected && plano.id === 'profissional' && (
-                  <div className="absolute -inset-1 bg-gradient-to-r from-green-500 to-emerald-600 rounded-3xl blur-lg opacity-30 -z-10" />
-                )}
-                {isSelected && plano.id === 'negocio' && (
-                  <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-pink-600 rounded-3xl blur-lg opacity-30 -z-10" />
+                {plano.destaque && !atual && (
+                  <span className="absolute right-5 top-5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                    Mais escolhido
+                  </span>
                 )}
 
-                {/* Badges */}
-                {plano.destaque && !isCurrent && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold rounded-full whitespace-nowrap shadow-lg">
-                    ⭐ MAIS POPULAR
-                  </div>
-                )}
-                {isCurrent && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-full whitespace-nowrap shadow-lg">
-                    SEU PLANO ATUAL
-                  </div>
-                )}
-                {isSelected && !isCurrent && (
-                  <div className="absolute top-4 right-4 w-7 h-7 bg-green-600 rounded-full flex items-center justify-center shadow-lg">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
+                {atual && (
+                  <span className="absolute right-5 top-5 rounded-full bg-blue-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                    Plano atual
+                  </span>
                 )}
 
-                {/* Ícone */}
                 <div
-                  className={`w-14 h-14 ${plano.corIcon} rounded-2xl flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform`}
+                  className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+                    plano.id === "profissional"
+                      ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  }`}
                 >
-                  <Icon className="w-7 h-7" />
+                  <Icon className="h-6 w-6" />
                 </div>
 
-                {/* Nome e descrição */}
-                <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-1">
+                <h2 className="mt-5 text-2xl font-extrabold text-gray-900 dark:text-white">
                   {plano.nome}
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                </h2>
+                <p className="mt-1 min-h-10 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                   {plano.descricao}
                 </p>
 
-                {/* Preço */}
-                <div className="mb-6 flex items-baseline gap-1">
-                  <span className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                <div className="my-6 flex items-end gap-1">
+                  <span className="mb-1 text-sm font-semibold text-gray-600 dark:text-gray-400">
                     R$
                   </span>
-                  <span className="text-5xl font-extrabold text-gray-900 dark:text-white">
-                    {Math.floor(plano.preco)}
+                  <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
+                    {formatarPreco(plano.preco)}
                   </span>
-                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                    ,{(plano.preco % 1).toFixed(2).slice(2)}
-                  </span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
-                    /mês
+                  <span className="mb-1 text-sm text-gray-500 dark:text-gray-400">
+                    /30 dias
                   </span>
                 </div>
 
-                {/* Benefícios */}
-                <ul className="space-y-3 text-sm">
-                  {plano.beneficios.map((b) => (
-                    <li key={b.texto} className="flex items-start gap-2">
-                      {b.ia ? (
-                        <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                <ul className="space-y-3">
+                  {plano.beneficios.map((beneficio) => (
+                    <li
+                      key={beneficio.texto}
+                      className="flex items-start gap-2.5"
+                    >
+                      {beneficio.ia ? (
+                        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                       ) : (
-                        <CheckCircle
-                          className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                            plano.id === 'negocio' ? 'text-purple-600' : 'text-green-600'
-                          }`}
-                        />
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                       )}
                       <span
-                        className={`text-gray-700 dark:text-gray-300 ${
-                          b.bold ? 'font-semibold' : ''
+                        className={`text-sm text-gray-700 dark:text-gray-300 ${
+                          beneficio.destaque ? "font-semibold" : ""
                         }`}
                       >
-                        {b.texto}
-                        {b.soon && (
-                          <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full font-semibold">
-                            em breve
-                          </span>
-                        )}
+                        {beneficio.texto}
                       </span>
                     </li>
                   ))}
                 </ul>
               </button>
-            )
+            );
           })}
-        </div>
+        </section>
 
-        {/* Bloco de pagamento */}
-        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-3xl p-6 md:p-8 shadow-xl">
-          <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-5">
+        <section className="mx-auto mt-8 max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 md:p-8">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             Forma de pagamento
-          </h3>
+          </h2>
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <button
-              onClick={() => setTipoPagamento('pix')}
-              className={`p-5 rounded-2xl border-2 transition-all ${
-                tipoPagamento === 'pix'
-                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md scale-105'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <div className="text-3xl mb-2">💸</div>
-              <div className="font-bold text-gray-900 dark:text-white">PIX</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Pagamento mensal
-              </div>
-            </button>
+          {!contaNegocioLegada && !renovacaoAutomaticaLegadaAtiva && (
+            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-800 dark:bg-emerald-900/15">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                  <CreditCard aria-hidden="true" className="h-5 w-5" />
+                </div>
 
-            <button
-              onClick={() => setTipoPagamento('assinatura')}
-              className={`p-5 rounded-2xl border-2 transition-all ${
-                tipoPagamento === 'assinatura'
-                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md scale-105'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <div className="text-3xl mb-2">💳</div>
-              <div className="font-bold text-gray-900 dark:text-white">Cartão</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Assinatura automática
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-gray-900 dark:text-white">
+                    Pagamento seguro pelo Mercado Pago
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                    Na próxima tela, escolha cartão, Pix, boleto ou outro meio
+                    disponível.
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {["Cartão", "Pix", "Boleto"].map((forma) => (
+                      <span
+                        key={forma}
+                        className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm dark:bg-gray-900 dark:text-emerald-300"
+                      >
+                        {forma}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
+            </div>
+          )}
+
+          {suporteRequerido ? (
+            <Link
+              href={linkSuporte}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white hover:bg-emerald-700"
+            >
+              <MessageCircle className="h-5 w-5" />
+              Solicitar mudança pelo WhatsApp
+            </Link>
+          ) : renovacaoAutomaticaLegadaAtiva ? (
+            <div className="mt-6 rounded-xl bg-emerald-100 px-5 py-4 text-center text-base font-bold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+              Sua assinatura atual possui renovação automática
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handlePagar()}
+              disabled={
+                processando || (planoSelecionadoEhAtual && !querRenovar)
+              }
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {processando && <Loader2 className="h-5 w-5 animate-spin" />}
+              {processando
+                ? "Processando..."
+                : planoSelecionadoEhAtual && !querRenovar
+                  ? "Este é seu plano atual"
+                  : querRenovar && planoSelecionadoEhAtual
+                    ? `Renovar ${planoExibido.nome} por R$ ${formatarPreco(
+                        planoExibido.preco,
+                      )}`
+                    : `Continuar com ${planoExibido.nome} por R$ ${formatarPreco(
+                        planoExibido.preco,
+                      )}`}
             </button>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              Pagamento processado pelo Mercado Pago
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              30 dias de acesso após a aprovação
+            </span>
           </div>
 
-          {/* Botão de pagamento */}
-          <button
-            onClick={handlePagar}
-            disabled={processando !== null || (tipoPlanoAtual === planoSelecionado && !querRenovar)}
-            className={`w-full ${
-              planoAtual?.corBotao || 'bg-green-600 hover:bg-green-700'
-            } disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:shadow-none text-white font-bold py-4 rounded-full text-base md:text-lg transition-all`}
+          <div className="mt-6 border-t border-gray-100 pt-5 text-center dark:border-gray-800">
+            <Link
+              href={`https://wa.me/${WHATSAPP_SUPORTE}?text=${encodeURIComponent(
+                "Tenho dúvidas sobre os planos do EstoqueSystem.",
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Tirar dúvidas pelo WhatsApp
+            </Link>
+          </div>
+        </section>
+
+        <footer className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          Ao continuar, você concorda com os{" "}
+          <Link
+            href="/termos"
+            target="_blank"
+            className="text-emerald-600 hover:underline dark:text-emerald-400"
           >
-            {processando
-              ? 'Processando...'
-              : tipoPlanoAtual === planoSelecionado && !querRenovar
-              ? 'Este é seu plano atual'
-              : querRenovar && tipoPlanoAtual === planoSelecionado
-              ? `Renovar ${planoAtual?.nome} • R$ ${planoAtual?.preco
-                  .toFixed(2)
-                  .replace('.', ',')}/mês`
-              : `${isUpgrade ? 'Fazer upgrade pro' : 'Assinar'} ${planoAtual?.nome} • R$ ${planoAtual?.preco
-                  .toFixed(2)
-                  .replace('.', ',')}/mês`}
-          </button>
-
-          {/* Trust badges */}
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-gray-500 dark:text-gray-400">
-            <span className="flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-green-500" />
-              Pagamento seguro Mercado Pago
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-              Cancele quando quiser
-            </span>
-          </div>
-
-          {/* CTA WhatsApp */}
-          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-center">
-            <Link
-              href="https://wa.me/5522999467499?text=Tenho%20duvidas%20sobre%20os%20planos%20do%20EstoqueSystem"
-              target="_blank"
-              className="inline-flex items-center gap-2 text-sm text-green-600 dark:text-green-400 hover:underline font-medium"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Tenho dúvidas, falar com Lucas pelo WhatsApp
-            </Link>
-          </div>
-        </div>
-
-        {/* Garantia / FAQ rápido */}
-        <div className="max-w-2xl mx-auto mt-8 text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            Ao assinar, você concorda com nossos{' '}
-            <Link href="/termos" target="_blank" className="text-green-600 dark:text-green-400 hover:underline">
-              Termos de Uso
-            </Link>{' '}
-            e{' '}
-            <Link
-              href="/privacidade"
-              target="_blank"
-              className="text-green-600 dark:text-green-400 hover:underline"
-            >
-              Política de Privacidade
-            </Link>
-            .
-            <br />
-            Você pode cancelar a assinatura a qualquer momento sem multa ou fidelidade.
-          </p>
-        </div>
+            Termos de Uso
+          </Link>{" "}
+          e com a{" "}
+          <Link
+            href="/privacidade"
+            target="_blank"
+            className="text-emerald-600 hover:underline dark:text-emerald-400"
+          >
+            Política de Privacidade
+          </Link>
+          .
+        </footer>
       </div>
+    </main>
+  );
+}
+
+function Aviso({
+  tipo,
+  children,
+}: {
+  tipo: "erro" | "aviso" | "info";
+  children: ReactNode;
+}) {
+  const estilo =
+    tipo === "erro"
+      ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+      : tipo === "aviso"
+        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+        : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300";
+
+  return (
+    <div
+      role={tipo === "aviso" ? "status" : "alert"}
+      className={`mb-6 flex items-start gap-3 rounded-xl border p-4 text-sm ${estilo}`}
+    >
+      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+      <p>{children}</p>
     </div>
-  )
+  );
 }
 
 export default function AssinarPage() {
@@ -486,5 +619,5 @@ export default function AssinarPage() {
     <Suspense fallback={<Loading />}>
       <AssinarContent />
     </Suspense>
-  )
+  );
 }

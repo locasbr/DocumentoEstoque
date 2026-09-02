@@ -1,303 +1,618 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { MovimentoEstoque, Produto } from '@/lib/types'
 import {
-  Plus,
-  ArrowDown,
-  ArrowUp,
-  ShoppingCart,
-  Download,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+import type { LucideIcon } from 'lucide-react'
+import Link from 'next/link'
+
+import PageHeader from '@/components/page-header'
+import { SkeletonTable } from '@/components/skeleton-loaders'
+import { useNotification } from '@/contexts/NotificationContext'
+import { usePlano } from '@/hooks/usePlano'
+import { exportMovimentosDiariosCSV } from '@/lib/export-utils'
+import { supabase } from '@/lib/supabase'
+import type { MovimentoEstoque, Produto } from '@/lib/types'
+
+import {
+  Activity,
+  AlertCircle,
   AlertTriangle,
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Boxes,
+  Calendar,
   Crown,
+  Download,
+  Eye,
+  Filter,
+  Package,
+  PackageCheck,
+  PackageX,
+  Plus,
+  RefreshCw,
   Search,
   X,
-  Package,
-  DollarSign,
-  Calendar,
-  Filter,
-  Boxes,
-  ArrowRight,
-  PackageX,
-  Eye,
-  RotateCw,
 } from 'lucide-react'
-import { formatarMoeda } from '@/lib/utils'
-import { useNotification } from '@/contexts/NotificationContext'
-import { exportMovimentosDiariosCSV } from '@/lib/export-utils'
-import { SkeletonTable } from '@/components/skeleton-loaders'
-import { usePlano } from '@/hooks/usePlano'
 
 type TipoFiltro = 'todos' | 'entrada' | 'saida'
 type PeriodoFiltro = 'hoje' | '7d' | '30d' | 'todos'
+type CorKPI = 'green' | 'red' | 'amber' | 'blue' | 'emerald'
 
-// ════════════════════════════════════════════════════
-// 🎨 KPI CARD PRO
-// ════════════════════════════════════════════════════
-function KPICardPro({
+type MovimentoComProduto = Omit<
+  MovimentoEstoque,
+  'produto'
+> & {
+  produto?: Produto | null
+}
+
+interface KPIProps {
+  label: string
+  valor: string | number
+  sublabel?: string
+  icon: LucideIcon
+  cor: CorKPI
+  destaque?: boolean
+}
+
+interface MovimentoPorDia {
+  data: string
+  entradas: number
+  saidas: number
+}
+
+const PALETA_KPI: Record<
+  CorKPI,
+  {
+    bg: string
+    text: string
+    border: string
+  }
+> = {
+  green: {
+    bg: 'bg-green-100 dark:bg-green-900/30',
+    text: 'text-green-600 dark:text-green-400',
+    border: 'border-green-200 dark:border-green-800',
+  },
+  red: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    text: 'text-red-600 dark:text-red-400',
+    border: 'border-red-200 dark:border-red-800',
+  },
+  amber: {
+    bg: 'bg-amber-100 dark:bg-amber-900/30',
+    text: 'text-amber-600 dark:text-amber-400',
+    border: 'border-amber-200 dark:border-amber-800',
+  },
+  blue: {
+    bg: 'bg-blue-100 dark:bg-blue-900/30',
+    text: 'text-blue-600 dark:text-blue-400',
+    border: 'border-blue-200 dark:border-blue-800',
+  },
+  emerald: {
+    bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    border: 'border-emerald-200 dark:border-emerald-800',
+  },
+}
+
+function normalizarNumero(valor: unknown): number {
+  const numero = Number(valor)
+
+  return Number.isFinite(numero) ? numero : 0
+}
+
+function normalizarTexto(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function obterInicioPeriodo(periodo: PeriodoFiltro): Date | null {
+  if (periodo === 'todos') {
+    return null
+  }
+
+  const inicio = new Date()
+  inicio.setHours(0, 0, 0, 0)
+
+  if (periodo === '7d') {
+    inicio.setDate(inicio.getDate() - 6)
+  }
+
+  if (periodo === '30d') {
+    inicio.setDate(inicio.getDate() - 29)
+  }
+
+  return inicio
+}
+
+function formatarHora(data: string): string {
+  const valor = new Date(data)
+
+  if (Number.isNaN(valor.getTime())) {
+    return 'Horário não informado'
+  }
+
+  return valor.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatarMoeda(valor: number): string {
+  return valor.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
+function criarChaveData(dataString: string): string {
+  const data = new Date(dataString)
+
+  if (Number.isNaN(data.getTime())) {
+    return 'Data não informada'
+  }
+
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+
+  const ontem = new Date(hoje)
+  ontem.setDate(ontem.getDate() - 1)
+
+  const dataNormalizada = new Date(data)
+  dataNormalizada.setHours(0, 0, 0, 0)
+
+  if (dataNormalizada.getTime() === hoje.getTime()) {
+    return 'Hoje'
+  }
+
+  if (dataNormalizada.getTime() === ontem.getTime()) {
+    return 'Ontem'
+  }
+
+  return data.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year:
+      data.getFullYear() !== hoje.getFullYear()
+        ? 'numeric'
+        : undefined,
+  })
+}
+
+function KPICard({
   label,
   valor,
   sublabel,
   icon: Icon,
   cor,
-  destaque,
-}: {
-  label: string
-  valor: string | number
-  sublabel?: string
-  icon: typeof Boxes
-  cor: 'green' | 'red' | 'yellow' | 'blue' | 'emerald'
-  destaque?: boolean
-}) {
-  const cores = {
-    green: {
-      bg: 'bg-green-100 dark:bg-green-900/30',
-      text: 'text-green-600 dark:text-green-400',
-      border: 'border-green-200 dark:border-green-800',
-    },
-    red: {
-      bg: 'bg-red-100 dark:bg-red-900/30',
-      text: 'text-red-600 dark:text-red-400',
-      border: 'border-red-200 dark:border-red-800',
-    },
-    yellow: {
-      bg: 'bg-yellow-100 dark:bg-yellow-900/30',
-      text: 'text-yellow-600 dark:text-yellow-400',
-      border: 'border-yellow-200 dark:border-yellow-800',
-    },
-    blue: {
-      bg: 'bg-blue-100 dark:bg-blue-900/30',
-      text: 'text-blue-600 dark:text-blue-400',
-      border: 'border-blue-200 dark:border-blue-800',
-    },
-    emerald: {
-      bg: 'bg-emerald-100 dark:bg-emerald-900/30',
-      text: 'text-emerald-600 dark:text-emerald-400',
-      border: 'border-emerald-200 dark:border-emerald-800',
-    },
-  }
-  const c = cores[cor]
+  destaque = false,
+}: KPIProps) {
+  const palette = PALETA_KPI[cor]
 
   return (
-    <div
-      className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
-        destaque ? c.border : 'border-gray-200 dark:border-gray-800'
+    <article
+      className={`min-w-0 rounded-xl border bg-white p-4 dark:bg-gray-900 ${
+        destaque
+          ? palette.border
+          : 'border-gray-200 dark:border-gray-800'
       }`}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-9 h-9 rounded-lg ${c.bg} flex items-center justify-center`}>
-          <Icon className={`w-4 h-4 ${c.text}`} />
-        </div>
+      <div
+        className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${palette.bg}`}
+      >
+        <Icon
+          aria-hidden="true"
+          className={`h-4 w-4 ${palette.text}`}
+        />
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5 truncate">{label}</p>
-      <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white truncate">
+
+      <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
+        {label}
+      </p>
+
+      <p className="break-words text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
         {valor}
       </p>
+
       {sublabel && (
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
           {sublabel}
         </p>
       )}
-    </div>
+    </article>
   )
 }
 
-// ════════════════════════════════════════════════════
-// 🎯 PÁGINA PRINCIPAL
-// ════════════════════════════════════════════════════
 export default function EstoquePage() {
-  const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filtro, setFiltro] = useState('')
-  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
-  const [periodoFiltro, setPeriodoFiltro] = useState<PeriodoFiltro>('todos')
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [criticosVisivel, setCriticosVisivel] = useState(true)
   const { addNotification } = useNotification()
-
   const { temExportarCSV } = usePlano()
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [movimentosRes, produtosRes] = await Promise.all([
-        supabase
-          .from('movimentos_estoque')
-          .select('*, produtos(*)')
-          .order('criado_em', { ascending: false })
-          .limit(500),
-        supabase.from('produtos').select('*'),
-      ])
+  const [movimentos, setMovimentos] = useState<
+    MovimentoComProduto[]
+  >([])
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [totalMovimentacoes, setTotalMovimentacoes] = useState(0)
 
-      if (!movimentosRes.error && movimentosRes.data) {
-        setMovimentos(movimentosRes.data)
+  const [loading, setLoading] = useState(true)
+  const [atualizando, setAtualizando] = useState(false)
+  const [erroCarregamento, setErroCarregamento] = useState<
+    string | null
+  >(null)
+
+  const [filtro, setFiltro] = useState('')
+  const [tipoFiltro, setTipoFiltro] =
+    useState<TipoFiltro>('todos')
+  const [periodoFiltro, setPeriodoFiltro] =
+    useState<PeriodoFiltro>('todos')
+  const [criticosVisivel, setCriticosVisivel] = useState(true)
+
+  const fetchData = useCallback(
+    async (mostrarFeedback = false) => {
+      if (mostrarFeedback) {
+        setAtualizando(true)
+      } else {
+        setLoading(true)
       }
 
-      if (!produtosRes.error && produtosRes.data) {
-        setProdutos(produtosRes.data)
+      setErroCarregamento(null)
+
+      try {
+        const [
+          movimentosRes,
+          movimentosCountRes,
+          produtosRes,
+        ] = await Promise.all([
+          supabase
+            .from('movimentos_estoque')
+            .select('*, produto:produto_id(*)')
+            .order('criado_em', { ascending: false })
+            .limit(500),
+
+          supabase
+            .from('movimentos_estoque')
+            .select('*', {
+              count: 'exact',
+              head: true,
+            }),
+
+          supabase
+            .from('produtos')
+            .select('*')
+            .order('nome', { ascending: true }),
+        ])
+
+        const erros = [
+          movimentosRes.error,
+          movimentosCountRes.error,
+          produtosRes.error,
+        ].filter(Boolean)
+
+        if (erros.length > 0) {
+          console.error(
+            'Erro ao carregar movimentações:',
+            erros
+          )
+
+          setErroCarregamento(
+            'Não foi possível carregar todos os dados das movimentações.'
+          )
+        }
+
+        setMovimentos(
+          (movimentosRes.data as unknown as
+            | MovimentoComProduto[]
+            | null) ?? []
+        )
+
+        setProdutos(
+          (produtosRes.data as Produto[] | null) ?? []
+        )
+
+        setTotalMovimentacoes(
+          movimentosCountRes.count ?? 0
+        )
+
+        if (mostrarFeedback && erros.length === 0) {
+          addNotification(
+            'Dados atualizados com sucesso.',
+            'success',
+            2000
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Erro inesperado ao carregar movimentações:',
+          error
+        )
+
+        setErroCarregamento(
+          'Ocorreu um erro inesperado ao carregar as movimentações.'
+        )
+
+        if (mostrarFeedback) {
+          addNotification(
+            'Não foi possível atualizar os dados.',
+            'error'
+          )
+        }
+      } finally {
+        setLoading(false)
+        setAtualizando(false)
       }
-    } catch (error) {
-      console.error('Error fetching data:', error)
-      addNotification('Erro ao carregar dados', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+    },
+    [addNotification]
+  )
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // ────────────────────────────────────────────────
-  // 📊 ESTATÍSTICAS
-  // ────────────────────────────────────────────────
+  const produtosAtivos = useMemo(
+    () =>
+      produtos.filter(
+        (produto) => produto.ativo !== false
+      ),
+    [produtos]
+  )
+
   const stats = useMemo(() => {
-    const hoje = new Date().toDateString()
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+
     const movimentosHoje = movimentos.filter(
-      (m) => new Date(m.criado_em).toDateString() === hoje
+      (movimento) => {
+        const data = new Date(movimento.criado_em)
+
+        return (
+          !Number.isNaN(data.getTime()) && data >= hoje
+        )
+      }
     )
 
     const entradasHoje = movimentosHoje
-      .filter((m) => m.tipo_movimento === 'entrada')
-      .reduce((acc, m) => acc + m.quantidade, 0)
-
-    const saidasHoje = movimentosHoje
-      .filter((m) => m.tipo_movimento === 'saida')
-      .reduce((acc, m) => acc + m.quantidade, 0)
-
-    // 🆕 Faturamento de saídas hoje (valor real!)
-    const faturamentoHoje = movimentosHoje
-      .filter((m) => m.tipo_movimento === 'saida')
+      .filter(
+        (movimento) =>
+          movimento.tipo_movimento === 'entrada'
+      )
       .reduce(
-        (acc, m) => acc + m.quantidade * (m.produto?.preco_venda || 0),
+        (total, movimento) =>
+          total +
+          Math.max(
+            normalizarNumero(movimento.quantidade),
+            0
+          ),
         0
       )
 
-    const produtosBaixoEstoque = produtos.filter(
-      (p) => p.quantidade_atual < p.quantidade_minima && p.quantidade_atual > 0
-    )
-    const produtosCriticos = produtos.filter((p) => p.quantidade_atual === 0)
+    const saidasHoje = movimentosHoje
+      .filter(
+        (movimento) =>
+          movimento.tipo_movimento === 'saida'
+      )
+      .reduce(
+        (total, movimento) =>
+          total +
+          Math.max(
+            normalizarNumero(movimento.quantidade),
+            0
+          ),
+        0
+      )
 
-    // 🆕 Valor total em estoque
-    const valorEstoque = produtos.reduce(
-      (acc, p) => acc + p.quantidade_atual * (p.preco_venda || 0),
+    const produtosBaixoEstoque =
+      produtosAtivos.filter((produto) => {
+        const atual = Math.max(
+          normalizarNumero(produto.quantidade_atual),
+          0
+        )
+
+        const minimo = Math.max(
+          normalizarNumero(produto.quantidade_minima),
+          0
+        )
+
+        return (
+          atual > 0 &&
+          minimo > 0 &&
+          atual < minimo
+        )
+      })
+
+    const produtosCriticos = produtosAtivos.filter(
+      (produto) =>
+        normalizarNumero(produto.quantidade_atual) <= 0
+    )
+
+    const produtosSemCusto = produtosAtivos.filter(
+      (produto) =>
+        normalizarNumero(produto.preco_custo) <= 0
+    ).length
+
+    const valorEstoqueCusto = produtosAtivos.reduce(
+      (total, produto) => {
+        const quantidade = Math.max(
+          normalizarNumero(produto.quantidade_atual),
+          0
+        )
+
+        const custo = Math.max(
+          normalizarNumero(produto.preco_custo),
+          0
+        )
+
+        return total + quantidade * custo
+      },
       0
     )
 
     return {
       entradasHoje,
       saidasHoje,
-      faturamentoHoje,
       produtosBaixoEstoque,
       produtosCriticos,
-      valorEstoque,
-      totalProdutos: produtos.length,
+      produtosSemCusto,
+      valorEstoqueCusto,
+      totalProdutosAtivos: produtosAtivos.length,
     }
-  }, [movimentos, produtos])
+  }, [movimentos, produtosAtivos])
 
-  // ────────────────────────────────────────────────
-  // 🔍 FILTROS APLICADOS
-  // ────────────────────────────────────────────────
   const movimentosFiltrados = useMemo(() => {
-    let resultado = movimentos
+    const inicioPeriodo =
+      obterInicioPeriodo(periodoFiltro)
+    const termoBusca = normalizarTexto(filtro)
 
-    // Filtro por período
-    if (periodoFiltro !== 'todos') {
-      const agora = new Date()
-      const dataLimite = new Date()
-      if (periodoFiltro === 'hoje') {
-        dataLimite.setHours(0, 0, 0, 0)
-      } else if (periodoFiltro === '7d') {
-        dataLimite.setDate(agora.getDate() - 7)
-      } else if (periodoFiltro === '30d') {
-        dataLimite.setDate(agora.getDate() - 30)
-      }
-      resultado = resultado.filter(
-        (m) => new Date(m.criado_em) >= dataLimite
-      )
-    }
+    return movimentos.filter((movimento) => {
+      if (inicioPeriodo) {
+        const dataMovimento = new Date(
+          movimento.criado_em
+        )
 
-    // Filtro por tipo
-    if (tipoFiltro !== 'todos') {
-      resultado = resultado.filter((m) => m.tipo_movimento === tipoFiltro)
-    }
-
-    // Busca (nome OU sku OU motivo)
-    if (filtro.trim()) {
-      const termo = filtro.toLowerCase()
-      resultado = resultado.filter(
-        (m) =>
-          m.produto?.nome?.toLowerCase().includes(termo) ||
-          m.produto?.sku?.toLowerCase().includes(termo) ||
-          m.motivo?.toLowerCase().includes(termo)
-      )
-    }
-
-    return resultado
-  }, [movimentos, filtro, tipoFiltro, periodoFiltro])
-
-  // 🆕 Agrupa movimentos por data (visual estilo Linear/Notion)
-  const movimentosAgrupados = useMemo(() => {
-    const grupos: Record<string, MovimentoEstoque[]> = {}
-
-    movimentosFiltrados.forEach((m) => {
-      const data = new Date(m.criado_em)
-      const hoje = new Date()
-      hoje.setHours(0, 0, 0, 0)
-      const ontem = new Date(hoje)
-      ontem.setDate(ontem.getDate() - 1)
-
-      let chave: string
-      if (data >= hoje) {
-        chave = 'Hoje'
-      } else if (data >= ontem) {
-        chave = 'Ontem'
-      } else {
-        chave = data.toLocaleDateString('pt-BR', {
-          day: '2-digit',
-          month: 'long',
-          year:
-            data.getFullYear() !== hoje.getFullYear() ? 'numeric' : undefined,
-        })
+        if (
+          Number.isNaN(dataMovimento.getTime()) ||
+          dataMovimento < inicioPeriodo
+        ) {
+          return false
+        }
       }
 
-      if (!grupos[chave]) grupos[chave] = []
-      grupos[chave].push(m)
+      if (
+        tipoFiltro !== 'todos' &&
+        movimento.tipo_movimento !== tipoFiltro
+      ) {
+        return false
+      }
+
+      if (termoBusca) {
+        const conteudo = normalizarTexto(
+          [
+            movimento.produto?.nome,
+            movimento.produto?.sku,
+            movimento.motivo,
+          ]
+            .filter(Boolean)
+            .join(' ')
+        )
+
+        if (!conteudo.includes(termoBusca)) {
+          return false
+        }
+      }
+
+      return true
     })
+  }, [
+    movimentos,
+    filtro,
+    tipoFiltro,
+    periodoFiltro,
+  ])
 
-    return grupos
+  const movimentosAgrupados = useMemo(() => {
+    return movimentosFiltrados.reduce<
+      Record<string, MovimentoComProduto[]>
+    >((grupos, movimento) => {
+      const chave = criarChaveData(
+        movimento.criado_em
+      )
+
+      if (!grupos[chave]) {
+        grupos[chave] = []
+      }
+
+      grupos[chave].push(movimento)
+
+      return grupos
+    }, {})
   }, [movimentosFiltrados])
 
-  // ────────────────────────────────────────────────
-  // 🎬 AÇÕES
-  // ────────────────────────────────────────────────
+  const movimentosPorDia = useMemo(() => {
+    const agrupados = movimentosFiltrados.reduce<
+      Record<string, MovimentoPorDia>
+    >((resultado, movimento) => {
+      const data = new Date(movimento.criado_em)
+
+      if (Number.isNaN(data.getTime())) {
+        return resultado
+      }
+
+      const chave = data.toLocaleDateString('pt-BR')
+
+      if (!resultado[chave]) {
+        resultado[chave] = {
+          data: chave,
+          entradas: 0,
+          saidas: 0,
+        }
+      }
+
+      const quantidade = Math.max(
+        normalizarNumero(movimento.quantidade),
+        0
+      )
+
+      if (movimento.tipo_movimento === 'entrada') {
+        resultado[chave].entradas += quantidade
+      } else {
+        resultado[chave].saidas += quantidade
+      }
+
+      return resultado
+    }, {})
+
+    return Object.values(agrupados)
+  }, [movimentosFiltrados])
+
+  const limparFiltros = () => {
+    setFiltro('')
+    setTipoFiltro('todos')
+    setPeriodoFiltro('todos')
+  }
+
+  const temFiltrosAtivos =
+    Boolean(filtro.trim()) ||
+    tipoFiltro !== 'todos' ||
+    periodoFiltro !== 'todos'
+
   const handleExportarMovimentos = () => {
     if (!temExportarCSV) {
       addNotification(
-        'Exportação CSV disponível no plano Profissional',
+        'Exportação CSV disponível no plano Profissional.',
         'warning'
       )
       return
     }
 
-    const hoje = new Date()
-    const dataStr = hoje.toLocaleDateString('pt-BR')
-    const movimentosPorDia = [
-      {
-        data: dataStr,
-        entradas: stats.entradasHoje,
-        saidas: stats.saidasHoje,
-      },
-    ]
-    exportMovimentosDiariosCSV(movimentosPorDia, 'hoje')
-    addNotification('Movimentos exportados!', 'success', 3000)
-  }
+    if (movimentosPorDia.length === 0) {
+      addNotification(
+        'Não existem movimentações para exportar.',
+        'warning'
+      )
+      return
+    }
 
-  const handleAtualizar = () => {
-    setLoading(true)
-    fetchData()
-    addNotification('Dados atualizados ✓', 'success', 1500)
+    const nomePeriodo =
+      periodoFiltro === 'todos'
+        ? 'todos'
+        : periodoFiltro
+
+    exportMovimentosDiariosCSV(
+      movimentosPorDia,
+      nomePeriodo
+    )
+
+    addNotification(
+      'Movimentações exportadas com sucesso.',
+      'success',
+      3000
+    )
   }
 
   if (loading) {
@@ -305,201 +620,275 @@ export default function EstoquePage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* ══════════ HEADER PRO ══════════ */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="hidden sm:flex w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
-            <Boxes className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-              Estoque
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Acompanhe entradas, saídas e movimentação em tempo real
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <button
-            onClick={handleAtualizar}
-            className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
-            title="Atualizar"
-          >
-            <RotateCw className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
-
-          <Link
-            href="/dashboard/pdv"
-            className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition text-sm"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span className="hidden sm:inline">PDV</span>
-          </Link>
-
-          {temExportarCSV ? (
+    <div className="min-w-0 space-y-6 overflow-x-clip pb-8">
+      <PageHeader
+        eyebrow="GESTÃO DE ESTOQUE"
+        title="Movimentações"
+        description="Acompanhe entradas, saídas, ajustes e o histórico do estoque."
+        icon={Activity}
+        actions={
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             <button
-              onClick={handleExportarMovimentos}
-              className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition text-sm"
+              type="button"
+              aria-label="Atualizar movimentações"
+              onClick={() => fetchData(true)}
+              disabled={atualizando}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
+              <RefreshCw
+                aria-hidden="true"
+                className={`h-4 w-4 ${
+                  atualizando ? 'animate-spin' : ''
+                }`}
+              />
+              <span className="sm:hidden">
+                Atualizar
+              </span>
             </button>
-          ) : (
+
+            {temExportarCSV ? (
+              <button
+                type="button"
+                onClick={handleExportarMovimentos}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                <Download
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                />
+                Exportar
+              </button>
+            ) : (
+              <Link
+                href="/assinar"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+              >
+                <Crown
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                />
+                Exportar
+              </Link>
+            )}
+
             <Link
-              href="/assinar"
-              className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/30 transition font-semibold text-sm"
-              title="Disponível no plano Profissional"
+              href="/dashboard/estoque/movimento?tipo=entrada"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
             >
-              <Crown className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar PRO</span>
+              <ArrowDownLeft
+                aria-hidden="true"
+                className="h-4 w-4"
+              />
+              Nova entrada
             </Link>
-          )}
 
-          <Link
-            href="/dashboard/estoque/movimento"
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold rounded-lg transition text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Novo</span>
-            Movimento
-          </Link>
+            <Link
+              href="/dashboard/estoque/movimento?tipo=saida"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+            >
+              <ArrowUpRight
+                aria-hidden="true"
+                className="h-4 w-4"
+              />
+              Nova saída
+            </Link>
+          </div>
+        }
+      />
+
+      {erroCarregamento && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          <AlertCircle
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 flex-shrink-0"
+          />
+
+          <div className="min-w-0 flex-1">
+            <p>{erroCarregamento}</p>
+
+            <button
+              type="button"
+              onClick={() => fetchData(true)}
+              className="mt-2 text-xs font-semibold underline"
+            >
+              Tentar novamente
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ══════════ ALERTA CRÍTICOS (DISMISSÍVEL) ══════════ */}
-      {stats.produtosCriticos.length > 0 && criticosVisivel && (
-        <div className="relative bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 animate-slideDown">
-          <div className="flex items-start gap-3 pr-8">
-            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/50 flex items-center justify-center flex-shrink-0">
-              <PackageX className="w-5 h-5 text-red-600 dark:text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h3 className="font-bold text-red-900 dark:text-red-100">
-                  Estoque Zerado
-                </h3>
-                <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 text-xs font-bold rounded-full">
-                  {stats.produtosCriticos.length}{' '}
-                  {stats.produtosCriticos.length === 1 ? 'produto' : 'produtos'}
-                </span>
+      {stats.produtosCriticos.length > 0 &&
+        criticosVisivel && (
+          <section className="relative rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/15">
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40">
+                <PackageX
+                  aria-hidden="true"
+                  className="h-5 w-5 text-red-600 dark:text-red-400"
+                />
               </div>
-              <p className="text-sm text-red-800 dark:text-red-200 mb-3 break-words">
-                {stats.produtosCriticos.slice(0, 5).map((p) => p.nome).join(', ')}
-                {stats.produtosCriticos.length > 5 &&
-                  ` e mais ${stats.produtosCriticos.length - 5}...`}
-              </p>
-              <div className="flex flex-wrap gap-2">
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-bold text-red-900 dark:text-red-100">
+                    Produtos zerados
+                  </h2>
+
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                    {stats.produtosCriticos.length}
+                  </span>
+                </div>
+
+                <p className="mt-1 break-words text-sm text-red-700 dark:text-red-300">
+                  {stats.produtosCriticos
+                    .slice(0, 5)
+                    .map((produto) => produto.nome)
+                    .join(', ')}
+
+                  {stats.produtosCriticos.length > 5 &&
+                    ` e mais ${
+                      stats.produtosCriticos.length - 5
+                    }`}
+                </p>
+
                 <Link
                   href="/dashboard/produtos"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-300 hover:underline"
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:underline dark:text-red-300"
                 >
-                  Ver produtos <ArrowRight className="w-3 h-3" />
+                  Ver produtos
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="h-3 w-3"
+                  />
                 </Link>
               </div>
             </div>
-          </div>
-          <button
-            onClick={() => setCriticosVisivel(false)}
-            className="absolute top-3 right-3 text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
+
+            <button
+              type="button"
+              aria-label="Ocultar aviso de produtos zerados"
+              onClick={() => setCriticosVisivel(false)}
+              className="absolute right-3 top-3 rounded-lg p-1 text-red-400 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/30"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </section>
+        )}
+
+      <section aria-label="Indicadores das movimentações">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <KPICard
+            label="Entradas hoje"
+            valor={stats.entradasHoje}
+            sublabel="unidades registradas"
+            icon={ArrowDownLeft}
+            cor="green"
+          />
+
+          <KPICard
+            label="Saídas hoje"
+            valor={stats.saidasHoje}
+            sublabel="unidades registradas"
+            icon={ArrowUpRight}
+            cor="red"
+          />
+
+          <KPICard
+            label="Valor do estoque a custo"
+            valor={formatarMoeda(
+              stats.valorEstoqueCusto
+            )}
+            sublabel="capital registrado"
+            icon={Package}
+            cor="emerald"
+          />
+
+          <KPICard
+            label="Abaixo do mínimo"
+            valor={stats.produtosBaixoEstoque.length}
+            icon={AlertTriangle}
+            cor={
+              stats.produtosBaixoEstoque.length > 0
+                ? 'amber'
+                : 'green'
+            }
+            destaque={
+              stats.produtosBaixoEstoque.length > 0
+            }
+          />
+
+          <KPICard
+            label="Produtos zerados"
+            valor={stats.produtosCriticos.length}
+            icon={
+              stats.produtosCriticos.length > 0
+                ? PackageX
+                : PackageCheck
+            }
+            cor={
+              stats.produtosCriticos.length > 0
+                ? 'red'
+                : 'green'
+            }
+            destaque={
+              stats.produtosCriticos.length > 0
+            }
+          />
+
+          <KPICard
+            label="Total de movimentações"
+            valor={totalMovimentacoes}
+            icon={Activity}
+            cor="blue"
+          />
+        </div>
+      </section>
+
+      {stats.produtosSemCusto > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+          O valor do estoque considera somente produtos com preço de
+          custo cadastrado.{' '}
+          <strong>
+            {stats.produtosSemCusto} produto(s)
+          </strong>{' '}
+          ainda não possuem custo informado.
         </div>
       )}
 
-      {/* ══════════ KPIs ══════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICardPro
-          label="Faturamento hoje"
-          valor={formatarMoeda(stats.faturamentoHoje)}
-          icon={DollarSign}
-          cor="emerald"
-          destaque={stats.faturamentoHoje > 0}
-        />
-        <KPICardPro
-          label="Entradas hoje"
-          valor={stats.entradasHoje}
-          sublabel="unidades"
-          icon={ArrowDown}
-          cor="green"
-        />
-        <KPICardPro
-          label="Saídas hoje"
-          valor={stats.saidasHoje}
-          sublabel="unidades"
-          icon={ArrowUp}
-          cor="red"
-        />
-        <KPICardPro
-          label="Valor em estoque"
-          valor={formatarMoeda(stats.valorEstoque)}
-          icon={Package}
-          cor="blue"
-        />
-        <KPICardPro
-          label="Baixo estoque"
-          valor={stats.produtosBaixoEstoque.length}
-          icon={AlertTriangle}
-          cor="yellow"
-          destaque={stats.produtosBaixoEstoque.length > 0}
-        />
-        <KPICardPro
-          label="Total produtos"
-          valor={stats.totalProdutos}
-          icon={Boxes}
-          cor="blue"
-        />
-      </div>
+      <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-col gap-3 xl:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            />
 
-      {/* ══════════ AVISO BAIXO ESTOQUE (mais discreto) ══════════ */}
-      {stats.produtosBaixoEstoque.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-          <p className="text-sm text-yellow-800 dark:text-yellow-200 flex-1 min-w-0 truncate">
-            <strong>{stats.produtosBaixoEstoque.length}</strong> produto(s) com baixo
-            estoque:{' '}
-            <span className="text-yellow-700 dark:text-yellow-300">
-              {stats.produtosBaixoEstoque.slice(0, 3).map((p) => p.nome).join(', ')}
-              {stats.produtosBaixoEstoque.length > 3 && '...'}
-            </span>
-          </p>
-          <Link
-            href="/dashboard/alertas"
-            className="text-xs font-semibold text-yellow-700 dark:text-yellow-300 hover:underline whitespace-nowrap flex items-center gap-1"
-          >
-            Ver alertas <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-      )}
-
-      {/* ══════════ TOOLBAR DE FILTROS ══════════ */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-        <div className="flex flex-col lg:flex-row gap-3">
-          {/* Busca */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
-              type="text"
+              type="search"
               placeholder="Buscar por produto, SKU ou motivo..."
               value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              onChange={(event) =>
+                setFiltro(event.target.value)
+              }
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
+
             {filtro && (
               <button
+                type="button"
+                aria-label="Limpar busca"
                 onClick={() => setFiltro('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               >
-                <X className="w-4 h-4" />
+                <X aria-hidden="true" className="h-4 w-4" />
               </button>
             )}
           </div>
 
-          {/* Filtro de período */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+          <div className="flex overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
             {[
               { id: 'hoje' as const, label: 'Hoje' },
               { id: '7d' as const, label: '7 dias' },
@@ -507,12 +896,13 @@ export default function EstoquePage() {
               { id: 'todos' as const, label: 'Todos' },
             ].map(({ id, label }) => (
               <button
+                type="button"
                 key={id}
                 onClick={() => setPeriodoFiltro(id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition ${
+                className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   periodoFiltro === id
-                    ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}
               >
                 {label}
@@ -520,221 +910,265 @@ export default function EstoquePage() {
             ))}
           </div>
 
-          {/* Filtro de tipo */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-            {(
-              [
-                { id: 'todos' as const, label: 'Todos', cor: 'gray' },
-                { id: 'entrada' as const, label: 'Entradas', cor: 'green' },
-                { id: 'saida' as const, label: 'Saídas', cor: 'red' },
-              ] as const
-            ).map(({ id, label, cor }) => (
+          <div className="flex overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+            {[
+              {
+                id: 'todos' as const,
+                label: 'Todos',
+                icon: null,
+              },
+              {
+                id: 'entrada' as const,
+                label: 'Entradas',
+                icon: ArrowDownLeft,
+              },
+              {
+                id: 'saida' as const,
+                label: 'Saídas',
+                icon: ArrowUpRight,
+              },
+            ].map(({ id, label, icon: Icon }) => (
               <button
+                type="button"
                 key={id}
                 onClick={() => setTipoFiltro(id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition flex items-center gap-1 ${
+                className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   tipoFiltro === id
-                    ? cor === 'green'
-                      ? 'bg-green-600 text-white shadow-sm'
-                      : cor === 'red'
-                      ? 'bg-red-600 text-white shadow-sm'
-                      : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    ? id === 'entrada'
+                      ? 'bg-emerald-600 text-white'
+                      : id === 'saida'
+                        ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                        : 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}
               >
-                {id === 'entrada' && <ArrowDown className="w-3 h-3" />}
-                {id === 'saida' && <ArrowUp className="w-3 h-3" />}
+                {Icon && (
+                  <Icon
+                    aria-hidden="true"
+                    className="h-3 w-3"
+                  />
+                )}
                 {label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Contador de resultados */}
-        {(filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos') && (
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-            <Filter className="w-3 h-3 text-gray-400" />
+        {temFiltrosAtivos && (
+          <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+            <Filter
+              aria-hidden="true"
+              className="h-3.5 w-3.5 text-gray-400"
+            />
+
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {movimentosFiltrados.length} resultado(s)
             </span>
+
             <button
-              onClick={() => {
-                setFiltro('')
-                setTipoFiltro('todos')
-                setPeriodoFiltro('todos')
-              }}
-              className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline ml-auto"
+              type="button"
+              onClick={limparFiltros}
+              className="ml-auto text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
             >
               Limpar filtros
             </button>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* ══════════ LISTA AGRUPADA ══════════ */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <h2 className="font-bold text-gray-900 dark:text-white text-sm">
-              Histórico de Movimentos
+      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <header className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+          <div className="flex min-w-0 items-center gap-2">
+            <Calendar
+              aria-hidden="true"
+              className="h-4 w-4 flex-shrink-0 text-gray-400"
+            />
+
+            <h2 className="truncate text-sm font-bold text-gray-900 dark:text-white">
+              Histórico de movimentações
             </h2>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full font-semibold">
+
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
               {movimentosFiltrados.length}
             </span>
           </div>
-        </div>
+        </header>
 
         {movimentosFiltrados.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="inline-flex w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 items-center justify-center mb-4">
-              <Boxes className="w-8 h-8 text-gray-400" />
+          <div className="px-4 py-16 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+              <Boxes
+                aria-hidden="true"
+                className="h-7 w-7 text-gray-400"
+              />
             </div>
-            <h3 className="font-bold text-gray-900 dark:text-white mb-1">
-              {filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos'
-                ? 'Nenhum movimento encontrado'
-                : 'Nenhum movimento ainda'}
+
+            <h3 className="font-bold text-gray-900 dark:text-white">
+              {temFiltrosAtivos
+                ? 'Nenhuma movimentação encontrada'
+                : 'Nenhuma movimentação registrada'}
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-4">
-              {filtro || tipoFiltro !== 'todos' || periodoFiltro !== 'todos'
-                ? 'Tente ajustar os filtros pra ver mais resultados.'
-                : 'Registre uma entrada ou faça uma venda no PDV pra começar.'}
+
+            <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500 dark:text-gray-400">
+              {temFiltrosAtivos
+                ? 'Tente limpar ou alterar os filtros utilizados.'
+                : 'Registre uma entrada, saída ou ajuste para começar.'}
             </p>
-            {!filtro && tipoFiltro === 'todos' && periodoFiltro === 'todos' && (
+
+            {temFiltrosAtivos ? (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+              >
+                <X aria-hidden="true" className="h-4 w-4" />
+                Limpar filtros
+              </button>
+            ) : (
               <Link
                 href="/dashboard/estoque/movimento"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
               >
-                <Plus className="w-4 h-4" />
-                Registrar primeiro movimento
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                Registrar movimentação
               </Link>
             )}
           </div>
         ) : (
-          <div className="max-h-[600px] overflow-y-auto">
-            {Object.entries(movimentosAgrupados).map(([data, movs]) => (
-              <div key={data}>
-                {/* Header do grupo */}
-                <div className="sticky top-0 z-10 px-5 py-2 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between">
+          <div className="max-h-[700px] overflow-y-auto">
+            {Object.entries(movimentosAgrupados).map(
+              ([data, movimentosDoDia]) => (
+                <div key={data}>
+                  <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/95 px-5 py-2 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-800/95">
                     <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       {data}
                     </h3>
+
                     <span className="text-xs text-gray-400">
-                      {movs.length} movimento{movs.length !== 1 ? 's' : ''}
+                      {movimentosDoDia.length}{' '}
+                      {movimentosDoDia.length === 1
+                        ? 'movimentação'
+                        : 'movimentações'}
                     </span>
                   </div>
-                </div>
 
-                {/* Movimentos do grupo */}
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {movs.map((movimento) => {
-                    const isEntrada = movimento.tipo_movimento === 'entrada'
-                    const valor =
-                      movimento.quantidade *
-                      (movimento.produto?.preco_venda || 0)
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {movimentosDoDia.map((movimento) => {
+                      const isEntrada =
+                        movimento.tipo_movimento ===
+                        'entrada'
 
-                    return (
-                      <div
-                        key={movimento.id}
-                        className="group flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-                      >
-                        {/* Ícone */}
-                        <div
-                          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            isEntrada
-                              ? 'bg-green-100 dark:bg-green-900/30'
-                              : 'bg-red-100 dark:bg-red-900/30'
-                          }`}
+                      return (
+                        <article
+                          key={movimento.id}
+                          className="group px-4 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/30 sm:px-5"
                         >
-                          {isEntrada ? (
-                            <ArrowDown className="w-4 h-4 text-green-600 dark:text-green-400" />
-                          ) : (
-                            <ArrowUp className="w-4 h-4 text-red-600 dark:text-red-400" />
-                          )}
-                        </div>
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div
+                              className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
+                                isEntrada
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                                  : 'bg-gray-100 dark:bg-gray-800'
+                              }`}
+                            >
+                              {isEntrada ? (
+                                <ArrowDownLeft
+                                  aria-hidden="true"
+                                  className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+                                />
+                              ) : (
+                                <ArrowUpRight
+                                  aria-hidden="true"
+                                  className="h-4 w-4 text-gray-600 dark:text-gray-300"
+                                />
+                              )}
+                            </div>
 
-                        {/* Info do produto */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
-                              {movimento.produto?.nome || 'Produto removido'}
-                            </p>
-                            {movimento.produto?.sku && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded font-mono">
-                                {movimento.produto.sku}
-                              </span>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <p className="min-w-0 break-words text-sm font-semibold text-gray-900 dark:text-white">
+                                  {movimento.produto?.nome ??
+                                    'Produto removido'}
+                                </p>
+
+                                {movimento.produto?.sku && (
+                                  <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                    {movimento.produto.sku}
+                                  </span>
+                                )}
+
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    isEntrada
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                      : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                  }`}
+                                >
+                                  {isEntrada
+                                    ? 'Entrada'
+                                    : 'Saída'}
+                                </span>
+                              </div>
+
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                                <span>
+                                  {movimento.motivo ||
+                                    'Sem motivo informado'}
+                                </span>
+
+                                <span aria-hidden="true">•</span>
+
+                                <time
+                                  dateTime={
+                                    movimento.criado_em
+                                  }
+                                >
+                                  {formatarHora(
+                                    movimento.criado_em
+                                  )}
+                                </time>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-shrink-0 items-center gap-2">
+                              <p
+                                className={`text-base font-bold ${
+                                  isEntrada
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-gray-700 dark:text-gray-200'
+                                }`}
+                              >
+                                {isEntrada ? '+' : '-'}
+                                {normalizarNumero(
+                                  movimento.quantidade
+                                )}
+                              </p>
+
+                              {movimento.produto?.id && (
+                                <Link
+                                  href={`/dashboard/produtos/${movimento.produto.id}`}
+                                  aria-label={`Ver produto ${movimento.produto.nome ?? ''}`}
+                                  title="Ver produto"
+                                  className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:hover:bg-blue-900/30 dark:hover:text-blue-400"
+                                >
+                                  <Eye
+                                    aria-hidden="true"
+                                    className="h-3.5 w-3.5"
+                                  />
+                                </Link>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                            {movimento.motivo || (
-                              <span className="italic">Sem motivo informado</span>
-                            )}{' '}
-                            ·{' '}
-                            {new Date(movimento.criado_em).toLocaleTimeString(
-                              'pt-BR',
-                              {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              }
-                            )}
-                          </p>
-                        </div>
-
-                        {/* Quantidade + valor */}
-                        <div className="text-right flex-shrink-0">
-                          <p
-                            className={`font-bold text-base ${
-                              isEntrada
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-red-600 dark:text-red-400'
-                            }`}
-                          >
-                            {isEntrada ? '+' : '-'}
-                            {movimento.quantidade}
-                          </p>
-                          {!isEntrada && valor > 0 && (
-                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                              {formatarMoeda(valor)}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Ação rápida */}
-{movimento.produto?.id && (
-  <Link
-    href={`/dashboard/produtos/${movimento.produto.id}`}
-    className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition"
-    title="Ver produto"
-  >
-    <Eye className="w-3.5 h-3.5" />
-  </Link>
-)}
-                      </div>
-                    )
-                  })}
+                        </article>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
-      </div>
-
-      <style jsx>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slideDown {
-          animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-      `}</style>
+      </section>
     </div>
   )
 }

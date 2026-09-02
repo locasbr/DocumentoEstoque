@@ -1,951 +1,1078 @@
-'use client'
+"use client";
 
-import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { Produto } from '@/lib/types'
 import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowDownLeft,
   ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  Search,
+  ArrowUpRight,
+  CheckCircle2,
+  Loader2,
+  Minus,
   Package,
   Plus,
-  Minus,
-  CheckCircle2,
-  AlertTriangle,
-  Sparkles,
+  Search,
   X,
-  Loader2,
-  Zap,
-  TrendingDown,
-  Boxes,
-} from 'lucide-react'
-import { useNotification } from '@/contexts/NotificationContext'
+} from "lucide-react";
 
-// 🆕 Motivos rápidos pré-definidos
-const MOTIVOS_RAPIDOS = {
+import PageHeader from "@/components/page-header";
+import { useNotification } from "@/contexts/NotificationContext";
+import { supabase } from "@/lib/supabase";
+import type { Produto } from "@/lib/types";
+
+type TipoMovimento = "entrada" | "saida";
+
+type MotivoEntrada =
+  | "Compra de fornecedor"
+  | "Devolução de cliente"
+  | "Estoque inicial"
+  | "Ajuste de inventário"
+  | "Brinde ou doação"
+  | "Outra entrada";
+
+type MotivoSaida =
+  | "Venda"
+  | "Perda"
+  | "Produto vencido"
+  | "Avaria"
+  | "Consumo interno"
+  | "Devolução ao fornecedor"
+  | "Ajuste de inventário"
+  | "Outra saída";
+
+type MotivoMovimento = MotivoEntrada | MotivoSaida;
+
+interface ResultadoMovimento {
+  nome: string;
+  novaQuantidade: number;
+  tipo: TipoMovimento;
+  motivo: MotivoMovimento;
+}
+
+interface MovimentoInserido {
+  id: string;
+}
+
+const MOTIVOS: Record<
+  TipoMovimento,
+  ReadonlyArray<{ label: string; valor: MotivoMovimento }>
+> = {
   entrada: [
-    { label: '📦 Compra de fornecedor', valor: 'Compra de fornecedor' },
-    { label: '🔄 Devolução de cliente', valor: 'Devolução de cliente' },
-    { label: '🎁 Brinde/Doação', valor: 'Brinde recebido' },
-    { label: '📋 Ajuste de inventário', valor: 'Ajuste de inventário' },
+    { label: "Compra de fornecedor", valor: "Compra de fornecedor" },
+    { label: "Devolução de cliente", valor: "Devolução de cliente" },
+    { label: "Estoque inicial", valor: "Estoque inicial" },
+    { label: "Ajuste de inventário", valor: "Ajuste de inventário" },
+    { label: "Brinde ou doação", valor: "Brinde ou doação" },
+    { label: "Outra entrada", valor: "Outra entrada" },
   ],
   saida: [
-    { label: '💔 Produto vencido', valor: 'Produto vencido' },
-    { label: '📦 Perda/Quebra', valor: 'Perda ou quebra' },
-    { label: '🎁 Uso interno', valor: 'Uso interno' },
-    { label: '📋 Ajuste de inventário', valor: 'Ajuste de inventário' },
+    { label: "Venda", valor: "Venda" },
+    { label: "Perda", valor: "Perda" },
+    { label: "Produto vencido", valor: "Produto vencido" },
+    { label: "Avaria", valor: "Avaria" },
+    { label: "Consumo interno", valor: "Consumo interno" },
+    {
+      label: "Devolução ao fornecedor",
+      valor: "Devolução ao fornecedor",
+    },
+    { label: "Ajuste de inventário", valor: "Ajuste de inventário" },
+    { label: "Outra saída", valor: "Outra saída" },
   ],
+};
+
+function normalizarNumero(valor: unknown): number {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function normalizarTexto(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function NovoMovimentoContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { addNotification } = useNotification()
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { addNotification } = useNotification();
 
-  const [loading, setLoading] = useState(false)
-  const [loadingProdutos, setLoadingProdutos] = useState(true)
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [showModal, setShowModal] = useState(false)
-  const [resultado, setResultado] = useState<{
-    nome: string
-    novaQtd: number
-    tipo: 'entrada' | 'saida'
-  } | null>(null)
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [loadingProdutos, setLoadingProdutos] = useState(true);
+  const [erroProdutos, setErroProdutos] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoMovimento | null>(null);
 
-  // Estados do form
-  const [produtoBuscaQuery, setProdutoBuscaQuery] = useState('')
-  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState('')
-  const [mostrarLista, setMostrarLista] = useState(false)
-  const [tipoMovimento, setTipoMovimento] = useState<'entrada' | 'saida'>('entrada')
-  const [quantidade, setQuantidade] = useState(0)
-  const [motivo, setMotivo] = useState('')
+  const [produtoBusca, setProdutoBusca] = useState("");
+  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState("");
+  const [mostrarLista, setMostrarLista] = useState(false);
+  const [tipoMovimento, setTipoMovimento] =
+    useState<TipoMovimento>("entrada");
+  const [quantidade, setQuantidade] = useState(0);
+  const [motivo, setMotivo] = useState<MotivoMovimento | "">("");
+  const [observacao, setObservacao] = useState("");
 
-  const buscaInputRef = useRef<HTMLInputElement>(null)
-  const quantidadeInputRef = useRef<HTMLInputElement>(null)
-  const listaRef = useRef<HTMLDivElement>(null)
+  const buscaInputRef = useRef<HTMLInputElement>(null);
+  const quantidadeInputRef = useRef<HTMLInputElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
 
-  // ────────────────────────────────────────────────
-  // 📡 FETCH PRODUTOS
-  // ────────────────────────────────────────────────
-  useEffect(() => {
-    const fetchProdutos = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('produtos')
-          .select('*')
-          .eq('ativo', true)
-          .order('nome')
+  const carregarProdutos = useCallback(async () => {
+    setLoadingProdutos(true);
+    setErroProdutos(null);
 
-        if (!error && data) {
-          setProdutos(data)
-        }
-      } catch (err) {
-        console.error('Error fetching produtos:', err)
-        addNotification('Erro ao carregar produtos', 'error')
-      } finally {
-        setLoadingProdutos(false)
+    try {
+      const { data, error } = await supabase
+        .from("produtos")
+        .select("*")
+        .eq("ativo", true)
+        .order("nome", { ascending: true });
+
+      if (error) {
+        console.error("Erro ao carregar produtos:", error);
+        setErroProdutos("Não foi possível carregar os produtos.");
+        setProdutos([]);
+        return;
       }
+
+      setProdutos((data as Produto[] | null) ?? []);
+    } catch (error) {
+      console.error("Erro inesperado ao carregar produtos:", error);
+      setErroProdutos("Ocorreu um erro inesperado ao carregar os produtos.");
+      setProdutos([]);
+    } finally {
+      setLoadingProdutos(false);
     }
+  }, []);
 
-    fetchProdutos()
-  }, [addNotification])
-
-  // ────────────────────────────────────────────────
-  // 🔗 LÊ PARAMS DA URL
-  // ────────────────────────────────────────────────
   useEffect(() => {
-    const tipo = searchParams.get('tipo')
-    const produtoId = searchParams.get('produto')
+    carregarProdutos();
+  }, [carregarProdutos]);
 
-    if (tipo === 'entrada' || tipo === 'saida') {
-      setTipoMovimento(tipo)
+  useEffect(() => {
+    const tipo = searchParams.get("tipo");
+    const produtoId = searchParams.get("produto");
+
+    if (tipo === "entrada" || tipo === "saida") {
+      setTipoMovimento(tipo);
+      setMotivo("");
     }
 
     if (produtoId && produtos.length > 0) {
-      const produto = produtos.find((p) => p.id === produtoId)
+      const produto = produtos.find((item) => item.id === produtoId);
       if (produto) {
-        setProdutoSelecionadoId(produtoId)
-        setProdutoBuscaQuery(produto.nome)
+        setProdutoSelecionadoId(produto.id);
+        setProdutoBusca(produto.nome);
       }
     }
-  }, [searchParams, produtos])
+  }, [searchParams, produtos]);
 
-  // ────────────────────────────────────────────────
-  // ⌨️ ATALHOS DE TECLADO
-  // ────────────────────────────────────────────────
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault()
-        buscaInputRef.current?.focus()
-        buscaInputRef.current?.select()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "F2") {
+        event.preventDefault();
+        buscaInputRef.current?.focus();
+        buscaInputRef.current?.select();
       }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
-  // ────────────────────────────────────────────────
-  // 🖱️ FECHA LISTA AO CLICAR FORA
-  // ────────────────────────────────────────────────
+      if (event.key === "Escape") {
+        setMostrarLista(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   useEffect(() => {
-    const handleClickFora = (e: MouseEvent) => {
-      if (listaRef.current && !listaRef.current.contains(e.target as Node)) {
-        setMostrarLista(false)
+    const handleClickFora = (event: MouseEvent) => {
+      if (
+        listaRef.current &&
+        !listaRef.current.contains(event.target as Node)
+      ) {
+        setMostrarLista(false);
       }
-    }
-    document.addEventListener('mousedown', handleClickFora)
-    return () => document.removeEventListener('mousedown', handleClickFora)
-  }, [])
+    };
 
-  // ────────────────────────────────────────────────
-  // 🔍 FILTRO DE BUSCA
-  // ────────────────────────────────────────────────
+    document.addEventListener("mousedown", handleClickFora);
+    return () => document.removeEventListener("mousedown", handleClickFora);
+  }, []);
+
   const produtosFiltrados = useMemo(() => {
-    if (!produtoBuscaQuery.trim()) return produtos.slice(0, 50)
-    const termo = produtoBuscaQuery.toLowerCase()
+    const termo = normalizarTexto(produtoBusca);
+
+    if (!termo) {
+      return produtos.slice(0, 50);
+    }
+
     return produtos
-      .filter(
-        (p) =>
-          p.nome.toLowerCase().includes(termo) ||
-          p.sku?.toLowerCase().includes(termo) ||
-          p.categoria?.toLowerCase().includes(termo)
-      )
-      .slice(0, 50)
-  }, [produtoBuscaQuery, produtos])
+      .filter((produto) => {
+        const conteudo = normalizarTexto(
+          [produto.nome, produto.sku, produto.categoria, produto.marca]
+            .filter(Boolean)
+            .join(" "),
+        );
+        return conteudo.includes(termo);
+      })
+      .slice(0, 50);
+  }, [produtoBusca, produtos]);
 
   const produtoSelecionado = useMemo(
-    () => produtos.find((p) => p.id === produtoSelecionadoId),
-    [produtos, produtoSelecionadoId]
-  )
+    () => produtos.find((produto) => produto.id === produtoSelecionadoId),
+    [produtoSelecionadoId, produtos],
+  );
 
-  // ────────────────────────────────────────────────
-  // 🧮 CÁLCULOS
-  // ────────────────────────────────────────────────
-  const maxQuantidade = useMemo(() => {
-    if (!produtoSelecionado) return Infinity
-    return tipoMovimento === 'saida'
-      ? produtoSelecionado.quantidade_atual
-      : Infinity
-  }, [produtoSelecionado, tipoMovimento])
+  const estoqueAtual = Math.max(
+    normalizarNumero(produtoSelecionado?.quantidade_atual),
+    0,
+  );
+  const estoqueMinimo = Math.max(
+    normalizarNumero(produtoSelecionado?.quantidade_minima),
+    0,
+  );
 
-  const novaQuantidade = useMemo(() => {
-    if (!produtoSelecionado) return 0
-    return tipoMovimento === 'entrada'
-      ? produtoSelecionado.quantidade_atual + quantidade
-      : produtoSelecionado.quantidade_atual - quantidade
-  }, [produtoSelecionado, tipoMovimento, quantidade])
+  const maxQuantidade =
+    tipoMovimento === "saida" ? estoqueAtual : Number.POSITIVE_INFINITY;
 
-  const ficaraAbaixoDoMinimo = useMemo(() => {
-    if (!produtoSelecionado || tipoMovimento !== 'saida') return false
-    return novaQuantidade < produtoSelecionado.quantidade_minima
-  }, [produtoSelecionado, tipoMovimento, novaQuantidade])
-
-  const quantidadeParaRepor = useMemo(() => {
-    if (!produtoSelecionado) return 0
-    return Math.max(
-      0,
-      produtoSelecionado.quantidade_minima - produtoSelecionado.quantidade_atual
-    )
-  }, [produtoSelecionado])
-
-  const valorMovimento = useMemo(() => {
-    if (!produtoSelecionado || quantidade <= 0) return 0
-    return tipoMovimento === 'entrada'
-      ? quantidade * (produtoSelecionado.preco_custo || 0)
-      : quantidade * (produtoSelecionado.preco_venda || 0)
-  }, [produtoSelecionado, tipoMovimento, quantidade])
+  const novaQuantidade = produtoSelecionado
+    ? tipoMovimento === "entrada"
+      ? estoqueAtual + quantidade
+      : estoqueAtual - quantidade
+    : 0;
 
   const quantidadeInvalida =
-    tipoMovimento === 'saida' &&
-    produtoSelecionado &&
-    quantidade > produtoSelecionado.quantidade_atual
+    tipoMovimento === "saida" && quantidade > estoqueAtual;
 
-  // ────────────────────────────────────────────────
-  // 🎯 SELECIONAR PRODUTO
-  // ────────────────────────────────────────────────
+  const ficaraAbaixoDoMinimo =
+    Boolean(produtoSelecionado) &&
+    tipoMovimento === "saida" &&
+    quantidade > 0 &&
+    !quantidadeInvalida &&
+    estoqueMinimo > 0 &&
+    novaQuantidade < estoqueMinimo;
+
+  const quantidadeParaRepor = Math.max(estoqueMinimo - estoqueAtual, 0);
+
   const selecionarProduto = useCallback((produto: Produto) => {
-    setProdutoSelecionadoId(produto.id)
-    setProdutoBuscaQuery(produto.nome)
-    setMostrarLista(false)
-    setTimeout(() => quantidadeInputRef.current?.focus(), 100)
-  }, [])
+    setProdutoSelecionadoId(produto.id);
+    setProdutoBusca(produto.nome);
+    setMostrarLista(false);
+    setQuantidade(0);
+    window.setTimeout(() => quantidadeInputRef.current?.focus(), 100);
+  }, []);
 
   const limparProduto = () => {
-    setProdutoSelecionadoId('')
-    setProdutoBuscaQuery('')
-    setQuantidade(0)
-    setTimeout(() => buscaInputRef.current?.focus(), 100)
-  }
+    setProdutoSelecionadoId("");
+    setProdutoBusca("");
+    setQuantidade(0);
+    setMostrarLista(false);
+    window.setTimeout(() => buscaInputRef.current?.focus(), 100);
+  };
 
-  // ────────────────────────────────────────────────
-  // 💾 SUBMIT
-  // ────────────────────────────────────────────────
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const alterarTipo = (tipo: TipoMovimento) => {
+    setTipoMovimento(tipo);
+    setQuantidade(0);
+    setMotivo("");
+    setObservacao("");
+  };
 
-    if (!produtoSelecionadoId) {
-      addNotification('Selecione um produto', 'warning', 3000)
-      buscaInputRef.current?.focus()
-      return
+  const criarOuAtualizarAlerta = async (
+    produtoId: string,
+    usuarioId: string,
+    quantidadeFinal: number,
+  ) => {
+    if (!produtoSelecionado || estoqueMinimo <= 0) {
+      return;
     }
 
-    if (quantidade <= 0) {
-      addNotification('Informe uma quantidade válida', 'warning', 3000)
-      quantidadeInputRef.current?.focus()
-      return
+    if (quantidadeFinal >= estoqueMinimo) {
+      const { error } = await supabase
+        .from("alertas")
+        .update({ visualizado: true })
+        .eq("produto_id", produtoId)
+        .eq("visualizado", false);
+
+      if (error) {
+        console.warn("Não foi possível encerrar alertas pendentes:", error);
+      }
+      return;
     }
 
-    if (
-      tipoMovimento === 'saida' &&
-      produtoSelecionado &&
-      quantidade > produtoSelecionado.quantidade_atual
-    ) {
+    const tipoAlerta =
+      quantidadeFinal <= 0 ? "estoque_critico" : "estoque_baixo";
+
+    const { data: alertaExistente, error: buscaAlertaError } = await supabase
+      .from("alertas")
+      .select("id")
+      .eq("produto_id", produtoId)
+      .eq("visualizado", false)
+      .limit(1)
+      .maybeSingle();
+
+    if (buscaAlertaError) {
+      console.warn("Não foi possível consultar alertas pendentes:", buscaAlertaError);
+      return;
+    }
+
+    if (alertaExistente?.id) {
+      const { error } = await supabase
+        .from("alertas")
+        .update({ tipo_alerta: tipoAlerta })
+        .eq("id", alertaExistente.id);
+
+      if (error) {
+        console.warn("Não foi possível atualizar o alerta:", error);
+      }
+      return;
+    }
+
+    const { error } = await supabase.from("alertas").insert({
+      produto_id: produtoId,
+      usuario_id: usuarioId,
+      tipo_alerta: tipoAlerta,
+      visualizado: false,
+    });
+
+    if (error) {
+      console.warn("Não foi possível criar o alerta:", error);
+    }
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!produtoSelecionado) {
+      addNotification("Selecione um produto.", "warning", 3000);
+      buscaInputRef.current?.focus();
+      return;
+    }
+
+    if (!Number.isInteger(quantidade) || quantidade <= 0) {
+      addNotification("Informe uma quantidade inteira maior que zero.", "warning", 3000);
+      quantidadeInputRef.current?.focus();
+      return;
+    }
+
+    if (!motivo) {
+      addNotification("Selecione o motivo da movimentação.", "warning", 3000);
+      return;
+    }
+
+    if (quantidadeInvalida) {
       addNotification(
-        `Quantidade insuficiente. Disponível: ${produtoSelecionado.quantidade_atual}`,
-        'error',
-        4000
-      )
-      return
+        `Quantidade insuficiente. Disponível: ${estoqueAtual}.`,
+        "error",
+        4000,
+      );
+      return;
     }
 
-    setLoading(true)
+    setSalvando(true);
+
+    let movimentoCriadoId: string | null = null;
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
-        addNotification('Usuário não autenticado', 'error')
-        return
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        addNotification("Usuário não autenticado.", "error");
+        return;
       }
 
-      // 1. Registra o movimento
-      const { error: movimentoError } = await supabase
-        .from('movimentos_estoque')
-        .insert([
-          {
-            produto_id: produtoSelecionadoId,
-            tipo_movimento: tipoMovimento,
-            quantidade,
-            motivo,
-            usuario_id: userData.user.id,
-          },
-        ])
+      const motivoCompleto = observacao.trim()
+        ? `${motivo} | ${observacao.trim()}`
+        : motivo;
+
+      const { data: movimentoCriado, error: movimentoError } = await supabase
+        .from("movimentos_estoque")
+        .insert({
+          produto_id: produtoSelecionado.id,
+          tipo_movimento: tipoMovimento,
+          quantidade,
+          motivo: motivoCompleto,
+          usuario_id: userData.user.id,
+        })
+        .select("id")
+        .single();
 
       if (movimentoError) {
-        addNotification(movimentoError.message, 'error')
-        return
+        console.error("Erro ao registrar movimento:", movimentoError);
+        addNotification("Não foi possível registrar a movimentação.", "error");
+        return;
       }
 
-      // 2. Atualiza estoque
-      if (produtoSelecionado) {
-        const { error: updateError } = await supabase
-          .from('produtos')
-          .update({ quantidade_atual: novaQuantidade })
-          .eq('id', produtoSelecionadoId)
+      movimentoCriadoId = (movimentoCriado as MovimentoInserido).id;
 
-        if (updateError) {
+      const { data: produtoAtualizado, error: updateError } = await supabase
+        .from("produtos")
+        .update({ quantidade_atual: novaQuantidade })
+        .eq("id", produtoSelecionado.id)
+        .eq("quantidade_atual", estoqueAtual)
+        .select("id, quantidade_atual")
+        .maybeSingle();
+
+      if (updateError || !produtoAtualizado) {
+        console.error(
+          "Falha ao atualizar quantidade; tentando reverter movimento:",
+          updateError,
+        );
+
+        const { error: rollbackError } = await supabase
+          .from("movimentos_estoque")
+          .delete()
+          .eq("id", movimentoCriadoId);
+
+        if (rollbackError) {
+          console.error("Falha ao reverter movimento:", rollbackError);
           addNotification(
-            'Movimento registrado, mas erro ao atualizar quantidade',
-            'warning'
-          )
-          return
+            "Falha crítica: a movimentação foi criada, mas o estoque não foi atualizado. Procure o suporte.",
+            "error",
+            7000,
+          );
+        } else {
+          addNotification(
+            "O estoque foi alterado por outra operação. Atualize a página e tente novamente.",
+            "warning",
+            6000,
+          );
         }
-
-        // 3. Cria alerta se necessário
-        if (novaQuantidade < produtoSelecionado.quantidade_minima) {
-          const tipoAlerta =
-            novaQuantidade === 0 ? 'estoque_critico' : 'estoque_baixo'
-
-          await supabase.from('alertas').insert([
-            {
-              produto_id: produtoSelecionadoId,
-              usuario_id: userData.user.id,
-              tipo_alerta: tipoAlerta,
-              visualizado: false,
-            },
-          ])
-        }
-
-        // 4. Modal de sucesso
-        setResultado({
-          nome: produtoSelecionado.nome,
-          novaQtd: novaQuantidade,
-          tipo: tipoMovimento,
-        })
-        setShowModal(true)
-
-        setTimeout(() => {
-          router.push('/dashboard/estoque')
-        }, 2500)
+        return;
       }
-    } catch (err) {
-      console.error(err)
-      addNotification('Erro ao registrar movimento', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  // ────────────────────────────────────────────────
-  // 🎨 LOADING
-  // ────────────────────────────────────────────────
+      await criarOuAtualizarAlerta(
+        produtoSelecionado.id,
+        userData.user.id,
+        novaQuantidade,
+      );
+
+      setProdutos((itens) =>
+        itens.map((item) =>
+          item.id === produtoSelecionado.id
+            ? { ...item, quantidade_atual: novaQuantidade }
+            : item,
+        ),
+      );
+
+      setResultado({
+        nome: produtoSelecionado.nome,
+        novaQuantidade,
+        tipo: tipoMovimento,
+        motivo,
+      });
+
+      addNotification("Movimentação registrada com sucesso.", "success", 2500);
+    } catch (error) {
+      console.error("Erro inesperado ao registrar movimentação:", error);
+      addNotification("Erro inesperado ao registrar a movimentação.", "error");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const registrarOutro = () => {
+    setResultado(null);
+    setQuantidade(0);
+    setMotivo("");
+    setObservacao("");
+    window.setTimeout(() => quantidadeInputRef.current?.focus(), 100);
+  };
+
   if (loadingProdutos) {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
-        <div className="h-8 w-48 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 space-y-4">
-          <div className="h-20 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-          <div className="h-16 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-          <div className="h-16 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-          <div className="h-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-        </div>
+      <div className="mx-auto max-w-3xl space-y-4 pb-12">
+        <div className="h-24 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+        <div className="h-[520px] animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
       </div>
-    )
+    );
   }
 
-  // ────────────────────────────────────────────────
-  // 🎨 RENDER
-  // ────────────────────────────────────────────────
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-12">
-      {/* ══════════ HEADER ══════════ */}
-      <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard/estoque"
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition group"
+    <div className="mx-auto max-w-3xl space-y-6 pb-12">
+      <PageHeader
+        eyebrow="GESTÃO DE ESTOQUE"
+        title="Nova movimentação"
+        description="Registre uma entrada ou saída e mantenha o saldo do produto atualizado."
+        icon={Package}
+        actions={
+          <Link
+            href="/dashboard/estoque"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            Voltar
+          </Link>
+        }
+      />
+
+      {erroProdutos && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
         >
-          <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400 group-hover:-translate-x-0.5 transition" />
-        </Link>
-        <div className="flex items-center gap-3 flex-1">
-          <div className="hidden sm:flex w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
-            <Boxes className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Novo Movimento
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Registre entrada ou saída de estoque
-            </p>
+          <AlertCircle aria-hidden="true" className="mt-0.5 h-5 w-5" />
+          <div className="flex-1">
+            <p>{erroProdutos}</p>
+            <button
+              type="button"
+              onClick={carregarProdutos}
+              className="mt-2 text-xs font-semibold underline"
+            >
+              Tentar novamente
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* ══════════ TIPO DE MOVIMENTO (TABS GRANDES) ══════════ */}
-        <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-            Tipo de movimento
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setTipoMovimento('entrada')}
-              className={`relative p-4 rounded-xl border-2 transition-all ${
-                tipoMovimento === 'entrada'
-                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md scale-[1.02]'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    tipoMovimento === 'entrada'
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                  }`}
-                >
-                  <ArrowDown className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <p
-                    className={`font-bold text-sm ${
-                      tipoMovimento === 'entrada'
-                        ? 'text-green-900 dark:text-green-100'
-                        : 'text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    Entrada
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Adicionar ao estoque
-                  </p>
-                </div>
-              </div>
-              {tipoMovimento === 'entrada' && (
-                <div className="absolute top-2 right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-3 h-3 text-white" />
-                </div>
-              )}
-            </button>
+        <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <fieldset>
+            <legend className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Tipo de movimentação
+            </legend>
 
-            <button
-              type="button"
-              onClick={() => setTipoMovimento('saida')}
-              className={`relative p-4 rounded-xl border-2 transition-all ${
-                tipoMovimento === 'saida'
-                  ? 'border-red-500 bg-red-50 dark:bg-red-900/20 shadow-md scale-[1.02]'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    tipoMovimento === 'saida'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                  }`}
-                >
-                  <ArrowUp className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <p
-                    className={`font-bold text-sm ${
-                      tipoMovimento === 'saida'
-                        ? 'text-red-900 dark:text-red-100'
-                        : 'text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    Saída
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Retirar do estoque
-                  </p>
-                </div>
-              </div>
-              {tipoMovimento === 'saida' && (
-                <div className="absolute top-2 right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-3 h-3 text-white" />
-                </div>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* ══════════ BUSCA DE PRODUTO ══════════ */}
-        <div className="relative" ref={listaRef}>
-          <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 flex items-center justify-between">
-            <span>Produto *</span>
-            <span className="text-[10px] text-gray-400">
-              <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded font-mono">
-                F2
-              </kbd>{' '}
-              pra buscar
-            </span>
-          </label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              ref={buscaInputRef}
-              type="text"
-              value={produtoBuscaQuery}
-              onChange={(e) => {
-                setProdutoBuscaQuery(e.target.value)
-                setMostrarLista(true)
-                if (!e.target.value) setProdutoSelecionadoId('')
-              }}
-              onFocus={() => setMostrarLista(true)}
-              placeholder="Buscar por nome, SKU ou categoria..."
-              className="w-full pl-10 pr-10 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            />
-            {produtoBuscaQuery && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={limparProduto}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                aria-pressed={tipoMovimento === "entrada"}
+                onClick={() => alterarTipo("entrada")}
+                className={`rounded-xl border p-4 text-left transition-colors ${
+                  tipoMovimento === "entrada"
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                    : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                }`}
               >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Lista de produtos */}
-          {mostrarLista && (
-            <div className="absolute z-20 left-0 right-0 mt-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl max-h-72 overflow-y-auto animate-slideDown">
-              {produtosFiltrados.length === 0 ? (
-                <div className="p-6 text-center">
-                  <Package className="w-8 h-8 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Nenhum produto encontrado
-                  </p>
-                  <Link
-                    href="/dashboard/produtos/novo"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium mt-1 inline-block"
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                      tipoMovimento === "entrada"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                    }`}
                   >
-                    Cadastrar novo produto →
-                  </Link>
+                    <ArrowDownLeft aria-hidden="true" className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      Entrada
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Adicionar unidades ao estoque
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="py-1">
-                  {produtosFiltrados.map((p) => {
-                    const isCritico = p.quantidade_atual === 0
-                    const isBaixo =
-                      p.quantidade_atual > 0 &&
-                      p.quantidade_atual < p.quantidade_minima
+              </button>
+
+              <button
+                type="button"
+                aria-pressed={tipoMovimento === "saida"}
+                onClick={() => alterarTipo("saida")}
+                className={`rounded-xl border p-4 text-left transition-colors ${
+                  tipoMovimento === "saida"
+                    ? "border-gray-500 bg-gray-50 dark:bg-gray-800/60"
+                    : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                      tipoMovimento === "saida"
+                        ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                    }`}
+                  >
+                    <ArrowUpRight aria-hidden="true" className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      Saída
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Retirar unidades do estoque
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </fieldset>
+        </section>
+
+        <section className="space-y-5 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <div ref={listaRef} className="relative">
+            <label
+              htmlFor="produto-busca"
+              className="mb-2 flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+            >
+              <span>Produto *</span>
+              <span className="font-normal normal-case text-gray-400">F2 para buscar</span>
+            </label>
+
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                id="produto-busca"
+                ref={buscaInputRef}
+                type="search"
+                autoComplete="off"
+                value={produtoBusca}
+                onChange={(event) => {
+                  setProdutoBusca(event.target.value);
+                  setMostrarLista(true);
+                  if (!event.target.value) {
+                    setProdutoSelecionadoId("");
+                    setQuantidade(0);
+                  }
+                }}
+                onFocus={() => setMostrarLista(true)}
+                placeholder="Buscar por nome, SKU, marca ou categoria..."
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-10 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+              {produtoBusca && (
+                <button
+                  type="button"
+                  aria-label="Limpar produto selecionado"
+                  onClick={limparProduto}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  <X aria-hidden="true" className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {mostrarLista && (
+              <div className="absolute left-0 right-0 z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                {produtosFiltrados.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <Package
+                      aria-hidden="true"
+                      className="mx-auto mb-2 h-8 w-8 text-gray-300 dark:text-gray-700"
+                    />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhum produto encontrado
+                    </p>
+                    <Link
+                      href="/dashboard/produtos/novo"
+                      className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Cadastrar produto
+                    </Link>
+                  </div>
+                ) : (
+                  produtosFiltrados.map((produto) => {
+                    const atual = Math.max(
+                      normalizarNumero(produto.quantidade_atual),
+                      0,
+                    );
+                    const minimo = Math.max(
+                      normalizarNumero(produto.quantidade_minima),
+                      0,
+                    );
+                    const zerado = atual <= 0;
+                    const baixo = atual > 0 && minimo > 0 && atual < minimo;
+
                     return (
                       <button
-                        key={p.id}
+                        key={produto.id}
                         type="button"
-                        onClick={() => selecionarProduto(p)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left"
+                        onClick={() => selecionarProduto(produto)}
+                        className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-b-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                          <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                          <Package
+                            aria-hidden="true"
+                            className="h-4 w-4 text-gray-500 dark:text-gray-400"
+                          />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
-                              {p.nome}
-                            </p>
-                            {p.sku && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded font-mono">
-                                {p.sku}
-                              </span>
-                            )}
-                          </div>
-                          {p.categoria && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              {p.categoria}
-                            </p>
-                          )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                            {produto.nome}
+                          </p>
+                          <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                            {produto.sku || "Sem SKU"}
+                            {produto.categoria ? ` · ${produto.categoria}` : ""}
+                          </p>
                         </div>
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right">
                           <p
                             className={`text-sm font-bold ${
-                              isCritico
-                                ? 'text-red-600 dark:text-red-400'
-                                : isBaixo
-                                ? 'text-yellow-600 dark:text-yellow-400'
-                                : 'text-green-600 dark:text-green-400'
+                              zerado
+                                ? "text-red-600 dark:text-red-400"
+                                : baixo
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
                             }`}
                           >
-                            {p.quantidade_atual}
+                            {atual}
                           </p>
                           <p className="text-[10px] text-gray-400">em estoque</p>
                         </div>
                       </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Info do produto selecionado */}
-          {produtoSelecionado && !mostrarLista && (
-            <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2 text-xs">
-                  <Package className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-gray-600 dark:text-gray-400">Estoque atual:</span>
-                  <span
-                    className={`font-bold text-sm ${
-                      produtoSelecionado.quantidade_atual <
-                      produtoSelecionado.quantidade_minima
-                        ? 'text-red-600 dark:text-red-400'
-                        : 'text-green-600 dark:text-green-400'
-                    }`}
-                  >
-                    {produtoSelecionado.quantidade_atual}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <TrendingDown className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="text-gray-600 dark:text-gray-400">Mínimo:</span>
-                  <span className="font-bold text-sm text-gray-700 dark:text-gray-300">
-                    {produtoSelecionado.quantidade_minima}
-                  </span>
-                </div>
-                {produtoSelecionado.categoria && (
-                  <span className="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full font-semibold">
-                    {produtoSelecionado.categoria}
-                  </span>
+                    );
+                  })
                 )}
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* ══════════ QUANTIDADE ══════════ */}
-        {produtoSelecionado && (
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-              Quantidade *
-            </label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setQuantidade(Math.max(0, quantidade - 1))}
-                disabled={quantidade <= 0}
-                className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition"
-              >
-                <Minus className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-              </button>
-              <input
-                ref={quantidadeInputRef}
-                type="number"
-                value={quantidade || ''}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value) || 0
-                  setQuantidade(Math.max(0, Math.min(val, maxQuantidade)))
-                }}
-                min="0"
-                max={maxQuantidade === Infinity ? undefined : maxQuantidade}
-                placeholder="0"
-                className={`flex-1 text-center text-2xl font-bold py-3 bg-white dark:bg-gray-900 border-2 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition ${
-                  quantidadeInvalida
-                    ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                    : 'border-gray-200 dark:border-gray-700 focus:ring-blue-500 focus:border-transparent'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setQuantidade(Math.min(maxQuantidade, quantidade + 1))
-                }
-                disabled={quantidade >= maxQuantidade}
-                className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition"
-              >
-                <Plus className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-              </button>
-            </div>
+            {produtoSelecionado && !mostrarLista && (
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/15 sm:grid-cols-3">
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 dark:text-gray-400">
+                    Estoque atual
+                  </p>
+                  <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">
+                    {estoqueAtual}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-gray-500 dark:text-gray-400">
+                    Estoque mínimo
+                  </p>
+                  <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">
+                    {estoqueMinimo}
+                  </p>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <p className="text-[10px] uppercase text-gray-500 dark:text-gray-400">
+                    Categoria
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">
+                    {produtoSelecionado.categoria || "Sem categoria"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
 
-            {/* Sugestões rápidas */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              {[1, 5, 10, 50, 100].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() =>
-                    setQuantidade(Math.min(maxQuantidade, quantidade + n))
-                  }
-                  disabled={quantidade + n > maxQuantidade}
-                  className="px-3 py-1 text-xs font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 rounded-full transition"
+          {produtoSelecionado && (
+            <>
+              <div>
+                <label
+                  htmlFor="quantidade"
+                  className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400"
                 >
-                  +{n}
-                </button>
-              ))}
-              {tipoMovimento === 'entrada' && quantidadeParaRepor > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setQuantidade(quantidadeParaRepor)}
-                  className="flex items-center gap-1 px-3 py-1 text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-500 hover:shadow-md text-white rounded-full transition"
-                >
-                  <Zap className="w-3 h-3" />
-                  Repor mínimo ({quantidadeParaRepor})
-                </button>
-              )}
-              {tipoMovimento === 'saida' &&
-                produtoSelecionado.quantidade_atual > 0 && (
+                  Quantidade *
+                </label>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      setQuantidade(produtoSelecionado.quantidade_atual)
-                    }
-                    className="px-3 py-1 text-xs font-bold bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 rounded-full transition"
+                    aria-label="Diminuir quantidade"
+                    onClick={() => setQuantidade((valor) => Math.max(0, valor - 1))}
+                    disabled={quantidade <= 0 || salvando}
+                    className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 disabled:opacity-40 dark:bg-gray-800"
                   >
-                    Tudo ({produtoSelecionado.quantidade_atual})
+                    <Minus aria-hidden="true" className="h-5 w-5" />
                   </button>
-                )}
-            </div>
+                  <input
+                    id="quantidade"
+                    ref={quantidadeInputRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    max={
+                      tipoMovimento === "saida" ? estoqueAtual : undefined
+                    }
+                    value={quantidade || ""}
+                    onChange={(event) => {
+                      const valor = Number.parseInt(event.target.value, 10);
+                      setQuantidade(Number.isFinite(valor) ? Math.max(0, valor) : 0);
+                    }}
+                    className={`min-w-0 flex-1 rounded-xl border-2 bg-white py-3 text-center text-2xl font-bold text-gray-900 outline-none focus:ring-2 dark:bg-gray-900 dark:text-white ${
+                      quantidadeInvalida
+                        ? "border-red-400 focus:ring-red-500 dark:border-red-700"
+                        : "border-gray-200 focus:ring-emerald-500 dark:border-gray-700"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Aumentar quantidade"
+                    onClick={() =>
+                      setQuantidade((valor) =>
+                        Math.min(maxQuantidade, valor + 1),
+                      )
+                    }
+                    disabled={quantidade >= maxQuantidade || salvando}
+                    className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 disabled:opacity-40 dark:bg-gray-800"
+                  >
+                    <Plus aria-hidden="true" className="h-5 w-5" />
+                  </button>
+                </div>
 
-            {/* Avisos */}
-            {quantidadeInvalida && (
-              <div className="mt-3 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm">
-                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold text-red-900 dark:text-red-100">
-                    Quantidade insuficiente
-                  </p>
-                  <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
-                    Disponível: {produtoSelecionado.quantidade_atual} unidades
-                  </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[1, 5, 10, 50].map((incremento) => (
+                    <button
+                      key={incremento}
+                      type="button"
+                      onClick={() =>
+                        setQuantidade((valor) =>
+                          Math.min(maxQuantidade, valor + incremento),
+                        )
+                      }
+                      disabled={quantidade + incremento > maxQuantidade || salvando}
+                      className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      +{incremento}
+                    </button>
+                  ))}
+                  {tipoMovimento === "entrada" && quantidadeParaRepor > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQuantidade(quantidadeParaRepor)}
+                      disabled={salvando}
+                      className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                    >
+                      Repor mínimo ({quantidadeParaRepor})
+                    </button>
+                  )}
+                  {tipoMovimento === "saida" && estoqueAtual > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQuantidade(estoqueAtual)}
+                      disabled={salvando}
+                      className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+                    >
+                      Todo o estoque ({estoqueAtual})
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
 
-            {ficaraAbaixoDoMinimo && !quantidadeInvalida && quantidade > 0 && (
-              <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm">
-                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold text-amber-900 dark:text-amber-100">
-                    Estoque ficará abaixo do mínimo
-                  </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                    Sobrará apenas {novaQuantidade} unidades (mínimo:{' '}
-                    {produtoSelecionado.quantidade_minima})
+              {quantidadeInvalida && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4" />
+                  <p>
+                    Quantidade insuficiente. Existem {estoqueAtual} unidades
+                    disponíveis.
                   </p>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
 
-        {/* ══════════ PREVIEW DO MOVIMENTO ══════════ */}
-        {produtoSelecionado && quantidade > 0 && !quantidadeInvalida && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
-              Preview do movimento
-            </p>
-            <div className="flex items-center justify-center gap-4">
-              <div className="text-center">
-                <p className="text-[10px] text-gray-400 uppercase font-bold">
-                  Antes
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {produtoSelecionado.quantidade_atual}
-                </p>
-              </div>
-              <div className="flex-1 max-w-[100px]">
-                <div
-                  className={`h-1 rounded-full ${
-                    tipoMovimento === 'entrada' ? 'bg-green-500' : 'bg-red-500'
-                  }`}
-                />
-                <p
-                  className={`text-center text-xs font-bold mt-1 ${
-                    tipoMovimento === 'entrada'
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}
+              {ficaraAbaixoDoMinimo && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4" />
+                  <p>
+                    O estoque ficará com {novaQuantidade} unidades, abaixo do
+                    mínimo de {estoqueMinimo}.
+                  </p>
+                </div>
+              )}
+
+              <fieldset>
+                <legend className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Motivo *
+                </legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {MOTIVOS[tipoMovimento].map((opcao) => (
+                    <button
+                      key={opcao.valor}
+                      type="button"
+                      aria-pressed={motivo === opcao.valor}
+                      onClick={() => setMotivo(opcao.valor)}
+                      className={`rounded-lg border px-3 py-2.5 text-left text-xs font-semibold transition-colors ${
+                        motivo === opcao.valor
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+                          : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      {opcao.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div>
+                <label
+                  htmlFor="observacao"
+                  className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400"
                 >
-                  {tipoMovimento === 'entrada' ? '+' : '-'}
-                  {quantidade}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] text-gray-400 uppercase font-bold">
-                  Depois
-                </p>
-                <p
-                  className={`text-2xl font-bold ${
-                    novaQuantidade < produtoSelecionado.quantidade_minima
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-green-600 dark:text-green-400'
-                  }`}
-                >
-                  {novaQuantidade}
-                </p>
-              </div>
-            </div>
-            {valorMovimento > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Valor estimado:{' '}
-                  <span className="font-bold text-gray-900 dark:text-white">
-                    R${' '}
-                    {valorMovimento.toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                    })}
+                  Observação{" "}
+                  <span className="font-normal normal-case text-gray-400">
+                    (opcional)
                   </span>
+                </label>
+                <textarea
+                  id="observacao"
+                  value={observacao}
+                  maxLength={300}
+                  onChange={(event) => setObservacao(event.target.value)}
+                  placeholder="Adicione detalhes sobre esta movimentação..."
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+                <p className="mt-1 text-right text-[10px] text-gray-400">
+                  {observacao.length}/300
                 </p>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* ══════════ MOTIVO ══════════ */}
-        {produtoSelecionado && (
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-              Motivo <span className="text-gray-400 normal-case font-normal">(opcional)</span>
-            </label>
+              {quantidade > 0 && !quantidadeInvalida && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Resultado da movimentação
+                  </p>
+                  <div className="flex items-center justify-center gap-5">
+                    <div className="text-center">
+                      <p className="text-[10px] uppercase text-gray-400">Antes</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {estoqueAtual}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-sm font-bold ${
+                          tipoMovimento === "entrada"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {tipoMovimento === "entrada" ? "+" : "-"}
+                        {quantidade}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] uppercase text-gray-400">Depois</p>
+                      <p
+                        className={`text-2xl font-bold ${
+                          estoqueMinimo > 0 && novaQuantidade < estoqueMinimo
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {novaQuantidade}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
 
-            {/* Chips de motivos rápidos */}
-            <div className="flex flex-wrap gap-2 mb-2">
-              {MOTIVOS_RAPIDOS[tipoMovimento].map((m) => (
-                <button
-                  key={m.valor}
-                  type="button"
-                  onClick={() => setMotivo(m.valor)}
-                  className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${
-                    motivo === m.valor
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Adicione detalhes ou observações..."
-              rows={2}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
-            />
-          </div>
-        )}
-
-        {/* ══════════ AÇÕES ══════════ */}
-        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Link
             href="/dashboard/estoque"
-            className="flex-1 sm:flex-initial text-center py-3 px-6 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition"
+            className="rounded-xl bg-gray-100 px-6 py-3 text-center text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={
-              loading ||
-              !produtoSelecionadoId ||
+              salvando ||
+              !produtoSelecionado ||
               quantidade <= 0 ||
-              !!quantidadeInvalida
+              quantidadeInvalida ||
+              !motivo
             }
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-6 text-white font-bold rounded-xl transition shadow-lg ${
-              tipoMovimento === 'entrada'
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-green-500/30 shadow-green-500/20'
-                : 'bg-gradient-to-r from-red-500 to-rose-600 hover:shadow-red-500/30 shadow-red-500/20'
-            } disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none`}
+            className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              tipoMovimento === "entrada"
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+            }`}
           >
-            {loading ? (
+            {salvando ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
                 Registrando...
               </>
             ) : (
               <>
-                {tipoMovimento === 'entrada' ? (
-                  <ArrowDown className="w-5 h-5" />
+                {tipoMovimento === "entrada" ? (
+                  <ArrowDownLeft aria-hidden="true" className="h-5 w-5" />
                 ) : (
-                  <ArrowUp className="w-5 h-5" />
+                  <ArrowUpRight aria-hidden="true" className="h-5 w-5" />
                 )}
-                Registrar {tipoMovimento === 'entrada' ? 'Entrada' : 'Saída'}
+                Registrar {tipoMovimento === "entrada" ? "entrada" : "saída"}
               </>
             )}
           </button>
         </div>
       </form>
 
-      {/* ══════════ MODAL DE SUCESSO ══════════ */}
-      {showModal && resultado && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-8 text-center animate-slideUp">
-            <div className="inline-flex w-16 h-16 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 items-center justify-center mb-4 shadow-lg shadow-green-500/30">
-              <CheckCircle2 className="w-9 h-9 text-white" />
+      {resultado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="movimento-sucesso-titulo"
+            className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-7 text-center shadow-2xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+              <CheckCircle2
+                aria-hidden="true"
+                className="h-7 w-7 text-emerald-600 dark:text-emerald-400"
+              />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
-              Movimento registrado! 🎉
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-              {resultado.tipo === 'entrada' ? 'Entrada' : 'Saída'} de{' '}
-              <strong>{resultado.nome}</strong> com sucesso
+            <h2
+              id="movimento-sucesso-titulo"
+              className="text-xl font-bold text-gray-900 dark:text-white"
+            >
+              Movimentação registrada
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {resultado.tipo === "entrada" ? "Entrada" : "Saída"} de{" "}
+              <strong>{resultado.nome}</strong> registrada como{" "}
+              <strong>{resultado.motivo}</strong>.
             </p>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full">
-              <Sparkles className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Novo estoque:{' '}
-                <strong className="text-gray-900 dark:text-white">
-                  {resultado.novaQtd} un
-                </strong>
-              </span>
+            <div className="mt-4 rounded-xl bg-gray-100 px-4 py-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Novo saldo
+              </p>
+              <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+                {resultado.novaQuantidade} un
+              </p>
             </div>
-            <p className="text-xs text-gray-400 mt-4">
-              Redirecionando para o estoque...
-            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={registrarOutro}
+                className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Registrar outro
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/estoque")}
+                className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Ver movimentações
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        .animate-slideDown {
-          animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .animate-slideUp {
-          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.2s ease-out;
-        }
-      `}</style>
     </div>
-  )
+  );
+}
+
+function LoadingMovimento() {
+  return (
+    <div className="mx-auto flex max-w-3xl items-center justify-center py-20">
+      <Loader2
+        aria-hidden="true"
+        className="h-8 w-8 animate-spin text-emerald-600"
+      />
+      <span className="sr-only">Carregando formulário</span>
+    </div>
+  );
 }
 
 export default function NovoMovimentoPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="max-w-2xl mx-auto p-8 text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" />
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingMovimento />}>
       <NovoMovimentoContent />
     </Suspense>
-  )
+  );
 }

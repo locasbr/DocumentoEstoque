@@ -4,7 +4,6 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Produto } from '@/lib/types'
 import Alert from '@/components/alerts'
@@ -424,7 +423,6 @@ export default function PDVPage() {
           marca: '',
           descricao: '',
           categoria: '',
-          imagem_url: '',
         })
         setModalCadastroRapido(true)
         addNotification(
@@ -758,7 +756,6 @@ export default function PDVPage() {
           categoria: cadastroCategoria,
           preco_venda: preco,
           quantidade_atual: quantidade,
-          imagem_url: dadosProdutoAPI?.imagem_url || '',
           ativo: true,
           usuario_id: userData.user.id,
           quantidade_minima: 10,
@@ -1878,21 +1875,7 @@ export default function PDVPage() {
                 />
               </div>
 
-              {dadosProdutoAPI.imagem_url && (
-                <div>
-                  <label className="text-xs font-medium text-gray-500">
-                    Imagem
-                  </label>
-                  <Image
-                    src={dadosProdutoAPI.imagem_url}
-                    alt=""
-                    width={96}
-                    height={96}
-                    className="w-24 h-24 object-contain rounded"
-                    unoptimized
-                  />
-                </div>
-              )}
+
             </div>
 
             <div className="flex gap-3 mt-6">
