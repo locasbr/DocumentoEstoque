@@ -10,10 +10,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
+  CalendarCheck2,
   CheckCircle2,
   CreditCard,
   Loader2,
   MessageCircle,
+  QrCode,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Zap,
@@ -24,7 +27,7 @@ import { supabase } from "@/lib/supabase";
 
 type PlanoDisponivel = "iniciante" | "profissional";
 type TipoPlanoInterno = PlanoDisponivel | "negocio";
-type TipoPagamentoAtual = "pix" | "cartao" | null;
+type TipoPagamento = "avulso" | "assinatura";
 
 interface Beneficio {
   texto: string;
@@ -44,6 +47,7 @@ interface Plano {
 
 interface RespostaPagamento {
   init_point?: string;
+  subscription_id?: string;
   error?: string;
 }
 
@@ -112,15 +116,12 @@ function AssinarContent() {
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState("");
-  const [tipoPlanoAtual, setTipoPlanoAtual] =
-    useState<TipoPlanoInterno | null>(null);
-  const [tipoPagamentoAtual, setTipoPagamentoAtual] =
-    useState<TipoPagamentoAtual>(null);
+  const [tipoPlanoAtual, setTipoPlanoAtual] = useState<TipoPlanoInterno | null>(null);
   const [planoAtivo, setPlanoAtivo] = useState(false);
-  const [planoSelecionado, setPlanoSelecionado] =
-    useState<PlanoDisponivel>("profissional");
-  const [planoIndisponivelNaUrl, setPlanoIndisponivelNaUrl] =
-    useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [planoSelecionado, setPlanoSelecionado] = useState<PlanoDisponivel>("profissional");
+  const [tipoPagamento, setTipoPagamento] = useState<TipoPagamento>("avulso");
+  const [planoIndisponivelNaUrl, setPlanoIndisponivelNaUrl] = useState(false);
 
   const statusPagamento = searchParams.get("pagamento");
   const planoParam = searchParams.get("plano");
@@ -146,7 +147,7 @@ function AssinarContent() {
 
         const { data: perfil, error: perfilError } = await supabase
           .from("perfis")
-          .select("plano, tipo_plano, tipo_pagamento")
+          .select("plano, tipo_plano, subscription_id")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -161,15 +162,13 @@ function AssinarContent() {
           ? perfil.tipo_plano
           : null;
 
-        const pagamentoAtual: TipoPagamentoAtual =
-          perfil?.tipo_pagamento === "pix" ||
-          perfil?.tipo_pagamento === "cartao"
-            ? perfil.tipo_pagamento
-            : null;
-
         setTipoPlanoAtual(planoAtual);
-        setTipoPagamentoAtual(pagamentoAtual);
         setPlanoAtivo(perfil?.plano === "ativo");
+        setSubscriptionId(
+          typeof perfil?.subscription_id === "string" && perfil.subscription_id.trim()
+            ? perfil.subscription_id
+            : null,
+        );
         setPlanoIndisponivelNaUrl(planoParam === "negocio");
 
         if (isPlanoDisponivel(planoParam)) {
@@ -180,15 +179,11 @@ function AssinarContent() {
           setPlanoSelecionado("profissional");
         }
 
-        if (
-          perfil?.plano === "ativo" &&
-          planoAtual === "negocio" &&
-          !querRenovar
-        ) {
+        if (perfil?.plano === "ativo" && planoAtual === "negocio" && !querRenovar) {
           router.replace("/dashboard");
         }
       } catch (error: unknown) {
-        console.error("Erro ao carregar assinatura:", error);
+        console.error("Erro ao carregar planos:", error);
         if (ativo) setErro("Ocorreu um erro ao carregar os planos.");
       } finally {
         if (ativo) setLoading(false);
@@ -196,53 +191,53 @@ function AssinarContent() {
     }
 
     void verificar();
-
     return () => {
       ativo = false;
     };
   }, [planoParam, querRenovar, router]);
 
   const planoExibido = useMemo(
-    () =>
-      PLANOS.find((plano) => plano.id === planoSelecionado) ?? PLANOS[1],
+    () => PLANOS.find((plano) => plano.id === planoSelecionado) ?? PLANOS[1],
     [planoSelecionado],
   );
 
   const contaNegocioLegada = tipoPlanoAtual === "negocio";
   const planoSelecionadoEhAtual = tipoPlanoAtual === planoSelecionado;
-  // const isUpgrade =
-  //   tipoPlanoAtual === "iniciante" && planoSelecionado === "profissional";
   const estaTrocandoPlano =
     tipoPlanoAtual !== null && tipoPlanoAtual !== planoSelecionado;
-
-  // Preserva somente o tratamento das assinaturas antigas já existentes.
-  // Nenhuma nova compra será enviada para a rota de assinatura.
-  const assinaturaRecorrenteLegadaAtiva =
-    planoAtivo &&
-    tipoPagamentoAtual === "cartao" &&
-    tipoPlanoAtual !== "negocio";
-
-  const renovacaoAutomaticaLegadaAtiva =
-    assinaturaRecorrenteLegadaAtiva && planoSelecionadoEhAtual;
-
+  const assinaturaRecorrenteAtiva = planoAtivo && Boolean(subscriptionId);
+  const assinaturaAtualSelecionada =
+    assinaturaRecorrenteAtiva && planoSelecionadoEhAtual;
   const downgradeProfissionalParaIniciante =
     planoAtivo &&
     tipoPlanoAtual === "profissional" &&
     planoSelecionado === "iniciante";
+  const trocaComAssinaturaAtiva =
+    assinaturaRecorrenteAtiva && estaTrocandoPlano;
+  const periodoAvulsoAtivo = planoAtivo && !subscriptionId;
 
-  const trocaComAssinaturaRecorrenteLegada =
-    assinaturaRecorrenteLegadaAtiva && estaTrocandoPlano;
+  const assinaturaPrecisaSuporte =
+    tipoPagamento === "assinatura" &&
+    (contaNegocioLegada ||
+      downgradeProfissionalParaIniciante ||
+      trocaComAssinaturaAtiva ||
+      periodoAvulsoAtivo);
 
-  const suporteRequerido =
-    contaNegocioLegada ||
-    downgradeProfissionalParaIniciante ||
-    trocaComAssinaturaRecorrenteLegada;
+  const avulsoPrecisaSuporte =
+    tipoPagamento === "avulso" &&
+    (contaNegocioLegada ||
+      downgradeProfissionalParaIniciante ||
+      assinaturaRecorrenteAtiva);
+
+  const suporteRequerido = assinaturaPrecisaSuporte || avulsoPrecisaSuporte;
 
   const mensagemSuporte = contaNegocioLegada
     ? "Olá, quero gerenciar meu plano Negócio legado no EstoqueSystem."
     : downgradeProfissionalParaIniciante
-      ? "Olá, quero mudar do plano Profissional para o Iniciante ao final do período já pago."
-      : "Olá, quero solicitar uma mudança de plano no EstoqueSystem.";
+      ? "Olá, quero mudar do plano Profissional para o Iniciante ao final do período atual."
+      : assinaturaRecorrenteAtiva
+        ? "Olá, já tenho uma assinatura recorrente e quero alterar meu plano sem gerar cobrança duplicada."
+        : "Olá, tenho um período avulso ativo e quero migrar para assinatura automática sem perder os dias já pagos.";
 
   const linkSuporte = `https://wa.me/${WHATSAPP_SUPORTE}?text=${encodeURIComponent(
     mensagemSuporte,
@@ -256,12 +251,20 @@ function AssinarContent() {
       return;
     }
 
-    if (renovacaoAutomaticaLegadaAtiva) {
-      setErro("Sua assinatura atual possui renovação automática.");
+    if (tipoPagamento === "assinatura" && assinaturaAtualSelecionada) {
+      setErro("Este plano já possui assinatura mensal automática.");
       return;
     }
 
-    if (planoSelecionadoEhAtual && !querRenovar) return;
+    if (
+      tipoPagamento === "avulso" &&
+      planoSelecionadoEhAtual &&
+      planoAtivo &&
+      !querRenovar
+    ) {
+      setErro("Seu plano ainda está ativo. Use a opção de renovação quando quiser adicionar mais 30 dias.");
+      return;
+    }
 
     setProcessando(true);
     setErro("");
@@ -277,7 +280,12 @@ function AssinarContent() {
         return;
       }
 
-      const response = await fetch("/api/pagamento/criar", {
+      const endpoint =
+        tipoPagamento === "assinatura"
+          ? "/api/pagamento/assinatura"
+          : "/api/pagamento/criar";
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -287,7 +295,6 @@ function AssinarContent() {
       });
 
       let data: RespostaPagamento;
-
       try {
         data = (await response.json()) as RespostaPagamento;
       } catch {
@@ -296,7 +303,12 @@ function AssinarContent() {
       }
 
       if (!response.ok || !data.init_point) {
-        setErro(data.error || "Não foi possível criar o pagamento.");
+        setErro(
+          data.error ||
+            (tipoPagamento === "assinatura"
+              ? "Não foi possível criar a assinatura."
+              : "Não foi possível criar o pagamento."),
+        );
         return;
       }
 
@@ -308,15 +320,27 @@ function AssinarContent() {
       setProcessando(false);
     }
   }, [
+    assinaturaAtualSelecionada,
+    planoAtivo,
     planoSelecionado,
     planoSelecionadoEhAtual,
     processando,
     querRenovar,
-    renovacaoAutomaticaLegadaAtiva,
     suporteRequerido,
+    tipoPagamento,
   ]);
 
   if (loading) return <Loading />;
+
+  const textoBotao = processando
+    ? tipoPagamento === "assinatura"
+      ? "Criando assinatura..."
+      : "Criando pagamento..."
+    : tipoPagamento === "assinatura"
+      ? `Assinar ${planoExibido.nome} por R$ ${formatarPreco(planoExibido.preco)}/mês`
+      : querRenovar && planoSelecionadoEhAtual
+        ? `Renovar ${planoExibido.nome} por R$ ${formatarPreco(planoExibido.preco)}`
+        : `Pagar R$ ${formatarPreco(planoExibido.preco)} por 30 dias`;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8 dark:bg-gray-950 md:py-12">
@@ -326,14 +350,16 @@ function AssinarContent() {
             O pagamento não foi concluído. Revise os dados e tente novamente.
           </Aviso>
         )}
-
         {statusPagamento === "pendente" && (
           <Aviso tipo="aviso">
-            O pagamento está pendente. O acesso será atualizado após a
-            confirmação.
+            O pagamento está pendente. O acesso será atualizado após a confirmação.
           </Aviso>
         )}
-
+        {statusPagamento === "sucesso" && (
+          <Aviso tipo="sucesso">
+            Pagamento recebido. O acesso será confirmado pelo Mercado Pago.
+          </Aviso>
+        )}
         {(erro || planoIndisponivelNaUrl) && (
           <Aviso tipo="info">
             {erro ||
@@ -359,19 +385,15 @@ function AssinarContent() {
             Escolha o nível de controle ideal
           </h1>
           <p className="mt-4 text-base leading-relaxed text-gray-600 dark:text-gray-400 md:text-lg">
-            Comece organizando o estoque e avance quando precisar de validade,
-            relatórios completos e recursos inteligentes.
+            Escolha entre pagar por 30 dias ou ativar a renovação mensal automática.
           </p>
         </header>
 
-        <section
-          aria-label="Planos disponíveis"
-          className="grid gap-6 md:grid-cols-2"
-        >
+        <section aria-label="Planos disponíveis" className="grid gap-6 md:grid-cols-2">
           {PLANOS.map((plano) => {
             const Icon = plano.icon;
             const selecionado = planoSelecionado === plano.id;
-            const atual = tipoPlanoAtual === plano.id && !querRenovar;
+            const atual = tipoPlanoAtual === plano.id && planoAtivo;
 
             return (
               <button
@@ -403,7 +425,6 @@ function AssinarContent() {
                     Mais escolhido
                   </span>
                 )}
-
                 {atual && (
                   <span className="absolute right-5 top-5 rounded-full bg-blue-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                     Plano atual
@@ -435,16 +456,13 @@ function AssinarContent() {
                     {formatarPreco(plano.preco)}
                   </span>
                   <span className="mb-1 text-sm text-gray-500 dark:text-gray-400">
-                    /30 dias
+                    /mês
                   </span>
                 </div>
 
                 <ul className="space-y-3">
                   {plano.beneficios.map((beneficio) => (
-                    <li
-                      key={beneficio.texto}
-                      className="flex items-start gap-2.5"
-                    >
+                    <li key={beneficio.texto} className="flex items-start gap-2.5">
                       {beneficio.ia ? (
                         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                       ) : (
@@ -469,73 +487,103 @@ function AssinarContent() {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             Forma de pagamento
           </h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Escolha como prefere manter o acesso ao EstoqueSystem.
+          </p>
 
-          {!contaNegocioLegada && !renovacaoAutomaticaLegadaAtiva && (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-800 dark:bg-emerald-900/15">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
-                  <CreditCard aria-hidden="true" className="h-5 w-5" />
-                </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <OpcaoPagamento
+              selecionado={tipoPagamento === "avulso"}
+              onClick={() => {
+                setTipoPagamento("avulso");
+                setErro("");
+              }}
+              icon={QrCode}
+              titulo="Pagamento avulso"
+              descricao="Pague por 30 dias. Cartão, Pix, boleto e outros meios no Mercado Pago."
+              destaque="Sem renovação automática"
+              cor="emerald"
+            />
 
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-gray-900 dark:text-white">
-                    Pagamento seguro pelo Mercado Pago
-                  </p>
-                  <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                    Na próxima tela, escolha cartão, Pix, boleto ou outro meio
-                    disponível.
-                  </p>
+            <OpcaoPagamento
+              selecionado={tipoPagamento === "assinatura"}
+              onClick={() => {
+                setTipoPagamento("assinatura");
+                setErro("");
+              }}
+              icon={CreditCard}
+              titulo="Assinatura mensal"
+              descricao="Cobrança recorrente mensal pelo Mercado Pago."
+              destaque="Renovação automática"
+              cor="violet"
+            />
+          </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {["Cartão", "Pix", "Boleto"].map((forma) => (
-                      <span
-                        key={forma}
-                        className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm dark:bg-gray-900 dark:text-emerald-300"
-                      >
-                        {forma}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+          <div
+            className={`mt-5 rounded-2xl border p-5 ${
+              tipoPagamento === "assinatura"
+                ? "border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-900/15"
+                : "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/15"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${
+                  tipoPagamento === "assinatura" ? "bg-violet-600" : "bg-emerald-600"
+                }`}
+              >
+                {tipoPagamento === "assinatura" ? (
+                  <RefreshCw className="h-5 w-5" />
+                ) : (
+                  <CalendarCheck2 className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 dark:text-white">
+                  {tipoPagamento === "assinatura"
+                    ? "Assinatura com renovação automática"
+                    : "Pagamento único por 30 dias"}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                  {tipoPagamento === "assinatura"
+                    ? "Após a confirmação, novas cobranças serão feitas mensalmente até o cancelamento."
+                    : "Após a aprovação, o plano fica ativo por 30 dias e não será renovado automaticamente."}
+                </p>
               </div>
             </div>
-          )}
+          </div>
 
           {suporteRequerido ? (
-            <Link
-              href={linkSuporte}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white hover:bg-emerald-700"
-            >
-              <MessageCircle className="h-5 w-5" />
-              Solicitar mudança pelo WhatsApp
-            </Link>
-          ) : renovacaoAutomaticaLegadaAtiva ? (
-            <div className="mt-6 rounded-xl bg-emerald-100 px-5 py-4 text-center text-base font-bold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Sua assinatura atual possui renovação automática
+            <div className="mt-6 space-y-3">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                {tipoPagamento === "assinatura" && periodoAvulsoAtivo
+                  ? "Esta conta já possui um período avulso ativo. A migração para assinatura precisa ser ajustada para não perder os dias pagos."
+                  : "Esta alteração precisa de atendimento para evitar perda de período ou cobrança duplicada."}
+              </div>
+              <Link
+                href={linkSuporte}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white hover:bg-emerald-700"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Solicitar alteração pelo WhatsApp
+              </Link>
+            </div>
+          ) : assinaturaAtualSelecionada && tipoPagamento === "assinatura" ? (
+            <div className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-emerald-100 px-5 py-4 text-center text-base font-bold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+              <RefreshCw className="h-5 w-5" />
+              Sua assinatura já é renovada automaticamente
             </div>
           ) : (
             <button
               type="button"
               onClick={() => void handlePagar()}
-              disabled={
-                processando || (planoSelecionadoEhAtual && !querRenovar)
-              }
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              disabled={processando}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-base font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-500"
             >
               {processando && <Loader2 className="h-5 w-5 animate-spin" />}
-              {processando
-                ? "Processando..."
-                : planoSelecionadoEhAtual && !querRenovar
-                  ? "Este é seu plano atual"
-                  : querRenovar && planoSelecionadoEhAtual
-                    ? `Renovar ${planoExibido.nome} por R$ ${formatarPreco(
-                        planoExibido.preco,
-                      )}`
-                    : `Continuar com ${planoExibido.nome} por R$ ${formatarPreco(
-                        planoExibido.preco,
-                      )}`}
+              {textoBotao}
             </button>
           )}
 
@@ -546,14 +594,16 @@ function AssinarContent() {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              30 dias de acesso após a aprovação
+              {tipoPagamento === "assinatura"
+                ? "Renovação automática mensal"
+                : "30 dias após a aprovação"}
             </span>
           </div>
 
           <div className="mt-6 border-t border-gray-100 pt-5 text-center dark:border-gray-800">
             <Link
               href={`https://wa.me/${WHATSAPP_SUPORTE}?text=${encodeURIComponent(
-                "Tenho dúvidas sobre os planos do EstoqueSystem.",
+                "Tenho dúvidas sobre os pagamentos do EstoqueSystem.",
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -567,19 +617,11 @@ function AssinarContent() {
 
         <footer className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-gray-500 dark:text-gray-400">
           Ao continuar, você concorda com os{" "}
-          <Link
-            href="/termos"
-            target="_blank"
-            className="text-emerald-600 hover:underline dark:text-emerald-400"
-          >
+          <Link href="/termos" target="_blank" className="text-emerald-600 hover:underline dark:text-emerald-400">
             Termos de Uso
           </Link>{" "}
           e com a{" "}
-          <Link
-            href="/privacidade"
-            target="_blank"
-            className="text-emerald-600 hover:underline dark:text-emerald-400"
-          >
+          <Link href="/privacidade" target="_blank" className="text-emerald-600 hover:underline dark:text-emerald-400">
             Política de Privacidade
           </Link>
           .
@@ -589,11 +631,65 @@ function AssinarContent() {
   );
 }
 
+function OpcaoPagamento({
+  selecionado,
+  onClick,
+  icon: Icon,
+  titulo,
+  descricao,
+  destaque,
+  cor,
+}: {
+  selecionado: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+  titulo: string;
+  descricao: string;
+  destaque: string;
+  cor: "emerald" | "violet";
+}) {
+  const selecionadoStyle =
+    cor === "violet"
+      ? "border-violet-500 bg-violet-50 shadow-md dark:bg-violet-900/20"
+      : "border-emerald-500 bg-emerald-50 shadow-md dark:bg-emerald-900/20";
+  const iconStyle =
+    cor === "violet"
+      ? "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300"
+      : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selecionado}
+      className={`relative rounded-2xl border-2 p-4 text-left transition ${
+        selecionado
+          ? selecionadoStyle
+          : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+      }`}
+    >
+      {selecionado && (
+        <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-emerald-600" />
+      )}
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconStyle}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="mt-3 font-bold text-gray-900 dark:text-white">{titulo}</p>
+      <p className="mt-1 min-h-14 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        {descricao}
+      </p>
+      <span className="mt-3 inline-flex rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-gray-700 shadow-sm dark:bg-gray-900 dark:text-gray-300">
+        {destaque}
+      </span>
+    </button>
+  );
+}
+
 function Aviso({
   tipo,
   children,
 }: {
-  tipo: "erro" | "aviso" | "info";
+  tipo: "erro" | "aviso" | "info" | "sucesso";
   children: ReactNode;
 }) {
   const estilo =
@@ -601,11 +697,13 @@ function Aviso({
       ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
       : tipo === "aviso"
         ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
-        : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300";
+        : tipo === "sucesso"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+          : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300";
 
   return (
     <div
-      role={tipo === "aviso" ? "status" : "alert"}
+      role={tipo === "aviso" || tipo === "sucesso" ? "status" : "alert"}
       className={`mb-6 flex items-start gap-3 rounded-xl border p-4 text-sm ${estilo}`}
     >
       <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
