@@ -1,2008 +1,1253 @@
-// src/app/dashboard/pdv/page.tsx
-'use client'
+"use client";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Produto } from '@/lib/types'
-import Alert from '@/components/alerts'
-import CupomImpressao from '@/components/cupom-impressao'
-import BarcodeScanner from '@/components/barcode-scanner'
-import BotaoIA from '@/components/botao-ia'
-import { buscarProdutoPorBarcode } from '@/lib/barcode-api'
-import { useCupom } from '@/hooks/useCupom'
-import { useIAProduto } from '@/hooks/useIAProduto'
-import { useNotification } from '@/contexts/NotificationContext'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  X,
-  Plus,
-  Minus,
-  ShoppingCart,
-  CreditCard,
-  Banknote,
-  QrCode,
-  Camera,
-  Usb,
-  Keyboard,
-  TrendingUp,
-  Receipt,
-  Loader2,
-  Percent,
-  RotateCcw,
-  Volume2,
-  VolumeX,
-  Tag,
-  CheckCircle2,
   ArrowRight,
+  Banknote,
+  Camera,
+  CheckCircle2,
+  CreditCard,
+  Keyboard,
+  Loader2,
   Maximize2,
   Minimize2,
+  Minus,
+  Package,
+  Plus,
+  QrCode,
+  Receipt,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  ShoppingCart,
   Star,
-  UserPlus,   // 🆕
-} from 'lucide-react'
-import { formatarMoeda } from '@/lib/utils'
+  Tag,
+  TrendingUp,
+  Usb,
+  UserPlus,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
+
+import Alert from "@/components/alerts";
+import BarcodeScanner from "@/components/barcode-scanner";
+import CupomImpressao from "@/components/cupom-impressao";
+import { useNotification } from "@/contexts/NotificationContext";
+import { useCupom } from "@/hooks/useCupom";
+import { buscarProdutoPorBarcode } from "@/lib/barcode-api";
+import { supabase } from "@/lib/supabase";
+import type { Produto } from "@/lib/types";
+import { formatarMoeda } from "@/lib/utils";
+
+type FormaPagamento =
+  | "Dinheiro"
+  | "Pix"
+  | "Cartão Débito"
+  | "Cartão Crédito";
 
 interface ItemCarrinho {
-  produto_id: string
-  quantidade: number
-  preco_unitario: number
+  produto_id: string;
+  quantidade: number;
+  preco_unitario: number;
 }
 
 interface ClientePDV {
-  id: string
-  nome: string
-  telefone: string | null
-  endereco: string | null
+  id: string;
+  nome: string;
+  telefone: string | null;
+  endereco: string | null;
+}
+
+interface ItemVendaResultado {
+  produto_id: string;
+  nome: string;
+  sku: string | null;
+  quantidade: number;
+  preco_unitario: number;
+  subtotal: number;
+}
+
+interface ResultadoVenda {
+  venda_id: string;
+  numero_venda: string;
+  usuario_id: string;
+  realizado_por: string;
+  cliente_id: string | null;
+  subtotal: number;
+  desconto: number;
+  total: number;
+  forma_pagamento: FormaPagamento;
+  valor_recebido: number | null;
+  troco: number | null;
+  itens: ItemVendaResultado[];
 }
 
 interface VendaRecente {
-  numero_venda: string
-  total: number
-  forma_pagamento: string
-  itens: any[]
-  hora: string
+  numero_venda: string;
+  total: number;
+  desconto: number;
+  forma_pagamento: FormaPagamento;
+  valor_recebido?: number;
+  itens: ItemVendaResultado[];
+  hora: string;
 }
 
 interface StatsDia {
-  totalVendas: number
-  faturamento: number
-  ticketMedio: number
+  totalVendas: number;
+  faturamento: number;
+  ticketMedio: number;
 }
 
-const FORMAS_PAGAMENTO = [
-  { label: 'Dinheiro', icon: Banknote, value: 'Dinheiro' },
-  { label: 'Pix', icon: QrCode, value: 'Pix' },
-  { label: 'Débito', icon: CreditCard, value: 'Cartão Débito' },
-  { label: 'Crédito', icon: CreditCard, value: 'Cartão Crédito' },
-]
+interface DadosProdutoBarcode {
+  encontrado: boolean;
+  nome?: string;
+  marca?: string;
+  descricao?: string;
+  categoria?: string;
+}
 
-const SOM_BIPE_KEY = 'pdv_som_ativo'
+const FORMAS_PAGAMENTO: ReadonlyArray<{
+  label: string;
+  icon: typeof Banknote;
+  value: FormaPagamento;
+}> = [
+  { label: "Dinheiro", icon: Banknote, value: "Dinheiro" },
+  { label: "Pix", icon: QrCode, value: "Pix" },
+  { label: "Débito", icon: CreditCard, value: "Cartão Débito" },
+  { label: "Crédito", icon: CreditCard, value: "Cartão Crédito" },
+];
+
+const SOM_BIPE_KEY = "pdv_som_ativo";
+
+function numero(valor: unknown): number {
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido : 0;
+}
+
+function mensagemErro(valor: unknown): string {
+  return valor instanceof Error ? valor.message : "Erro inesperado";
+}
 
 export default function PDVPage() {
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [loading, setLoading] = useState(true)
-  const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
-  const [filtro, setFiltro] = useState('')
-  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const [processando, setProcessando] = useState(false)
+  const { addNotification } = useNotification();
+  const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom();
 
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [clientes, setClientes] = useState<ClientePDV[]>([]);
+  const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
+  const [vendasRecentes, setVendasRecentes] = useState<VendaRecente[]>([]);
+  const [topVendidosIds, setTopVendidosIds] = useState<string[]>([]);
   const [statsDia, setStatsDia] = useState<StatsDia>({
     totalVendas: 0,
     faturamento: 0,
     ticketMedio: 0,
-  })
+  });
 
-  const [vendasRecentes, setVendasRecentes] = useState<VendaRecente[]>([])
-
-  // 🆕 Top vendidos do dia
-  const [topVendidos, setTopVendidos] = useState<Produto[]>([])
-
-  const [mostrarAtalhos, setMostrarAtalhos] = useState(false)
-  const [somAtivo, setSomAtivo] = useState(true)
-
-  // 🆕 Fullscreen
-  const [fullscreen, setFullscreen] = useState(false)
-
-  // 🆕 Animação +1 ao adicionar
-  const [animacaoAdd, setAnimacaoAdd] = useState<{ id: string; key: number } | null>(null)
-
-  // 🆕 Tela de sucesso GIGANTE pós-venda
+  const [loading, setLoading] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
+  const [processando, setProcessando] = useState(false);
+  const [error, setError] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
+  const [somAtivo, setSomAtivo] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [usbDetectado, setUsbDetectado] = useState(false);
+  const [mostrarAtalhos, setMostrarAtalhos] = useState(false);
+  const [scannerAberto, setScannerAberto] = useState(false);
+  const [modalPagamento, setModalPagamento] = useState(false);
+  const [mostrarSeletorCliente, setMostrarSeletorCliente] = useState(false);
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [clienteSelecionado, setClienteSelecionado] =
+    useState<ClientePDV | null>(null);
+  const [formaPagamento, setFormaPagamento] =
+    useState<FormaPagamento>("Dinheiro");
+  const [valorRecebido, setValorRecebido] = useState("");
+  const [desconto, setDesconto] = useState("");
+  const [animacaoAdd, setAnimacaoAdd] = useState<{
+    id: string;
+    key: number;
+  } | null>(null);
   const [telaSucesso, setTelaSucesso] = useState<{
-    total: number
-    recebido: number
-    troco: number
-    formaPagamento: string
-  } | null>(null)
+    total: number;
+    recebido: number;
+    troco: number;
+    formaPagamento: string;
+  } | null>(null);
 
-  // Pagamento
-  const [modalPagamento, setModalPagamento] = useState(false)
-  const [formaPagamento, setFormaPagamento] = useState('Dinheiro')
-  const [valorRecebido, setValorRecebido] = useState('')
-  const [desconto, setDesconto] = useState('')
+  const [modalCadastroRapido, setModalCadastroRapido] = useState(false);
+  const [dadosProdutoAPI, setDadosProdutoAPI] =
+    useState<DadosProdutoBarcode | null>(null);
+  const [skuParaCadastro, setSkuParaCadastro] = useState("");
+  const [cadastroNome, setCadastroNome] = useState("");
+  const [cadastroMarca, setCadastroMarca] = useState("");
+  const [cadastroDescricao, setCadastroDescricao] = useState("");
+  const [cadastroCategoria, setCadastroCategoria] = useState("");
+  const [cadastroPreco, setCadastroPreco] = useState("");
+  const [cadastroCusto, setCadastroCusto] = useState("");
+  const [cadastroQuantidade, setCadastroQuantidade] = useState("1");
+  const [salvandoProdutoRapido, setSalvandoProdutoRapido] = useState(false);
 
-  // Scanner e cadastro rápido
-  const [scannerAberto, setScannerAberto] = useState(false)
-  const [modalCadastroRapido, setModalCadastroRapido] = useState(false)
-  const [dadosProdutoAPI, setDadosProdutoAPI] = useState<any>(null)
-  const [skuParaCadastro, setSkuParaCadastro] = useState('')
+  const buscaInputRef = useRef<HTMLInputElement>(null);
+  const usbBufferRef = useRef("");
+  const usbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyTimeRef = useRef(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  const [usbDetectado, setUsbDetectado] = useState(false)
+  const totalItens = useMemo(
+    () => carrinho.reduce((total, item) => total + item.quantidade, 0),
+    [carrinho],
+  );
 
-  // 🆕 Cliente vinculado à venda
-  const [clientes, setClientes] = useState<ClientePDV[]>([])
-  const [clienteSelecionado, setClienteSelecionado] = useState<ClientePDV | null>(null)
-  const [mostrarSeletorCliente, setMostrarSeletorCliente] = useState(false)
-  const [buscaCliente, setBuscaCliente] = useState('')
+  const subtotal = useMemo(
+    () =>
+      carrinho.reduce(
+        (total, item) => total + item.quantidade * item.preco_unitario,
+        0,
+      ),
+    [carrinho],
+  );
 
-  const [cadastroNome, setCadastroNome] = useState('')
-  const [cadastroMarca, setCadastroMarca] = useState('')
-  const [cadastroDescricao, setCadastroDescricao] = useState('')
-  const [cadastroCategoria, setCadastroCategoria] = useState('')
-  const [cadastroPreco, setCadastroPreco] = useState('')
-  const [cadastroQuantidade, setCadastroQuantidade] = useState('1')
-  const [salvandoProdutoRapido, setSalvandoProdutoRapido] = useState(false)
+  const descontoInformado = Number.parseFloat(desconto);
+  const descontoVal = Number.isFinite(descontoInformado)
+    ? Math.max(descontoInformado, 0)
+    : 0;
+  const descontoInvalido = descontoVal > subtotal;
+  const totalPagar = descontoInvalido ? subtotal : subtotal - descontoVal;
+  const recebido = Number.parseFloat(valorRecebido);
+  const pagamentoDinheiroInvalido =
+    formaPagamento === "Dinheiro" &&
+    (!Number.isFinite(recebido) || recebido < totalPagar);
+  const trocoVal =
+    formaPagamento === "Dinheiro" && Number.isFinite(recebido)
+      ? Math.max(0, recebido - totalPagar)
+      : 0;
 
-  const [precoSugeridoIA, setPrecoSugeridoIA] = useState<{
-    min: number
-    max: number
-  } | null>(null)
+  const categorias = useMemo(() => {
+    return Array.from(
+      new Set(
+        produtos
+          .map((produto) => produto.categoria?.trim())
+          .filter((categoria): categoria is string => Boolean(categoria)),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [produtos]);
 
-  const usbBufferRef = useRef('')
-  const usbTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastKeyTimeRef = useRef(0)
-  const buscaInputRef = useRef<HTMLInputElement>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const produtosFiltrados = useMemo(() => {
+    const termo = filtro.trim().toLocaleLowerCase("pt-BR");
+    return produtos.filter((produto) => {
+      const correspondeTexto =
+        !termo ||
+        produto.nome.toLocaleLowerCase("pt-BR").includes(termo) ||
+        produto.sku.toLocaleLowerCase("pt-BR").includes(termo) ||
+        produto.categoria?.toLocaleLowerCase("pt-BR").includes(termo) ||
+        produto.marca?.toLocaleLowerCase("pt-BR").includes(termo);
+      const correspondeCategoria =
+        !categoriaFiltro || produto.categoria === categoriaFiltro;
+      return correspondeTexto && correspondeCategoria;
+    });
+  }, [categoriaFiltro, filtro, produtos]);
 
-  const { addNotification } = useNotification()
-  const { cupomAberto, dadosCupom, gerarCupom, fecharCupom } = useCupom()
-  const { completarComIA, carregando: carregandoIA } = useIAProduto()
+  const topVendidos = useMemo(
+    () =>
+      topVendidosIds
+        .map((id) => produtos.find((produto) => produto.id === id))
+        .filter(
+          (produto): produto is Produto =>
+            Boolean(produto && numero(produto.quantidade_atual) > 0),
+        ),
+    [produtos, topVendidosIds],
+  );
 
-  // ══════════════════════════════════════════════════
-  // 🔊 SOM DE BIPE
-  // ══════════════════════════════════════════════════
+  const clientesFiltrados = useMemo(() => {
+    const termo = buscaCliente.trim().toLocaleLowerCase("pt-BR");
+    return clientes.filter((cliente) =>
+      cliente.nome.toLocaleLowerCase("pt-BR").includes(termo),
+    );
+  }, [buscaCliente, clientes]);
+
+  const carregarProdutos = useCallback(async () => {
+    const { data, error: produtosError } = await supabase
+      .from("produtos")
+      .select("*")
+      .eq("ativo", true)
+      .gt("quantidade_atual", 0)
+      .order("nome", { ascending: true });
+
+    if (produtosError) throw produtosError;
+    setProdutos((data as Produto[] | null) ?? []);
+  }, []);
+
+  const carregarClientes = useCallback(async () => {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) return;
+
+    const { data: membro } = await supabase
+      .from("membros")
+      .select("dono_id")
+      .eq("user_id", userData.user.id)
+      .eq("status", "ativo")
+      .maybeSingle();
+
+    const donoId = membro?.dono_id ?? userData.user.id;
+    const { data, error: clientesError } = await supabase
+      .from("clientes")
+      .select("id, nome, telefone, endereco")
+      .eq("usuario_id", donoId)
+      .order("nome", { ascending: true });
+
+    if (clientesError) {
+      console.error("Erro ao carregar clientes:", clientesError);
+      return;
+    }
+    setClientes((data as ClientePDV[] | null) ?? []);
+  }, []);
+
+  const carregarStatsDia = useCallback(async () => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const { data, error: statsError } = await supabase
+      .from("vendas")
+      .select("id, total")
+      .gte("criado_em", hoje.toISOString());
+
+    if (statsError) {
+      console.error("Erro nos indicadores do PDV:", statsError);
+      return;
+    }
+
+    const vendasHoje = data ?? [];
+    const totalVendas = vendasHoje.length;
+    const faturamento = vendasHoje.reduce(
+      (total, venda) => total + numero(venda.total),
+      0,
+    );
+
+    setStatsDia({
+      totalVendas,
+      faturamento,
+      ticketMedio: totalVendas > 0 ? faturamento / totalVendas : 0,
+    });
+  }, []);
+
+  const carregarTopVendidos = useCallback(async () => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const { data: vendasHoje, error: vendasError } = await supabase
+      .from("vendas")
+      .select("id")
+      .gte("criado_em", hoje.toISOString());
+
+    if (vendasError || !vendasHoje?.length) {
+      if (vendasError) console.error("Erro nas vendas do dia:", vendasError);
+      setTopVendidosIds([]);
+      return;
+    }
+
+    const { data: itens, error: itensError } = await supabase
+      .from("itens_venda")
+      .select("produto_id, quantidade")
+      .in(
+        "venda_id",
+        vendasHoje.map((venda) => venda.id),
+      );
+
+    if (itensError) {
+      console.error("Erro nos produtos mais vendidos:", itensError);
+      return;
+    }
+
+    const contagem = new Map<string, number>();
+    for (const item of itens ?? []) {
+      if (!item.produto_id) continue;
+      contagem.set(
+        item.produto_id,
+        (contagem.get(item.produto_id) ?? 0) + numero(item.quantidade),
+      );
+    }
+
+    setTopVendidosIds(
+      Array.from(contagem.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([produtoId]) => produtoId),
+    );
+  }, []);
+
+  const carregarTudo = useCallback(
+    async (feedback = false) => {
+      feedback ? setAtualizando(true) : setLoading(true);
+      setError("");
+
+      try {
+        await Promise.all([
+          carregarProdutos(),
+          carregarClientes(),
+          carregarStatsDia(),
+          carregarTopVendidos(),
+        ]);
+        if (feedback) {
+          addNotification("PDV atualizado.", "success", 1600);
+        }
+      } catch (erro) {
+        console.error("Erro ao carregar PDV:", erro);
+        setError("Não foi possível carregar os dados do PDV.");
+      } finally {
+        setLoading(false);
+        setAtualizando(false);
+      }
+    },
+    [
+      addNotification,
+      carregarClientes,
+      carregarProdutos,
+      carregarStatsDia,
+      carregarTopVendidos,
+    ],
+  );
 
   useEffect(() => {
-    const salvo = localStorage.getItem(SOM_BIPE_KEY)
-    if (salvo !== null) setSomAtivo(salvo === 'true')
-  }, [])
+    void carregarTudo();
+  }, [carregarTudo]);
+
+  useEffect(() => {
+    const salvo = localStorage.getItem(SOM_BIPE_KEY);
+    if (salvo !== null) setSomAtivo(salvo === "true");
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () =>
+      setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!telaSucesso) return;
+    const timer = window.setTimeout(() => setTelaSucesso(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [telaSucesso]);
+
+  useEffect(() => {
+    if (!dadosProdutoAPI) return;
+    setCadastroNome(dadosProdutoAPI.nome ?? "");
+    setCadastroMarca(dadosProdutoAPI.marca ?? "");
+    setCadastroDescricao(dadosProdutoAPI.descricao ?? "");
+    setCadastroCategoria(dadosProdutoAPI.categoria ?? "");
+  }, [dadosProdutoAPI]);
 
   const tocarBipe = useCallback(() => {
-    if (!somAtivo) return
+    if (!somAtivo) return;
     try {
+      const AudioContextCompativel =
+        window.AudioContext ??
+        (window as typeof window & {
+          webkitAudioContext?: typeof AudioContext;
+        }).webkitAudioContext;
+      if (!AudioContextCompativel) return;
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext ||
-          (window as any).webkitAudioContext)()
+        audioContextRef.current = new AudioContextCompativel();
       }
-      const ctx = audioContextRef.current
-      const oscillator = ctx.createOscillator()
-      const gain = ctx.createGain()
-      oscillator.connect(gain)
-      gain.connect(ctx.destination)
-      oscillator.frequency.value = 1200
-      gain.gain.setValueAtTime(0.15, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
-      oscillator.start(ctx.currentTime)
-      oscillator.stop(ctx.currentTime + 0.1)
+      const contexto = audioContextRef.current;
+      const oscilador = contexto.createOscillator();
+      const ganho = contexto.createGain();
+      oscilador.connect(ganho);
+      ganho.connect(contexto.destination);
+      oscilador.frequency.value = 1200;
+      ganho.gain.setValueAtTime(0.15, contexto.currentTime);
+      ganho.gain.exponentialRampToValueAtTime(
+        0.001,
+        contexto.currentTime + 0.1,
+      );
+      oscilador.start(contexto.currentTime);
+      oscilador.stop(contexto.currentTime + 0.1);
     } catch {
-      // Falha silenciosa
+      // O som e opcional.
     }
-  }, [somAtivo])
-
-  const toggleSom = () => {
-    const novo = !somAtivo
-    setSomAtivo(novo)
-    localStorage.setItem(SOM_BIPE_KEY, novo.toString())
-    addNotification(
-      novo ? '🔊 Som ativado' : '🔇 Som desativado',
-      'info',
-      1500
-    )
-  }
-
-  // ══════════════════════════════════════════════════
-  // 🆕 FULLSCREEN
-  // ══════════════════════════════════════════════════
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {})
-      setFullscreen(true)
-    } else {
-      document.exitFullscreen()
-      setFullscreen(false)
-    }
-  }
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setFullscreen(!!document.fullscreenElement)
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () =>
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [])
-
-  // ══════════════════════════════════════════════════
-  // FETCH PRODUTOS + STATS + TOP VENDIDOS
-  // ══════════════════════════════════════════════════
-
-  useEffect(() => {
-    fetchProdutos()
-    fetchStatsDia()
-    fetchTopVendidos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 🆕 Carrega clientes cadastrados
-  useEffect(() => {
-    const fetchClientes = async () => {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) return
-      const { data } = await supabase
-        .from('clientes')
-        .select('id, nome, telefone, endereco')
-        .eq('usuario_id', userData.user.id)
-        .order('nome')
-      if (data) setClientes(data as ClientePDV[])
-    }
-    fetchClientes()
-  }, [])
-
-  const fetchProdutos = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('produtos')
-        .select('*')
-        .eq('ativo', true)
-        .gt('quantidade_atual', 0)
-        .order('nome')
-
-      if (!error && data) setProdutos(data)
-    } catch {
-      setError('Erro ao carregar produtos')
-      addNotification('Erro ao carregar produtos', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchStatsDia = async () => {
-    try {
-      const hoje = new Date()
-      hoje.setHours(0, 0, 0, 0)
-
-      const { data: vendasHoje } = await supabase
-        .from('movimentos_estoque')
-        .select('quantidade, motivo, produto:produto_id(preco_venda)')
-        .eq('tipo_movimento', 'saida')
-        .gte('criado_em', hoje.toISOString())
-
-      if (vendasHoje) {
-        const motivosVendas = new Set<string>()
-        let faturamento = 0
-
-        vendasHoje.forEach((v: any) => {
-          const precoVenda = v.produto?.preco_venda || 0
-          faturamento += v.quantidade * precoVenda
-
-          if (v.motivo?.startsWith('PDV')) {
-            motivosVendas.add(v.motivo)
-          }
-        })
-
-        const totalVendas = motivosVendas.size
-        const ticketMedio = totalVendas > 0 ? faturamento / totalVendas : 0
-
-        setStatsDia({ totalVendas, faturamento, ticketMedio })
-      }
-    } catch (err) {
-      console.error('Erro ao buscar stats do dia:', err)
-    }
-  }
-
-  // 🆕 Top 6 produtos mais vendidos hoje
-  const fetchTopVendidos = async () => {
-    try {
-      const hoje = new Date()
-      hoje.setHours(0, 0, 0, 0)
-
-      const { data } = await supabase
-        .from('movimentos_estoque')
-        .select('produto_id, quantidade, produto:produto_id(*)')
-        .eq('tipo_movimento', 'saida')
-        .gte('criado_em', hoje.toISOString())
-
-      if (data) {
-        const contagem: Record<string, { produto: Produto; qtd: number }> = {}
-        data.forEach((m: any) => {
-          if (!m.produto) return
-          if (!contagem[m.produto_id]) {
-            contagem[m.produto_id] = { produto: m.produto, qtd: 0 }
-          }
-          contagem[m.produto_id].qtd += m.quantidade
-        })
-
-        const top = Object.values(contagem)
-          .sort((a, b) => b.qtd - a.qtd)
-          .slice(0, 6)
-          .map((c) => c.produto)
-          .filter((p) => p.quantidade_atual > 0)
-
-        setTopVendidos(top)
-      }
-    } catch (err) {
-      console.error('Erro top vendidos:', err)
-    }
-  }
-
-  // ══════════════════════════════════════════════════
-  // CARRINHO
-  // ══════════════════════════════════════════════════
+  }, [somAtivo]);
 
   const adicionarAoCarrinho = useCallback(
     (produto: Produto) => {
-      tocarBipe()
-      // 🆕 Trigger animação +1
-      setAnimacaoAdd({ id: produto.id, key: Date.now() })
+      tocarBipe();
+      setAnimacaoAdd({ id: produto.id, key: Date.now() });
 
-      setCarrinho((prev) => {
-        const itemExistente = prev.find((i) => i.produto_id === produto.id)
-        if (itemExistente) {
-          if (itemExistente.quantidade < produto.quantidade_atual) {
-            addNotification(`➡️ ${produto.nome}`, 'info', 800)
-            return prev.map((i) =>
-              i.produto_id === produto.id
-                ? { ...i, quantidade: i.quantidade + 1 }
-                : i
-            )
-          } else {
-            addNotification(`❌ Estoque insuficiente`, 'warning')
-            return prev
+      setCarrinho((atual) => {
+        const existente = atual.find((item) => item.produto_id === produto.id);
+        if (existente) {
+          if (existente.quantidade >= numero(produto.quantidade_atual)) {
+            addNotification("Estoque insuficiente.", "warning", 1800);
+            return atual;
           }
-        } else {
-          addNotification(`✅ ${produto.nome}`, 'success', 800)
-          return [
-            ...prev,
-            {
-              produto_id: produto.id,
-              quantidade: 1,
-              preco_unitario: produto.preco_venda,
-            },
-          ]
+          return atual.map((item) =>
+            item.produto_id === produto.id
+              ? { ...item, quantidade: item.quantidade + 1 }
+              : item,
+          );
         }
-      })
+
+        return [
+          ...atual,
+          {
+            produto_id: produto.id,
+            quantidade: 1,
+            preco_unitario: numero(produto.preco_venda),
+          },
+        ];
+      });
     },
-    [addNotification, tocarBipe]
-  )
+    [addNotification, tocarBipe],
+  );
 
-  const removerDoCarrinho = useCallback((produto_id: string) => {
-    setCarrinho((prev) => prev.filter((i) => i.produto_id !== produto_id))
-  }, [])
+  const removerDoCarrinho = useCallback((produtoId: string) => {
+    setCarrinho((atual) =>
+      atual.filter((item) => item.produto_id !== produtoId),
+    );
+  }, []);
 
-  const atualizarQuantidade = (produto_id: string, nova: number) => {
-    if (nova <= 0) {
-      removerDoCarrinho(produto_id)
-      return
-    }
-    const produto = produtos.find((p) => p.id === produto_id)
-    if (produto && nova <= produto.quantidade_atual) {
-      setCarrinho(
-        carrinho.map((i) =>
-          i.produto_id === produto_id ? { ...i, quantidade: nova } : i
-        )
-      )
-    }
-  }
-
-  // ══════════════════════════════════════════════════
-  // CÓDIGO DE BARRAS
-  // ══════════════════════════════════════════════════
+  const atualizarQuantidade = useCallback(
+    (produtoId: string, novaQuantidade: number) => {
+      if (novaQuantidade <= 0) {
+        removerDoCarrinho(produtoId);
+        return;
+      }
+      const produto = produtos.find((item) => item.id === produtoId);
+      if (!produto || novaQuantidade > numero(produto.quantidade_atual)) {
+        addNotification("Estoque insuficiente.", "warning", 1800);
+        return;
+      }
+      setCarrinho((atual) =>
+        atual.map((item) =>
+          item.produto_id === produtoId
+            ? { ...item, quantidade: novaQuantidade }
+            : item,
+        ),
+      );
+    },
+    [addNotification, produtos, removerDoCarrinho],
+  );
 
   const handleCodigoBarrasLido = useCallback(
     async (codigoBarras: string) => {
-      const produtoLocal = produtos.find((p) => p.sku === codigoBarras)
+      const codigo = codigoBarras.trim();
+      if (!codigo) return;
+
+      const produtoLocal = produtos.find((produto) => produto.sku === codigo);
       if (produtoLocal) {
-        adicionarAoCarrinho(produtoLocal)
-        addNotification(`✅ ${produtoLocal.nome} adicionado`, 'success', 2000)
-        return
+        adicionarAoCarrinho(produtoLocal);
+        addNotification(`${produtoLocal.nome} adicionado.`, "success", 1600);
+        return;
       }
 
-      addNotification(`🔍 Buscando ${codigoBarras}...`, 'info', 2000)
-      const resultadoAPI = await buscarProdutoPorBarcode(codigoBarras)
-
-      if (resultadoAPI.encontrado) {
-        setSkuParaCadastro(codigoBarras)
-        setDadosProdutoAPI(resultadoAPI)
-        setModalCadastroRapido(true)
-      } else {
-        setSkuParaCadastro(codigoBarras)
-        setDadosProdutoAPI({
-          encontrado: false,
-          nome: '',
-          marca: '',
-          descricao: '',
-          categoria: '',
-        })
-        setModalCadastroRapido(true)
-        addNotification(
-          `Produto não encontrado. Use a IA ou preencha manualmente.`,
-          'info',
-          4000
-        )
+      addNotification(`Buscando ${codigo}...`, "info", 1800);
+      try {
+        const resultado = (await buscarProdutoPorBarcode(
+          codigo,
+        )) as DadosProdutoBarcode;
+        setSkuParaCadastro(codigo);
+        setDadosProdutoAPI(resultado);
+        setModalCadastroRapido(true);
+        if (!resultado.encontrado) {
+          addNotification(
+            "Produto não encontrado. Preencha os dados manualmente.",
+            "info",
+            3500,
+          );
+        }
+      } catch (erro) {
+        console.error("Erro ao consultar código de barras:", erro);
+        setSkuParaCadastro(codigo);
+        setDadosProdutoAPI({ encontrado: false });
+        setModalCadastroRapido(true);
       }
     },
-    [produtos, adicionarAoCarrinho, addNotification]
-  )
-
-  // ══════════════════════════════════════════════════
-  // LEITOR USB
-  // ══════════════════════════════════════════════════
+    [addNotification, adicionarAoCarrinho, produtos],
+  );
 
   useEffect(() => {
-    const MAX_GAP_MS = 50
-    const PROCESS_DELAY_MS = 80
-    const MIN_LENGTH = 8
+    const MAX_GAP_MS = 50;
+    const PROCESS_DELAY_MS = 80;
+    const MIN_LENGTH = 8;
 
     const processarBuffer = () => {
       if (usbTimeoutRef.current) {
-        clearTimeout(usbTimeoutRef.current)
-        usbTimeoutRef.current = null
+        clearTimeout(usbTimeoutRef.current);
+        usbTimeoutRef.current = null;
       }
+      const codigo = usbBufferRef.current.trim();
+      usbBufferRef.current = "";
+      if (codigo.length < MIN_LENGTH) return;
+      setUsbDetectado(true);
+      window.setTimeout(() => setUsbDetectado(false), 1800);
+      navigator.vibrate?.(120);
+      void handleCodigoBarrasLido(codigo);
+    };
 
-      const code = usbBufferRef.current.trim()
-      usbBufferRef.current = ''
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName.toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      if (code.length < MIN_LENGTH) return
-
-      setUsbDetectado(true)
-      setTimeout(() => setUsbDetectado(false), 2000)
-      if (navigator.vibrate) navigator.vibrate(200)
-      handleCodigoBarrasLido(code)
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName?.toUpperCase()
-      if (
-        activeTag === 'INPUT' ||
-        activeTag === 'TEXTAREA' ||
-        activeTag === 'SELECT'
-      ) {
-        return
-      }
-
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-
-      if (e.key === 'Enter') {
-        const code = usbBufferRef.current.trim()
-        if (code.length >= MIN_LENGTH) {
-          e.preventDefault()
-          e.stopPropagation()
+      if (event.key === "Enter") {
+        const codigo = usbBufferRef.current.trim();
+        if (codigo.length >= MIN_LENGTH) {
+          event.preventDefault();
+          event.stopPropagation();
         }
-        processarBuffer()
-        return
+        processarBuffer();
+        return;
       }
 
-      if (e.key.length !== 1) {
-        usbBufferRef.current = ''
-        lastKeyTimeRef.current = 0
-        if (usbTimeoutRef.current) {
-          clearTimeout(usbTimeoutRef.current)
-          usbTimeoutRef.current = null
-        }
-        return
+      if (event.key.length !== 1) {
+        usbBufferRef.current = "";
+        lastKeyTimeRef.current = 0;
+        return;
       }
 
-      const now = Date.now()
-      const gap = now - lastKeyTimeRef.current
-
-      if (gap > MAX_GAP_MS) {
-        if (usbTimeoutRef.current) {
-          clearTimeout(usbTimeoutRef.current)
-          usbTimeoutRef.current = null
-        }
-        usbBufferRef.current = ''
+      const agora = Date.now();
+      if (agora - lastKeyTimeRef.current > MAX_GAP_MS) {
+        usbBufferRef.current = "";
       }
+      lastKeyTimeRef.current = agora;
+      usbBufferRef.current += event.key;
 
-      lastKeyTimeRef.current = now
+      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current);
+      usbTimeoutRef.current = setTimeout(processarBuffer, PROCESS_DELAY_MS);
+    };
 
-      usbBufferRef.current += e.key
-
-      if (usbTimeoutRef.current) {
-        clearTimeout(usbTimeoutRef.current)
-      }
-      usbTimeoutRef.current = setTimeout(() => {
-        processarBuffer()
-      }, PROCESS_DELAY_MS)
-    }
-
-    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener("keydown", handleKeyDown, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true)
-      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current)
-    }
-  }, [handleCodigoBarrasLido])
-
-  // ══════════════════════════════════════════════════
-  // ATALHOS
-  // ══════════════════════════════════════════════════
+      window.removeEventListener("keydown", handleKeyDown, true);
+      if (usbTimeoutRef.current) clearTimeout(usbTimeoutRef.current);
+    };
+  }, [handleCodigoBarrasLido]);
 
   const abrirPagamento = useCallback(() => {
     if (carrinho.length === 0) {
-      addNotification('Carrinho vazio', 'warning')
-      return
+      addNotification("Carrinho vazio.", "warning");
+      return;
     }
-    const subtotal = carrinho.reduce(
-      (acc, i) => acc + i.quantidade * i.preco_unitario,
-      0
-    )
-    const descontoVal = parseFloat(desconto) || 0
-    const total = Math.max(0, subtotal - descontoVal)
-    setValorRecebido(total.toFixed(2))
-    setModalPagamento(true)
-  }, [carrinho, desconto, addNotification])
+    if (descontoInvalido) {
+      addNotification(
+        "O desconto não pode ser maior que o subtotal.",
+        "warning",
+        3500,
+      );
+      return;
+    }
+    setValorRecebido(totalPagar.toFixed(2));
+    setModalPagamento(true);
+  }, [addNotification, carrinho.length, descontoInvalido, totalPagar]);
 
   useEffect(() => {
-    const handleHotkeys = (e: KeyboardEvent) => {
-      const modaisAbertos =
+    const handleHotkeys = (event: KeyboardEvent) => {
+      const modalAberto =
         modalPagamento ||
         modalCadastroRapido ||
         scannerAberto ||
         cupomAberto ||
         mostrarSeletorCliente ||
-        !!telaSucesso
+        Boolean(telaSucesso);
 
-      if (e.key === 'Escape') {
-        if (mostrarAtalhos) {
-          setMostrarAtalhos(false)
-          return
-        }
-        if (telaSucesso) {
-          setTelaSucesso(null)
-          return
-        }
-        if (modaisAbertos) return
-        if (carrinho.length > 0) {
-          e.preventDefault()
-          if (confirm('Limpar carrinho?')) {
-            setCarrinho([])
-            addNotification('🗑️ Carrinho limpo', 'info', 1500)
-          }
-        }
-        return
+      if (event.key === "F1") {
+        event.preventDefault();
+        setMostrarAtalhos(true);
+      } else if (event.key === "F2" && !modalAberto) {
+        event.preventDefault();
+        buscaInputRef.current?.focus();
+        buscaInputRef.current?.select();
+      } else if (event.key === "F8" && !modalAberto) {
+        event.preventDefault();
+        abrirPagamento();
+      } else if (event.key === "Escape" && !modalAberto && carrinho.length > 0) {
+        if (window.confirm("Limpar carrinho?")) setCarrinho([]);
       }
+    };
 
-      if (modaisAbertos || mostrarAtalhos) return
-
-      if (e.key === 'F1') {
-        e.preventDefault()
-        setMostrarAtalhos(true)
-        return
-      }
-
-      if (e.key === 'F2') {
-        e.preventDefault()
-        buscaInputRef.current?.focus()
-        buscaInputRef.current?.select()
-        return
-      }
-
-      if (e.key === 'F4') {
-        e.preventDefault()
-        if (carrinho.length === 0) {
-          addNotification('Carrinho vazio', 'warning')
-          return
-        }
-        const descontoInput = document.getElementById(
-          'desconto-input'
-        ) as HTMLInputElement
-        descontoInput?.focus()
-        descontoInput?.select()
-        return
-      }
-
-      if (e.key === 'F8') {
-        e.preventDefault()
-        abrirPagamento()
-        return
-      }
-
-      if (e.key === 'F10') {
-        e.preventDefault()
-        if (carrinho.length > 0) {
-          const ultimoItem = carrinho[carrinho.length - 1]
-          const produto = produtos.find((p) => p.id === ultimoItem.produto_id)
-          removerDoCarrinho(ultimoItem.produto_id)
-          addNotification(
-            `❌ Removido: ${produto?.nome || 'item'}`,
-            'info',
-            2000
-          )
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleHotkeys)
-    return () => window.removeEventListener('keydown', handleHotkeys)
+    window.addEventListener("keydown", handleHotkeys);
+    return () => window.removeEventListener("keydown", handleHotkeys);
   }, [
-    carrinho,
-    modalPagamento,
-    modalCadastroRapido,
-    scannerAberto,
-    cupomAberto,
-    mostrarSeletorCliente,
-    mostrarAtalhos,
-    addNotification,
-    produtos,
     abrirPagamento,
-    removerDoCarrinho,
+    carrinho.length,
+    cupomAberto,
+    modalCadastroRapido,
+    modalPagamento,
+    mostrarSeletorCliente,
+    scannerAberto,
     telaSucesso,
-  ])
+  ]);
 
-  // 🆕 Auto-fecha tela de sucesso em 8 segundos
   useEffect(() => {
-    if (telaSucesso) {
-      const timer = setTimeout(() => setTelaSucesso(null), 8000)
-      return () => clearTimeout(timer)
-    }
-  }, [telaSucesso])
-
-  // 🆕 Atalhos do modal de pagamento: 1-4 escolhem forma, Enter confirma
-  useEffect(() => {
-    if (!modalPagamento) return
-
-    const handlePagamentoKeys = (e: KeyboardEvent) => {
-      // Não interfere se o usuário estiver digitando no campo de valor
-      const tag = document.activeElement?.tagName?.toUpperCase()
-      const digitandoValor = tag === 'INPUT'
-
-      // Teclas 1-4 escolhem a forma de pagamento
-      if (!digitandoValor && ['1', '2', '3', '4'].includes(e.key)) {
-        e.preventDefault()
-        const idx = parseInt(e.key, 10) - 1
-        const forma = FORMAS_PAGAMENTO[idx]
-        if (forma) setFormaPagamento(forma.value)
-        return
+    if (!modalPagamento) return;
+    const handlePagamentoKeys = (event: KeyboardEvent) => {
+      const digitando = document.activeElement?.tagName === "INPUT";
+      if (!digitando && ["1", "2", "3", "4"].includes(event.key)) {
+        event.preventDefault();
+        const forma = FORMAS_PAGAMENTO[Number(event.key) - 1];
+        if (forma) setFormaPagamento(forma.value);
       }
-
-      // Enter confirma a venda
-      if (e.key === 'Enter' && !processando) {
-        e.preventDefault()
-        e.stopPropagation()
-        processarVenda()
+      if (event.key === "Enter" && !processando) {
+        event.preventDefault();
+        void processarVenda();
       }
-    }
-
-    window.addEventListener('keydown', handlePagamentoKeys, true)
-    return () => window.removeEventListener('keydown', handlePagamentoKeys, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalPagamento, processando])
-
-  // ══════════════════════════════════════════════════
-  // CADASTRO RÁPIDO
-  // ══════════════════════════════════════════════════
-
-  useEffect(() => {
-    if (dadosProdutoAPI) {
-      setCadastroNome(dadosProdutoAPI.nome || '')
-      setCadastroMarca(dadosProdutoAPI.marca || '')
-      setCadastroDescricao(dadosProdutoAPI.descricao || '')
-      setCadastroCategoria(dadosProdutoAPI.categoria || '')
-    }
-  }, [dadosProdutoAPI])
-
-  useEffect(() => {
-    if (!modalCadastroRapido) {
-      setPrecoSugeridoIA(null)
-    }
-  }, [modalCadastroRapido])
-
-  const handleCompletarComIA = async () => {
-    const dados = await completarComIA({
-      sku: skuParaCadastro,
-      nomeOriginal: cadastroNome || dadosProdutoAPI?.nome,
-      marca: cadastroMarca || dadosProdutoAPI?.marca,
-      descricaoOriginal: cadastroDescricao || dadosProdutoAPI?.descricao,
-    })
-
-    if (dados) {
-      setCadastroNome(dados.nome)
-      setCadastroMarca(dados.marca || cadastroMarca)
-      setCadastroDescricao(dados.descricao)
-      setCadastroCategoria(dados.categoria)
-
-      if (dados.preco_sugerido_min && dados.preco_sugerido_max) {
-        setPrecoSugeridoIA({
-          min: dados.preco_sugerido_min,
-          max: dados.preco_sugerido_max,
-        })
-
-        if (!cadastroPreco) {
-          const precoMedio =
-            (dados.preco_sugerido_min + dados.preco_sugerido_max) / 2
-          setCadastroPreco(precoMedio.toFixed(2))
-        }
-      }
-    }
-  }
+    };
+    window.addEventListener("keydown", handlePagamentoKeys, true);
+    return () => window.removeEventListener("keydown", handlePagamentoKeys, true);
+  });
 
   const salvarProdutoRapido = async () => {
-    if (salvandoProdutoRapido) return
+    if (salvandoProdutoRapido) return;
 
-    if (
-      !cadastroNome.trim() ||
-      !cadastroPreco ||
-      parseFloat(cadastroPreco) <= 0
-    ) {
-      addNotification('Nome e preço são obrigatórios', 'error')
-      return
+    const precoVenda = Number.parseFloat(cadastroPreco);
+    const custoInformado = Number.parseFloat(cadastroCusto);
+    const precoCusto = Number.isFinite(custoInformado)
+      ? Math.max(custoInformado, 0)
+      : 0;
+    const quantidadeInformada = Number.parseInt(cadastroQuantidade, 10);
+    const quantidade = Number.isFinite(quantidadeInformada)
+      ? Math.max(quantidadeInformada, 0)
+      : 0;
+
+    if (!cadastroNome.trim() || !Number.isFinite(precoVenda) || precoVenda <= 0) {
+      addNotification("Nome e preço de venda são obrigatórios.", "error");
+      return;
     }
 
-    setSalvandoProdutoRapido(true)
-    const preco = parseFloat(cadastroPreco)
-    const quantidade = parseInt(cadastroQuantidade) || 0
-
+    setSalvandoProdutoRapido(true);
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Usuário não autenticado')
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error("Usuário não autenticado");
+
+      const { data: membro } = await supabase
+        .from("membros")
+        .select("dono_id")
+        .eq("user_id", userData.user.id)
+        .eq("status", "ativo")
+        .maybeSingle();
+      const donoId = membro?.dono_id ?? userData.user.id;
 
       const { data: novoProduto, error: insertError } = await supabase
-        .from('produtos')
+        .from("produtos")
         .insert({
           sku: skuParaCadastro,
-          nome: cadastroNome,
-          marca: cadastroMarca,
-          descricao: cadastroDescricao,
-          categoria: cadastroCategoria,
-          preco_venda: preco,
+          nome: cadastroNome.trim(),
+          marca: cadastroMarca.trim(),
+          descricao: cadastroDescricao.trim(),
+          categoria: cadastroCategoria.trim(),
+          preco_venda: precoVenda,
+          preco_custo: precoCusto,
           quantidade_atual: quantidade,
-          ativo: true,
-          usuario_id: userData.user.id,
           quantidade_minima: 10,
-          preco_custo: 0,
+          ativo: true,
+          usuario_id: donoId,
         })
-        .select()
-        .single()
+        .select("*")
+        .single();
 
-      if (insertError) {
-        if (insertError.message?.includes('Limite de 100 produtos')) {
-          addNotification(
-            '⚠️ Limite do plano Iniciante atingido. Faça upgrade!',
-            'error',
-            6000
-          )
-          return
-        }
-        throw insertError
+      if (insertError) throw insertError;
+
+      setModalCadastroRapido(false);
+      setDadosProdutoAPI(null);
+      setCadastroNome("");
+      setCadastroMarca("");
+      setCadastroDescricao("");
+      setCadastroCategoria("");
+      setCadastroPreco("");
+      setCadastroCusto("");
+      setCadastroQuantidade("1");
+      await carregarProdutos();
+
+      if (novoProduto && numero(novoProduto.quantidade_atual) > 0) {
+        adicionarAoCarrinho(novoProduto as Produto);
       }
-
-      addNotification(`✅ "${cadastroNome}" cadastrado!`, 'success')
-      setModalCadastroRapido(false)
-      await fetchProdutos()
-
-      if (novoProduto) {
-        adicionarAoCarrinho(novoProduto as Produto)
-      }
-    } catch (err: any) {
-      addNotification(`Erro ao cadastrar: ${err.message}`, 'error')
+      addNotification("Produto cadastrado e pronto para uso.", "success");
+    } catch (erro) {
+      addNotification(`Erro ao cadastrar: ${mensagemErro(erro)}`, "error", 4500);
     } finally {
-      setSalvandoProdutoRapido(false)
+      setSalvandoProdutoRapido(false);
     }
-  }
-
-  // ══════════════════════════════════════════════════
-  // CÁLCULOS
-  // ══════════════════════════════════════════════════
-
-  const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0)
-  const subtotal = carrinho.reduce(
-    (acc, i) => acc + i.quantidade * i.preco_unitario,
-    0
-  )
-  const descontoVal = parseFloat(desconto) || 0
-  const totalPagar = Math.max(0, subtotal - descontoVal)
-  const trocoVal =
-    formaPagamento === 'Dinheiro' && parseFloat(valorRecebido) > totalPagar
-      ? parseFloat(valorRecebido) - totalPagar
-      : 0
-
-  const categorias = useMemo(() => {
-    const set = new Set<string>()
-    produtos.forEach((p) => {
-      if (p.categoria) set.add(p.categoria)
-    })
-    return Array.from(set).sort()
-  }, [produtos])
-
-  // ══════════════════════════════════════════════════
-  // VENDA
-  // ══════════════════════════════════════════════════
+  };
 
   const processarVenda = async () => {
-    setProcessando(true)
-    setError('')
+    if (processando) return;
+    setError("");
 
+    if (carrinho.length === 0) {
+      addNotification("Carrinho vazio.", "warning");
+      return;
+    }
+    if (descontoInvalido) {
+      setError("O desconto não pode ser maior que o subtotal.");
+      return;
+    }
+    if (pagamentoDinheiroInvalido) {
+      setError(
+        `O valor recebido deve ser igual ou maior que ${formatarMoeda(totalPagar)}.`,
+      );
+      return;
+    }
+
+    setProcessando(true);
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) {
-        setError('Usuário não autenticado')
-        return
-      }
-
-      const itensParaVenda = carrinho.map((item) => ({
-        produto_id: item.produto_id,
-        quantidade: item.quantidade,
-        preco_unitario: item.preco_unitario,
-      }))
-
-      const { data: resultado, error: rpcError } = await supabase.rpc(
-        'processar_venda',
-        {
-          p_usuario_id: userData.user.id,
-          p_itens: itensParaVenda,
-          p_forma_pagamento: formaPagamento,
-          p_desconto: descontoVal,
-        }
-      )
+      const { data, error: rpcError } = await supabase.rpc("processar_venda", {
+        p_itens: carrinho.map((item) => ({
+          produto_id: item.produto_id,
+          quantidade: item.quantidade,
+        })),
+        p_forma_pagamento: formaPagamento,
+        p_desconto: descontoVal,
+        p_valor_recebido: formaPagamento === "Dinheiro" ? recebido : null,
+        p_cliente_id: clienteSelecionado?.id ?? null,
+      });
 
       if (rpcError) {
-        console.error('Erro na venda:', rpcError)
-        if (rpcError.message.includes('Estoque insuficiente')) {
-          setError(rpcError.message)
-        } else if (rpcError.message.includes('não encontrado')) {
-          setError(
-            'Produto não encontrado. Atualize a página e tente novamente.'
-          )
-        } else {
-          setError(
-            'Erro ao processar venda. Nenhum item foi alterado. Tente novamente.'
-          )
-        }
-        return
+        console.error("Erro na venda:", rpcError);
+        setError(rpcError.message || "Não foi possível processar a venda.");
+        return;
       }
 
-      // 🆕 Vincula a venda ao cliente selecionado (se houver)
-      if (clienteSelecionado) {
-        await supabase
-          .from('vendas')
-          .update({ cliente_id: clienteSelecionado.id })
-          .eq('numero_venda', resultado.numero_venda)
-          .eq('usuario_id', userData.user.id)
+      const resultado = data as ResultadoVenda | null;
+      if (!resultado?.numero_venda || !Array.isArray(resultado.itens)) {
+        setError("O servidor retornou dados inválidos após processar a venda.");
+        return;
       }
 
       await gerarCupom({
-        itens: resultado.itens,
-        desconto: resultado.desconto,
+        itens: resultado.itens.map((item) => ({
+          nome: item.nome,
+          sku: item.sku ?? undefined,
+          quantidade: numero(item.quantidade),
+          preco_unitario: numero(item.preco_unitario),
+          subtotal: numero(item.subtotal),
+        })),
+        desconto: numero(resultado.desconto),
         forma_pagamento: resultado.forma_pagamento,
-        valor_recebido: parseFloat(valorRecebido) || undefined,
-        nome_cliente: clienteSelecionado?.nome,                       // 🆕
-        endereco_cliente: clienteSelecionado?.endereco || undefined,  // 🆕
-        telefone_cliente: clienteSelecionado?.telefone || undefined,  // 🆕
-      })
+        valor_recebido: resultado.valor_recebido ?? undefined,
+        nome_cliente: clienteSelecionado?.nome,
+        endereco_cliente: clienteSelecionado?.endereco || undefined,
+        telefone_cliente: clienteSelecionado?.telefone || undefined,
+      });
 
       const novaVenda: VendaRecente = {
         numero_venda: resultado.numero_venda,
-        total: resultado.total,
+        total: numero(resultado.total),
+        desconto: numero(resultado.desconto),
         forma_pagamento: resultado.forma_pagamento,
+        valor_recebido: resultado.valor_recebido ?? undefined,
         itens: resultado.itens,
-        hora: new Date().toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
+        hora: new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
         }),
-      }
-      setVendasRecentes((prev) => [novaVenda, ...prev].slice(0, 3))
-
-      addNotification(
-        `💰 Venda ${resultado.numero_venda}: ${formatarMoeda(resultado.total)}`,
-        'success',
-        4000
-      )
-
-      // 🆕 Tela de sucesso GIGANTE com troco
-      const recebido = parseFloat(valorRecebido) || resultado.total
-      const troco =
-        formaPagamento === 'Dinheiro'
-          ? Math.max(0, recebido - resultado.total)
-          : 0
+      };
+      setVendasRecentes((atuais) => [novaVenda, ...atuais].slice(0, 3));
       setTelaSucesso({
-        total: resultado.total,
-        recebido,
-        troco,
+        total: numero(resultado.total),
+        recebido: resultado.valor_recebido ?? numero(resultado.total),
+        troco: resultado.troco ?? 0,
         formaPagamento: resultado.forma_pagamento,
-      })
+      });
 
-      setCarrinho([])
-      setDesconto('')
-      setValorRecebido('')
-      setModalPagamento(false)
-      setClienteSelecionado(null)   // 🆕
-      setTimeout(() => {
-        fetchProdutos()
-        fetchStatsDia()
-        fetchTopVendidos()
-      }, 800)
-    } catch (err) {
-      setError('Erro inesperado ao processar venda. Nenhum item foi alterado.')
-      console.error(err)
+      setCarrinho([]);
+      setDesconto("");
+      setValorRecebido("");
+      setModalPagamento(false);
+      setClienteSelecionado(null);
+      addNotification(
+        `Venda ${resultado.numero_venda}: ${formatarMoeda(numero(resultado.total))}`,
+        "success",
+        4000,
+      );
+      await carregarTudo();
+    } catch (erro) {
+      console.error("Erro inesperado na venda:", erro);
+      setError("Erro inesperado ao processar a venda.");
     } finally {
-      setProcessando(false)
+      setProcessando(false);
     }
-  }
+  };
 
   const reimprimirCupom = async (venda: VendaRecente) => {
     await gerarCupom({
-      itens: venda.itens,
-      desconto: 0,
+      itens: venda.itens.map((item) => ({
+        nome: item.nome,
+        sku: item.sku ?? undefined,
+        quantidade: numero(item.quantidade),
+        preco_unitario: numero(item.preco_unitario),
+        subtotal: numero(item.subtotal),
+      })),
+      desconto: venda.desconto,
       forma_pagamento: venda.forma_pagamento,
-    })
-  }
+      valor_recebido: venda.valor_recebido,
+    });
+  };
 
-  const produtosFiltrados = produtos.filter((p) => {
-    const matchFiltro =
-      p.nome.toLowerCase().includes(filtro.toLowerCase()) ||
-      p.sku.toLowerCase().includes(filtro.toLowerCase()) ||
-      p.categoria?.toLowerCase().includes(filtro.toLowerCase())
-    const matchCategoria = !categoriaFiltro || p.categoria === categoriaFiltro
-    return matchFiltro && matchCategoria
-  })
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      void document.documentElement.requestFullscreen();
+    } else {
+      void document.exitFullscreen();
+    }
+  };
 
-  // 🆕 Clientes filtrados pela busca do modal
-  const clientesFiltrados = clientes.filter((c) =>
-    c.nome.toLowerCase().includes(buscaCliente.toLowerCase())
-  )
-
-  // 🆕 Bloco reutilizável: botão/label de vincular cliente
   const BlocoCliente = () =>
     clienteSelecionado ? (
-      <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-        <div className="flex items-center gap-2 min-w-0">
-          <UserPlus size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5 dark:border-blue-800 dark:bg-blue-900/20">
+        <div className="flex min-w-0 items-center gap-2">
+          <UserPlus className="h-4 w-4 shrink-0 text-blue-600" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
               {clienteSelecionado.nome}
             </p>
             {clienteSelecionado.telefone && (
-              <p className="text-xs text-gray-500 truncate">{clienteSelecionado.telefone}</p>
+              <p className="truncate text-xs text-gray-500">
+                {clienteSelecionado.telefone}
+              </p>
             )}
           </div>
         </div>
         <button
+          type="button"
+          aria-label="Remover cliente"
           onClick={() => setClienteSelecionado(null)}
-          className="p-1 text-gray-400 hover:text-red-500 transition shrink-0"
-          title="Remover cliente"
+          className="rounded p-1 text-gray-400 hover:text-red-500"
         >
-          <X size={16} />
+          <X className="h-4 w-4" />
         </button>
       </div>
     ) : (
       <button
+        type="button"
         onClick={() => setMostrarSeletorCliente(true)}
-        className="w-full flex items-center justify-center gap-2 p-2.5 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 transition"
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 p-2.5 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 dark:border-gray-600 dark:text-gray-300"
       >
-        <UserPlus size={16} />
+        <UserPlus className="h-4 w-4" />
         Vincular cliente (opcional)
       </button>
-    )
+    );
 
-  if (loading)
+  if (loading) {
     return (
-      <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+      <div className="flex min-h-[420px] items-center justify-center gap-2 text-gray-500">
+        <Loader2 className="h-8 w-8 animate-spin" />
         Carregando PDV...
       </div>
-    )
+    );
+  }
 
   return (
-    <div className={`p-4 md:p-6 ${carrinho.length > 0 ? 'pb-60 md:pb-6' : ''}`}>
+    <div className={`p-4 md:p-6 ${carrinho.length > 0 ? "pb-64 md:pb-6" : ""}`}>
       {usbDetectado && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
-          <Usb size={18} /> Código lido via leitor USB!
+        <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-xl">
+          <Usb className="h-4 w-4" /> Código lido pelo leitor USB
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="mb-4 space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <header className="mb-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               PDV
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1">
-                <Usb size={12} /> USB ativo
-              </span>
-              <span>·</span>
+            </h1>
+            <p className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <Usb className="h-3 w-3" /> Leitor USB ativo
               <button
+                type="button"
                 onClick={() => setMostrarAtalhos(true)}
-                className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
               >
-                <Keyboard size={12} /> Atalhos (F1)
+                <Keyboard className="h-3 w-3" /> Atalhos
               </button>
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            {/* 🆕 Fullscreen */}
+          <div className="flex gap-2">
             <button
+              type="button"
+              onClick={() => void carregarTudo(true)}
+              disabled={atualizando}
+              className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800"
+              title="Atualizar"
+            >
+              <RefreshCw className={`h-4 w-4 ${atualizando ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
               onClick={toggleFullscreen}
-              className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
-              title={fullscreen ? 'Sair tela cheia' : 'Tela cheia'}
+              className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800"
+              title="Tela cheia"
             >
-              {fullscreen ? (
-                <Minimize2 size={16} className="text-gray-700 dark:text-gray-300" />
-              ) : (
-                <Maximize2 size={16} className="text-gray-700 dark:text-gray-300" />
-              )}
+              {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
-
             <button
-              onClick={toggleSom}
-              className="p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg transition"
-              title={somAtivo ? 'Desativar som' : 'Ativar som'}
+              type="button"
+              onClick={() => {
+                const novo = !somAtivo;
+                setSomAtivo(novo);
+                localStorage.setItem(SOM_BIPE_KEY, String(novo));
+              }}
+              className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800"
+              title="Som do leitor"
             >
-              {somAtivo ? (
-                <Volume2 size={16} className="text-gray-700 dark:text-gray-300" />
-              ) : (
-                <VolumeX size={16} className="text-gray-400" />
-              )}
+              {somAtivo ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </button>
-
             <button
+              type="button"
               onClick={() => setScannerAberto(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold rounded-lg transition text-sm"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
             >
-              <Camera size={16} />
+              <Camera className="h-4 w-4" />
               <span className="hidden sm:inline">Câmera</span>
             </button>
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[10px] text-green-700 dark:text-green-400 font-semibold uppercase">
-              <TrendingUp size={10} />
-              Vendas hoje
-            </div>
-            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white truncate">
-              {formatarMoeda(statsDia.faturamento)}
-            </p>
-          </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[10px] text-blue-700 dark:text-blue-400 font-semibold uppercase">
-              <Receipt size={10} />
-              Nº vendas
-            </div>
-            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white">
-              {statsDia.totalVendas}
-            </p>
-          </div>
-          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[10px] text-purple-700 dark:text-purple-400 font-semibold uppercase">
-              <Percent size={10} />
-              Ticket médio
-            </div>
-            <p className="text-sm md:text-lg font-bold text-gray-900 dark:text-white truncate">
-              {formatarMoeda(statsDia.ticketMedio)}
-            </p>
-          </div>
+          <MetricCard icon={TrendingUp} label="Vendas hoje" valor={formatarMoeda(statsDia.faturamento)} cor="emerald" />
+          <MetricCard icon={Receipt} label="Nº vendas" valor={String(statsDia.totalVendas)} cor="blue" />
+          <MetricCard icon={ShoppingCart} label="Ticket médio" valor={formatarMoeda(statsDia.ticketMedio)} cor="violet" />
         </div>
 
         {vendasRecentes.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase whitespace-nowrap">
-              Últimas:
-            </span>
-            {vendasRecentes.map((v) => (
+            <span className="whitespace-nowrap text-[10px] font-bold uppercase text-gray-400">Últimas:</span>
+            {vendasRecentes.map((venda) => (
               <button
-                key={v.numero_venda}
-                onClick={() => reimprimirCupom(v)}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 rounded-md text-xs whitespace-nowrap transition"
-                title="Reimprimir cupom"
+                key={venda.numero_venda}
+                type="button"
+                onClick={() => void reimprimirCupom(venda)}
+                className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs dark:border-gray-700 dark:bg-gray-800"
               >
-                <Receipt size={10} className="text-gray-400" />
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {formatarMoeda(v.total)}
-                </span>
-                <span className="text-gray-400">· {v.hora}</span>
+                <Receipt className="h-3 w-3" />
+                {formatarMoeda(venda.total)} · {venda.hora}
               </button>
             ))}
           </div>
         )}
-      </div>
+      </header>
 
       {error && <Alert message={error} type="error" />}
 
-      {/* 🆕 TOP VENDIDOS DO DIA */}
       {topVendidos.length > 0 && !filtro && !categoriaFiltro && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Mais vendidos hoje
-            </h3>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {topVendidos.map((p) => (
+        <section className="mb-4">
+          <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+            <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" /> Mais vendidos hoje
+          </h2>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {topVendidos.map((produto) => (
               <button
-                key={p.id}
-                onClick={() => adicionarAoCarrinho(p)}
-                className="relative p-2 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg hover:scale-105 active:scale-95 transition text-left"
+                key={produto.id}
+                type="button"
+                onClick={() => adicionarAoCarrinho(produto)}
+                className="relative rounded-lg border border-yellow-200 bg-yellow-50 p-2 text-left transition hover:border-yellow-400 dark:border-yellow-800 dark:bg-yellow-900/20"
               >
-                <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                  {p.nome}
-                </p>
-                <p className="text-xs text-green-600 dark:text-green-400 font-bold">
-                  {formatarMoeda(p.preco_venda)}
-                </p>
-                {animacaoAdd?.id === p.id && (
-                  <span
-                    key={animacaoAdd.key}
-                    className="absolute -top-1 right-2 text-green-500 font-extrabold text-2xl pointer-events-none animate-floatUp"
-                  >
-                    +1
-                  </span>
-                )}
+                <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{produto.nome}</p>
+                <p className="text-xs font-bold text-emerald-600">{formatarMoeda(numero(produto.preco_venda))}</p>
+                {animacaoAdd?.id === produto.id && <span key={animacaoAdd.key} className="animate-floatUp absolute -top-1 right-2 text-xl font-extrabold text-emerald-500">+1</span>}
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* BUSCA */}
-      <div className="mb-4 space-y-3">
-        <input
-          ref={buscaInputRef}
-          type="text"
-          placeholder="Buscar produto por nome, SKU ou categoria... (F2)"
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full"
-          autoFocus
-        />
-
+      <section className="mb-4 space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            ref={buscaInputRef}
+            value={filtro}
+            onChange={(event) => setFiltro(event.target.value)}
+            placeholder="Buscar por nome, SKU, marca ou categoria..."
+            className="input-field w-full pl-10 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            autoFocus
+          />
+        </div>
         {categorias.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            <button
-              onClick={() => setCategoriaFiltro(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-                !categoriaFiltro
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              Todos
-            </button>
-            {categorias.map((cat) => (
-              <button
-                key={cat}
-                onClick={() =>
-                  setCategoriaFiltro(categoriaFiltro === cat ? null : cat)
-                }
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-                  categoriaFiltro === cat
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Tag size={10} />
-                {cat}
+            <button type="button" onClick={() => setCategoriaFiltro(null)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${!categoriaFiltro ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>Todos</button>
+            {categorias.map((categoria) => (
+              <button key={categoria} type="button" onClick={() => setCategoriaFiltro(categoriaFiltro === categoria ? null : categoria)} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${categoriaFiltro === categoria ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+                <Tag className="h-3 w-3" /> {categoria}
               </button>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* GRID PRODUTOS + CARRINHO */}
-      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-        <div className="flex-1">
+      <div className="flex flex-col gap-5 md:flex-row">
+        <section className="min-w-0 flex-1">
           {produtosFiltrados.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
-              <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Nenhum produto encontrado</p>
-              <p className="text-sm mt-1">
-                Tente ajustar os filtros ou ler um código de barras
-              </p>
+            <div className="rounded-xl border border-gray-200 bg-white py-16 text-center text-gray-400 dark:border-gray-800 dark:bg-gray-900">
+              <Package className="mx-auto mb-3 h-12 w-12 opacity-40" />
+              <p className="font-semibold">Nenhum produto disponível</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {produtosFiltrados.map((produto) => {
-                const item = carrinho.find((i) => i.produto_id === produto.id)
+                const item = carrinho.find((carrinhoItem) => carrinhoItem.produto_id === produto.id);
                 return (
-                  <button
-                    key={produto.id}
-                    onClick={() => adicionarAoCarrinho(produto)}
-                    className={`relative p-3 rounded-lg border-2 text-left transition transform hover:scale-105 active:scale-95 flex flex-col h-full ${
-                      item
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between w-full">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate dark:text-white">
-                          {produto.nome}
-                        </p>
-                        <p className="text-green-600 dark:text-green-400 font-bold text-base mt-1">
-                          {formatarMoeda(produto.preco_venda)}
-                        </p>
-                      </div>
-                      {item && (
-                        <span className="bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
-                          {item.quantidade}
-                        </span>
-                      )}
+                  <button key={produto.id} type="button" onClick={() => adicionarAoCarrinho(produto)} className={`relative flex min-h-28 flex-col rounded-xl border-2 p-3 text-left transition active:scale-[0.98] ${item ? "border-blue-500 bg-blue-50 dark:bg-blue-900/25" : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800"}`}>
+                    <div className="flex w-full items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{produto.nome}</p>
+                      {item && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{item.quantidade}</span>}
                     </div>
-                    <p className="text-xs text-gray-400 mt-auto pt-1">
-                      {produto.quantidade_atual} em estoque
-                    </p>
-
-                    {/* 🆕 Animação +1 */}
-                    {animacaoAdd?.id === produto.id && (
-                      <span
-                        key={animacaoAdd.key}
-                        className="absolute -top-1 right-2 text-green-500 font-extrabold text-2xl pointer-events-none animate-floatUp"
-                      >
-                        +1
-                      </span>
-                    )}
+                    <p className="mt-1 text-base font-extrabold text-emerald-600">{formatarMoeda(numero(produto.preco_venda))}</p>
+                    <p className="mt-auto pt-2 text-xs text-gray-400">{produto.quantidade_atual} em estoque</p>
+                    {animacaoAdd?.id === produto.id && <span key={animacaoAdd.key} className="animate-floatUp absolute -top-1 right-2 text-xl font-extrabold text-emerald-500">+1</span>}
                   </button>
-                )
+                );
               })}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* CARRINHO DESKTOP */}
-        <div className="hidden md:block w-72 lg:w-80 flex-shrink-0">
-          <div className="sticky top-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg dark:text-white">Carrinho</h3>
-              {carrinho.length > 0 && (
-                <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full font-bold">
-                  {totalItens} un
-                </span>
-              )}
-            </div>
-
-            {/* 🆕 Vincular cliente (opcional) */}
-            <BlocoCliente />
-
-            {carrinho.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Carrinho vazio</p>
-                <p className="text-xs mt-2 text-gray-500">
-                  Escaneie ou clique nos produtos
-                </p>
-              </div>
-            ) : (
-              <div className="max-h-96 overflow-y-auto -mx-4 px-4">
-                {carrinho.map((item) => {
-                  const produto = produtos.find(
-                    (p) => p.id === item.produto_id
-                  )
-                  return (
-                    <div
-                      key={item.produto_id}
-                      className="flex items-center justify-between py-2 border-b dark:border-gray-700"
-                    >
-                      <div className="flex-1 min-w-0 mr-2">
-                        <p className="text-sm font-medium truncate dark:text-white">
-                          {produto?.nome}
-                        </p>
-                        <button
-                          onClick={() => removerDoCarrinho(item.produto_id)}
-                          className="text-red-500 hover:text-red-700 text-xs"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() =>
-                            atualizarQuantidade(
-                              item.produto_id,
-                              item.quantidade - 1
-                            )
-                          }
-                          className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <span className="w-8 text-center font-bold text-sm">
-                          {item.quantidade}
-                        </span>
-                        <button
-                          onClick={() =>
-                            atualizarQuantidade(
-                              item.produto_id,
-                              item.quantidade + 1
-                            )
-                          }
-                          className="w-7 h-7 bg-white dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-600"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
-                      <p className="w-20 text-right font-semibold text-sm dark:text-white">
-                        {formatarMoeda(item.quantidade * item.preco_unitario)}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {carrinho.length > 0 && (
-              <>
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">
-                      Desconto (F4)
-                    </span>
-                    <input
-                      id="desconto-input"
-                      type="number"
-                      value={desconto}
-                      onChange={(e) => setDesconto(e.target.value)}
-                      placeholder="0.00"
-                      className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-sm"
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal</span>
-                    <span>{formatarMoeda(subtotal)}</span>
-                  </div>
-                  {descontoVal > 0 && (
-                    <div className="flex justify-between text-sm text-red-500">
-                      <span>Desconto</span>
-                      <span>-{formatarMoeda(descontoVal)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-lg border-t pt-2 dark:border-gray-700">
-                    <span>Total</span>
-                    <span>{formatarMoeda(totalPagar)}</span>
-                  </div>
-                </div>
-                <button
-                  onClick={abrirPagamento}
-                  className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 text-white font-bold rounded-lg transition flex items-center justify-center gap-2"
-                >
-                  Finalizar Venda
-                  <kbd className="text-[10px] px-1.5 py-0.5 bg-white/20 rounded font-mono">
-                    F8
-                  </kbd>
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm('Limpar carrinho?')) setCarrinho([])
-                  }}
-                  className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center justify-center gap-2"
-                >
-                  <RotateCcw size={14} />
-                  Limpar carrinho
-                  <kbd className="text-[9px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono">
-                    Esc
-                  </kbd>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <aside className="hidden w-80 shrink-0 md:block">
+          <Carrinho
+            carrinho={carrinho}
+            produtos={produtos}
+            totalItens={totalItens}
+            subtotal={subtotal}
+            desconto={desconto}
+            descontoVal={descontoVal}
+            descontoInvalido={descontoInvalido}
+            totalPagar={totalPagar}
+            processando={processando}
+            setDesconto={setDesconto}
+            atualizarQuantidade={atualizarQuantidade}
+            removerDoCarrinho={removerDoCarrinho}
+            abrirPagamento={abrirPagamento}
+            limpar={() => setCarrinho([])}
+            cliente={<BlocoCliente />}
+          />
+        </aside>
       </div>
 
-      {/* CARRINHO MOBILE */}
       {carrinho.length > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t dark:border-gray-800 shadow-2xl z-40">
-          <div className="max-h-40 overflow-y-auto px-3 pt-3 space-y-2">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white p-3 shadow-2xl dark:border-gray-800 dark:bg-gray-900 md:hidden">
+          <div className="mb-2 max-h-28 space-y-1 overflow-y-auto">
             {carrinho.map((item) => {
-              const produto = produtos.find((p) => p.id === item.produto_id)
+              const produto = produtos.find((p) => p.id === item.produto_id);
               return (
-                <div
-                  key={item.produto_id}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="font-medium truncate flex-1 mr-2">
-                    {produto?.nome}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() =>
-                        atualizarQuantidade(
-                          item.produto_id,
-                          item.quantidade - 1
-                        )
-                      }
-                      className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
-                    >
-                      <Minus size={12} />
-                    </button>
-                    <span className="w-6 text-center font-bold text-xs">
-                      {item.quantidade}
-                    </span>
-                    <button
-                      onClick={() =>
-                        atualizarQuantidade(
-                          item.produto_id,
-                          item.quantidade + 1
-                        )
-                      }
-                      className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                  <span className="font-semibold ml-2 w-20 text-right">
-                    {formatarMoeda(item.quantidade * item.preco_unitario)}
-                  </span>
-                  <button
-                    onClick={() => removerDoCarrinho(item.produto_id)}
-                    className="text-red-400 ml-1"
-                  >
-                    <X size={14} />
-                  </button>
+                <div key={item.produto_id} className="flex items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate font-semibold">{produto?.nome}</span>
+                  <button type="button" onClick={() => atualizarQuantidade(item.produto_id, item.quantidade - 1)} className="rounded bg-gray-100 p-1 dark:bg-gray-800"><Minus className="h-3 w-3" /></button>
+                  <span className="w-5 text-center font-bold">{item.quantidade}</span>
+                  <button type="button" onClick={() => atualizarQuantidade(item.produto_id, item.quantidade + 1)} className="rounded bg-gray-100 p-1 dark:bg-gray-800"><Plus className="h-3 w-3" /></button>
+                  <span className="w-20 text-right font-bold">{formatarMoeda(item.quantidade * item.preco_unitario)}</span>
+                  <button type="button" onClick={() => removerDoCarrinho(item.produto_id)} className="text-red-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
-              )
+              );
             })}
           </div>
-
-          <div className="px-3 py-3 border-t dark:border-gray-800">
-            {/* 🆕 Vincular cliente (opcional) — mobile */}
-            <div className="mb-2">
-              <BlocoCliente />
-            </div>
-
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500">
-                {carrinho.length} produto(s) · {totalItens} un
-              </span>
-              <span className="font-bold text-lg">
-                {formatarMoeda(totalPagar)}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (confirm('Limpar carrinho?')) setCarrinho([])
-                }}
-                className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-sm"
-              >
-                Limpar
-              </button>
-              <button
-                onClick={abrirPagamento}
-                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-lg"
-              >
-                Vender · {formatarMoeda(totalPagar)}
-              </button>
-            </div>
+          <div className="mb-2"><BlocoCliente /></div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setCarrinho([])} className="rounded-lg bg-gray-100 px-4 py-3 text-sm font-semibold dark:bg-gray-800">Limpar</button>
+            <button type="button" onClick={abrirPagamento} className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Vender · {formatarMoeda(totalPagar)}</button>
           </div>
         </div>
       )}
 
-      {/* 🆕 MODAL DE SELEÇÃO DE CLIENTE */}
       {mostrarSeletorCliente && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setMostrarSeletorCliente(false)}
-        >
-          <div
-            className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white">Selecionar cliente</h3>
-              <button
-                onClick={() => setMostrarSeletorCliente(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-4 border-b dark:border-gray-700">
-              <input
-                autoFocus
-                type="text"
-                value={buscaCliente}
-                onChange={(e) => setBuscaCliente(e.target.value)}
-                placeholder="Buscar por nome..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="overflow-y-auto flex-1">
-              {clientesFiltrados.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    setClienteSelecionado(c)
-                    setMostrarSeletorCliente(false)
-                    setBuscaCliente('')
-                  }}
-                  className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 border-b dark:border-gray-800 transition"
-                >
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{c.nome}</p>
-                  {c.telefone && <p className="text-xs text-gray-500">{c.telefone}</p>}
-                </button>
-              ))}
-
-              {clientesFiltrados.length === 0 && (
-                <p className="p-4 text-center text-sm text-gray-500">
-                  Nenhum cliente encontrado. Cadastre em &quot;Clientes&quot;.
-                </p>
-              )}
-            </div>
+        <Modal onFechar={() => setMostrarSeletorCliente(false)}>
+          <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-800">
+            <h2 className="text-lg font-bold">Selecionar cliente</h2>
+            <button type="button" onClick={() => setMostrarSeletorCliente(false)}><X className="h-5 w-5" /></button>
           </div>
-        </div>
+          <div className="p-4"><input autoFocus value={buscaCliente} onChange={(event) => setBuscaCliente(event.target.value)} placeholder="Buscar cliente..." className="input-field w-full dark:border-gray-700 dark:bg-gray-800" /></div>
+          <div className="max-h-80 overflow-y-auto">
+            {clientesFiltrados.length === 0 ? <p className="p-6 text-center text-sm text-gray-500">Nenhum cliente encontrado.</p> : clientesFiltrados.map((cliente) => (
+              <button key={cliente.id} type="button" onClick={() => { setClienteSelecionado(cliente); setMostrarSeletorCliente(false); setBuscaCliente(""); }} className="w-full border-t border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+                <p className="text-sm font-semibold">{cliente.nome}</p>
+                {cliente.telefone && <p className="text-xs text-gray-500">{cliente.telefone}</p>}
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
 
-      {/* MODAL DE ATALHOS */}
       {mostrarAtalhos && (
-        <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-          onClick={() => setMostrarAtalhos(false)}
-        >
-          <div
-            className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <Keyboard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-lg font-bold dark:text-white">
-                  Atalhos do PDV
-                </h3>
-              </div>
-              <button
-                onClick={() => setMostrarAtalhos(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
+        <Modal onFechar={() => setMostrarAtalhos(false)}>
+          <div className="p-6">
+            <div className="mb-5 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-bold"><Keyboard className="h-5 w-5 text-blue-600" /> Atalhos do PDV</h2><button type="button" onClick={() => setMostrarAtalhos(false)}><X className="h-5 w-5" /></button></div>
             <div className="space-y-2">
-              {[
-                { tecla: 'F1', acao: 'Mostrar esta ajuda' },
-                { tecla: 'F2', acao: 'Buscar produto' },
-                { tecla: 'F4', acao: 'Aplicar desconto' },
-                { tecla: 'F8', acao: 'Finalizar venda' },
-                { tecla: 'F10', acao: 'Remover último item' },
-                { tecla: '1-4', acao: 'Forma de pagamento (no modal)' },
-                { tecla: 'Enter', acao: 'Confirmar venda / leitor USB' },
-                { tecla: 'Esc', acao: 'Fechar modal / Limpar carrinho' },
-              ].map(({ tecla, acao }) => (
-                <div
-                  key={tecla}
-                  className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                >
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    {acao}
-                  </span>
-                  <kbd className="px-2.5 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono font-bold text-gray-700 dark:text-gray-300 shadow-sm">
-                    {tecla}
-                  </kbd>
-                </div>
+              {[["F1", "Mostrar ajuda"], ["F2", "Buscar produto"], ["F8", "Finalizar venda"], ["1-4", "Escolher pagamento"], ["Enter", "Confirmar venda"], ["Esc", "Limpar carrinho"]].map(([tecla, acao]) => (
+                <div key={tecla} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><span className="text-sm">{acao}</span><kbd className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-bold dark:border-gray-600 dark:bg-gray-900">{tecla}</kbd></div>
               ))}
             </div>
-
-            <div className="mt-5 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                💡 <strong>Dica:</strong> Conecte um leitor USB de código de barras
-                e ele funciona automaticamente. Só apontar e bipar!
-              </p>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* MODAL DE PAGAMENTO */}
       {modalPagamento && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold dark:text-white">
-                Finalizar Venda
-              </h3>
-              <button
-                onClick={() => setModalPagamento(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
+        <Modal onFechar={() => !processando && setModalPagamento(false)}>
+          <div className="max-h-[90vh] space-y-4 overflow-y-auto p-6">
+            <div className="flex items-center justify-between"><h2 className="text-xl font-bold">Finalizar venda</h2><button type="button" disabled={processando} onClick={() => setModalPagamento(false)}><X className="h-6 w-6" /></button></div>
+            <div className="space-y-2 rounded-xl bg-gray-50 p-4 dark:bg-gray-800"><div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatarMoeda(subtotal)}</span></div>{descontoVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}<div className="flex justify-between border-t border-gray-200 pt-2 text-xl font-extrabold dark:border-gray-700"><span>Total</span><span>{formatarMoeda(totalPagar)}</span></div></div>
+            <div className="grid grid-cols-4 gap-2">
+              {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }, indice) => (
+                <button key={value} type="button" onClick={() => setFormaPagamento(value)} className={`relative flex flex-col items-center gap-1 rounded-xl border-2 p-2 text-xs font-semibold ${formaPagamento === value ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-900/25" : "border-gray-200 dark:border-gray-700"}`}><kbd className="absolute right-1 top-1 text-[9px]">{indice + 1}</kbd><Icon className="h-5 w-5" />{label}</button>
+              ))}
             </div>
-
-            <div className="flex justify-between text-sm">
-              <span>{totalItens} item(ns)</span>
-              <span>{formatarMoeda(subtotal)}</span>
-            </div>
-            {descontoVal > 0 && (
-              <div className="flex justify-between text-sm text-red-500">
-                <span>Desconto</span>
-                <span>-{formatarMoeda(descontoVal)}</span>
-              </div>
+            {formaPagamento === "Dinheiro" && (
+              <div className="space-y-3"><label className="block text-sm font-semibold">Valor recebido</label><input type="number" min="0" step="0.01" value={valorRecebido} onChange={(event) => setValorRecebido(event.target.value)} className="input-field w-full text-lg font-bold dark:border-gray-700 dark:bg-gray-800" />{pagamentoDinheiroInvalido && <p className="text-sm text-red-600">Informe pelo menos {formatarMoeda(totalPagar)}.</p>}{trocoVal > 0 && <div className="flex justify-between rounded-xl bg-emerald-50 p-4 font-bold text-emerald-700 dark:bg-emerald-900/20"><span>Troco</span><span>{formatarMoeda(trocoVal)}</span></div>}</div>
             )}
-            <div className="flex justify-between font-bold text-xl border-t dark:border-gray-700 pt-2">
-              <span>Total</span>
-              <span>{formatarMoeda(totalPagar)}</span>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium mb-2 dark:text-gray-300">
-                Forma de pagamento
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {FORMAS_PAGAMENTO.map(({ label, icon: Icon, value }, idx) => (
-                  <button
-                    key={value}
-                    onClick={() => setFormaPagamento(value)}
-                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-xs font-medium transition ${
-                      formaPagamento === value
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <kbd className="absolute top-1 right-1 text-[9px] px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono text-gray-600 dark:text-gray-300">
-                      {idx + 1}
-                    </kbd>
-                    <Icon size={20} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {formaPagamento === 'Dinheiro' && (
-              <div className="space-y-3">
-                <label className="text-sm font-medium dark:text-gray-300">
-                  Valor recebido (R$)
-                </label>
-                <input
-                  type="number"
-                  value={valorRecebido}
-                  onChange={(e) => setValorRecebido(e.target.value)}
-                  className="input-field dark:bg-gray-800 dark:border-gray-700 dark:text-gray-50 w-full text-lg font-bold"
-                />
-
-                {/* 🆕 BOTÕES DE CÉDULAS RÁPIDAS */}
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider mb-2">
-                    Cliente pagou com
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setValorRecebido(totalPagar.toFixed(2))}
-                      className="py-3 bg-gradient-to-br from-green-500 to-emerald-600 hover:shadow-md text-white text-sm font-bold rounded-xl transition"
-                    >
-                      Valor exato
-                    </button>
-                    {(() => {
-                      const sugestoes = new Set<number>()
-                      ;[5, 10, 20, 50, 100, 200].forEach((cedula) => {
-                        const arredondado = Math.ceil(totalPagar / cedula) * cedula
-                        const sugestao = cedula >= totalPagar ? cedula : arredondado
-                        if (sugestao > totalPagar) sugestoes.add(sugestao)
-                      })
-                      return Array.from(sugestoes)
-                        .sort((a, b) => a - b)
-                        .slice(0, 6)
-                        .map((sugestao) => {
-                          const isAtivo = parseFloat(valorRecebido) === sugestao
-                          return (
-                            <button
-                              key={sugestao}
-                              type="button"
-                              onClick={() => setValorRecebido(sugestao.toFixed(2))}
-                              className={`py-3 text-sm font-bold rounded-xl border-2 transition ${
-                                isAtivo
-                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 text-gray-700 dark:text-gray-300'
-                              }`}
-                            >
-                              R$ {sugestao.toFixed(0)}
-                            </button>
-                          )
-                        })
-                    })()}
-                  </div>
-                </div>
-
-                {trocoVal > 0 && (
-                  <div className="flex justify-between items-center bg-green-50 dark:bg-green-900/20 p-3 rounded-xl">
-                    <span className="text-green-700 dark:text-green-400 font-medium">
-                      Troco
-                    </span>
-                    <span className="text-green-700 dark:text-green-400 font-bold text-lg">
-                      {formatarMoeda(trocoVal)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={processarVenda}
-              disabled={processando}
-              className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg text-lg transition"
-            >
-              {processando ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Processando...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  Confirmar · {formatarMoeda(totalPagar)}
-                  <kbd className="text-[10px] px-1.5 py-0.5 bg-white/20 rounded font-mono">
-                    Enter
-                  </kbd>
-                </span>
-              )}
-            </button>
+            <button type="button" onClick={() => void processarVenda()} disabled={processando || descontoInvalido || pagamentoDinheiroInvalido} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-lg font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">{processando ? <><Loader2 className="h-5 w-5 animate-spin" />Processando...</> : <>Confirmar · {formatarMoeda(totalPagar)}</>}</button>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* MODAL DE CADASTRO RÁPIDO */}
       {modalCadastroRapido && dadosProdutoAPI && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-bold dark:text-white">
-                Cadastrar novo produto
-              </h4>
-              <button
-                onClick={() => setModalCadastroRapido(false)}
-                className="text-gray-400"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-purple-900/20 dark:via-pink-900/20 dark:to-orange-900/20 border border-purple-200 dark:border-purple-800">
-              <div className="flex items-start gap-2 mb-3">
-                <span className="text-lg">💡</span>
-                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-                  <strong>Como usar:</strong> Digite o <strong>nome do produto</strong> no campo abaixo
-                  (ex: &quot;coca lata 350&quot;) e clique no botão. A IA completa categoria, descrição
-                  e sugere preço.
-                </p>
-              </div>
-              <BotaoIA
-                onClick={handleCompletarComIA}
-                carregando={carregandoIA}
-                label="✨ Completar com IA"
-                feature="cadastro"
-                className="w-full justify-center"
-              />
-              {!cadastroNome.trim() && (
-                <p className="text-xs text-amber-700 dark:text-amber-400 text-center mt-2 font-medium">
-                  ⚠️ Digite o nome do produto primeiro
-                </p>
-              )}
-            </div>
-
-            {dadosProdutoAPI.encontrado === true && (
-              <p className="text-sm text-green-600 dark:text-green-400 mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
-                ✅ Produto encontrado na base externa. Confirme os dados e ajuste o necessário.
-              </p>
-            )}
-
+        <Modal onFechar={() => !salvandoProdutoRapido && setModalCadastroRapido(false)} largura="max-w-lg">
+          <div className="max-h-[90vh] overflow-y-auto p-6">
+            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold">Cadastrar produto</h2><button type="button" disabled={salvandoProdutoRapido} onClick={() => setModalCadastroRapido(false)}><X className="h-5 w-5" /></button></div>
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">Os dados encontrados pelo código de barras foram preenchidos quando disponíveis. Revise tudo antes de salvar.</div>
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500">
-                  SKU (código)
-                </label>
-                <div className="font-mono text-sm bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
-                  {skuParaCadastro}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">Nome *</label>
-                <input
-                  value={cadastroNome}
-                  onChange={(e) => setCadastroNome(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">Marca</label>
-                <input
-                  value={cadastroMarca}
-                  onChange={(e) => setCadastroMarca(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Descrição
-                </label>
-                <textarea
-                  value={cadastroDescricao}
-                  onChange={(e) => setCadastroDescricao(e.target.value)}
-                  className="input-field w-full"
-                  rows={2}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Categoria
-                </label>
-                <input
-                  value={cadastroCategoria}
-                  onChange={(e) => setCadastroCategoria(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Preço de venda *
-                </label>
-                <input
-                  type="number"
-                  value={cadastroPreco}
-                  onChange={(e) => setCadastroPreco(e.target.value)}
-                  className="input-field w-full"
-                  placeholder="0.00"
-                />
-                {precoSugeridoIA && (
-                  <div className="mt-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-                    <p className="text-xs text-purple-700 dark:text-purple-300">
-                      💡 IA sugere: {formatarMoeda(precoSugeridoIA.min)} a{' '}
-                      {formatarMoeda(precoSugeridoIA.max)}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500">
-                  Quantidade inicial
-                </label>
-                <input
-                  type="number"
-                  value={cadastroQuantidade}
-                  onChange={(e) => setCadastroQuantidade(e.target.value)}
-                  className="input-field w-full"
-                />
-              </div>
-
-
+              <Campo label="SKU"><div className="rounded-lg bg-gray-100 px-3 py-2 font-mono text-sm dark:bg-gray-800">{skuParaCadastro}</div></Campo>
+              <Campo label="Nome *"><input value={cadastroNome} onChange={(e) => setCadastroNome(e.target.value)} className="input-field w-full" /></Campo>
+              <Campo label="Marca"><input value={cadastroMarca} onChange={(e) => setCadastroMarca(e.target.value)} className="input-field w-full" /></Campo>
+              <Campo label="Descrição"><textarea value={cadastroDescricao} onChange={(e) => setCadastroDescricao(e.target.value)} rows={2} className="input-field w-full resize-none" /></Campo>
+              <Campo label="Categoria"><input value={cadastroCategoria} onChange={(e) => setCadastroCategoria(e.target.value)} className="input-field w-full" /></Campo>
+              <div className="grid gap-3 sm:grid-cols-2"><Campo label="Preço de venda *"><input type="number" min="0.01" step="0.01" value={cadastroPreco} onChange={(e) => setCadastroPreco(e.target.value)} className="input-field w-full" /></Campo><Campo label="Preço de custo"><input type="number" min="0" step="0.01" value={cadastroCusto} onChange={(e) => setCadastroCusto(e.target.value)} className="input-field w-full" /></Campo></div>
+              <Campo label="Quantidade inicial"><input type="number" min="0" step="1" value={cadastroQuantidade} onChange={(e) => setCadastroQuantidade(e.target.value)} className="input-field w-full" /></Campo>
             </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={salvarProdutoRapido}
-                disabled={salvandoProdutoRapido}
-                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition"
-              >
-                {salvandoProdutoRapido ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Salvando...
-                  </span>
-                ) : (
-                  'Salvar e usar'
-                )}
-              </button>
-              <button
-                onClick={() => setModalCadastroRapido(false)}
-                disabled={salvandoProdutoRapido}
-                className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-semibold disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-            </div>
+            <div className="mt-6 flex gap-3"><button type="button" onClick={() => void salvarProdutoRapido()} disabled={salvandoProdutoRapido} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 font-bold text-white disabled:opacity-50">{salvandoProdutoRapido && <Loader2 className="h-4 w-4 animate-spin" />}Salvar e usar</button><button type="button" disabled={salvandoProdutoRapido} onClick={() => setModalCadastroRapido(false)} className="rounded-lg bg-gray-100 px-4 py-3 font-semibold dark:bg-gray-800">Cancelar</button></div>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* 🆕 TELA DE SUCESSO GIGANTE PÓS-VENDA */}
       {telaSucesso && (
-        <div className="fixed inset-0 z-50 bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="text-center text-white max-w-2xl w-full">
-            <div className="inline-flex w-24 h-24 rounded-full bg-white/20 backdrop-blur-sm items-center justify-center mb-6 animate-bounce">
-              <CheckCircle2 className="w-14 h-14" />
-            </div>
-
-            <h2 className="text-3xl md:text-4xl font-bold mb-2">
-              Venda realizada! 🎉
-            </h2>
-            <p className="text-green-100 mb-8">{telaSucesso.formaPagamento}</p>
-
-            {/* Total cobrado */}
-            <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 mb-4">
-              <p className="text-sm text-green-100 uppercase font-bold tracking-wider mb-1">
-                Total cobrado
-              </p>
-              <p className="text-5xl md:text-6xl font-extrabold">
-                {formatarMoeda(telaSucesso.total)}
-              </p>
-            </div>
-
-            {/* TROCO GIGANTE (só se for dinheiro) */}
-            {telaSucesso.troco > 0 && (
-              <div className="bg-white text-green-600 rounded-3xl p-8 mb-6 shadow-2xl">
-                <p className="text-sm text-green-500 uppercase font-bold tracking-wider mb-2">
-                  💰 Devolver de troco
-                </p>
-                <p className="text-7xl md:text-8xl font-extrabold leading-none">
-                  {formatarMoeda(telaSucesso.troco)}
-                </p>
-                <p className="text-sm text-gray-500 mt-3">
-                  Cliente pagou {formatarMoeda(telaSucesso.recebido)}
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-3 justify-center flex-wrap">
-              <button
-                onClick={() => setTelaSucesso(null)}
-                className="px-8 py-3 bg-white text-green-700 font-bold rounded-full hover:shadow-xl transition flex items-center gap-2"
-              >
-                Próxima venda
-                <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-green-100 mt-6">
-              Tela fecha em 8 segundos (ou aperte Esc)
-            </p>
-          </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-emerald-500 to-green-700 p-4 text-white">
+          <div className="w-full max-w-xl text-center"><div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-white/20"><CheckCircle2 className="h-12 w-12" /></div><h2 className="text-3xl font-extrabold">Venda realizada!</h2><p className="mt-1 text-emerald-100">{telaSucesso.formaPagamento}</p><div className="mt-6 rounded-3xl bg-white/15 p-6"><p className="text-xs font-bold uppercase tracking-wider text-emerald-100">Total cobrado</p><p className="mt-1 text-5xl font-extrabold">{formatarMoeda(telaSucesso.total)}</p></div>{telaSucesso.troco > 0 && <div className="mt-4 rounded-3xl bg-white p-7 text-emerald-700"><p className="text-xs font-bold uppercase">Devolver de troco</p><p className="mt-2 text-6xl font-extrabold">{formatarMoeda(telaSucesso.troco)}</p><p className="mt-2 text-sm text-gray-500">Recebido: {formatarMoeda(telaSucesso.recebido)}</p></div>}<button type="button" onClick={() => setTelaSucesso(null)} className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full bg-white px-8 py-3 font-bold text-emerald-700">Próxima venda <ArrowRight className="h-5 w-5" /></button></div>
         </div>
       )}
 
-      {/* SCANNER */}
-      {scannerAberto && (
-        <BarcodeScanner
-          onDetected={handleCodigoBarrasLido}
-          onClose={() => setScannerAberto(false)}
-        />
-      )}
+      {scannerAberto && <BarcodeScanner onDetected={handleCodigoBarrasLido} onClose={() => setScannerAberto(false)} />}
+      {cupomAberto && dadosCupom && <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />}
 
-      {/* CUPOM */}
-      {cupomAberto && dadosCupom && (
-        <CupomImpressao dados={dadosCupom} onFechar={fecharCupom} />
-      )}
-
-      {/* 🆕 ANIMAÇÕES CSS */}
       <style jsx>{`
-        @keyframes floatUp {
-          0% {
-            opacity: 0;
-            transform: translateY(0);
-          }
-          20% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0;
-            transform: translateY(-30px);
-          }
-        }
-        .animate-floatUp {
-          animation: floatUp 0.8s ease-out forwards;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
+        @keyframes floatUp { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
+        .animate-floatUp { animation: floatUp 0.8s ease-out forwards; }
       `}</style>
     </div>
-  )
+  );
+}
+
+function MetricCard({ icon: Icon, label, valor, cor }: { icon: typeof TrendingUp; label: string; valor: string; cor: "emerald" | "blue" | "violet" }) {
+  const estilos = { emerald: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20", blue: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20", violet: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-900/20" };
+  return <article className={`rounded-lg border px-3 py-2 ${estilos[cor]}`}><p className="flex items-center gap-1 text-[10px] font-bold uppercase"><Icon className="h-3 w-3" />{label}</p><p className="truncate text-sm font-extrabold text-gray-900 dark:text-white md:text-lg">{valor}</p></article>;
+}
+
+function Carrinho({ carrinho, produtos, totalItens, subtotal, desconto, descontoVal, descontoInvalido, totalPagar, processando, setDesconto, atualizarQuantidade, removerDoCarrinho, abrirPagamento, limpar, cliente }: { carrinho: ItemCarrinho[]; produtos: Produto[]; totalItens: number; subtotal: number; desconto: string; descontoVal: number; descontoInvalido: boolean; totalPagar: number; processando: boolean; setDesconto: (valor: string) => void; atualizarQuantidade: (id: string, quantidade: number) => void; removerDoCarrinho: (id: string) => void; abrirPagamento: () => void; limpar: () => void; cliente: React.ReactNode }) {
+  return <div className="sticky top-20 space-y-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">Carrinho</h2><span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">{totalItens} un</span></div>{cliente}{carrinho.length === 0 ? <div className="py-8 text-center text-gray-400"><ShoppingCart className="mx-auto mb-2 h-8 w-8" /><p className="text-sm">Carrinho vazio</p></div> : <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">{carrinho.map((item) => { const produto = produtos.find((p) => p.id === item.produto_id); return <div key={item.produto_id} className="py-3"><div className="flex items-center justify-between gap-2"><p className="min-w-0 flex-1 truncate text-sm font-semibold">{produto?.nome}</p><button type="button" onClick={() => removerDoCarrinho(item.produto_id)} className="text-red-500"><X className="h-4 w-4" /></button></div><div className="mt-2 flex items-center justify-between"><div className="flex items-center gap-1"><button type="button" onClick={() => atualizarQuantidade(item.produto_id, item.quantidade - 1)} className="rounded border p-1 dark:border-gray-700"><Minus className="h-3.5 w-3.5" /></button><span className="w-7 text-center text-sm font-bold">{item.quantidade}</span><button type="button" onClick={() => atualizarQuantidade(item.produto_id, item.quantidade + 1)} className="rounded border p-1 dark:border-gray-700"><Plus className="h-3.5 w-3.5" /></button></div><span className="text-sm font-bold">{formatarMoeda(item.quantidade * item.preco_unitario)}</span></div></div>; })}</div>}{carrinho.length > 0 && <><div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800"><div><label className="text-xs text-gray-500">Desconto</label><input type="number" min="0" step="0.01" value={desconto} onChange={(e) => setDesconto(e.target.value)} className={`input-field mt-1 w-full ${descontoInvalido ? "border-red-500" : ""}`} /></div><div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatarMoeda(subtotal)}</span></div>{descontoVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>Desconto</span><span>-{formatarMoeda(descontoVal)}</span></div>}<div className="flex justify-between border-t pt-2 text-lg font-extrabold dark:border-gray-700"><span>Total</span><span>{formatarMoeda(totalPagar)}</span></div></div><button type="button" onClick={abrirPagamento} disabled={processando || descontoInvalido} className="w-full rounded-lg bg-emerald-600 py-3 font-bold text-white disabled:opacity-50">Finalizar venda</button><button type="button" onClick={limpar} className="flex w-full items-center justify-center gap-2 py-2 text-sm text-gray-500"><RotateCcw className="h-4 w-4" />Limpar carrinho</button></>}</div>;
+}
+
+function Modal({ children, onFechar, largura = "max-w-md" }: { children: React.ReactNode; onFechar: () => void; largura?: string }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onFechar(); }}><div className={`w-full ${largura} rounded-2xl bg-white shadow-2xl dark:bg-gray-900`}>{children}</div></div>;
+}
+
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className="mb-1 block text-xs font-semibold text-gray-500">{label}</label>{children}</div>;
 }

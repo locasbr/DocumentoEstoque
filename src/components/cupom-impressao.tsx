@@ -105,7 +105,12 @@ export default function CupomImpressao({ dados, onFechar }: CupomProps) {
 
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 no-print">
-            <h2 className="font-bold text-lg text-gray-900 dark:text-white">Cupom Fiscal</h2>
+            <div>
+              <h2 className="font-bold text-lg text-gray-900 dark:text-white">Comprovante de venda</h2>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Documento não fiscal
+              </p>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleImprimir}
@@ -158,6 +163,7 @@ export default function CupomImpressao({ dados, onFechar }: CupomProps) {
               <div className="text-center mb-3">
                 <p className="font-bold text-base uppercase">{nomeLoja}</p>
                 <p className="text-xs text-gray-500">Sistema de Gestão EstoqueSystem</p>
+                <p className="mt-1 text-[10px] font-bold uppercase">Documento não fiscal</p>
                 <div className="border-t border-dashed border-gray-400 my-2" />
                 <p className="text-xs">
                   {dataFormatada} às {horaFormatada}

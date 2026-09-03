@@ -290,6 +290,10 @@ export default function AlertasPage() {
     alertasFiltrados.length > 0 &&
     alertasFiltrados.every((alerta) => selecionados.has(alerta.id));
 
+  const selecionadosVisualizados = alertas.filter(
+    (alerta) => selecionados.has(alerta.id) && alerta.visualizado,
+  ).length;
+
   const atualizarLocalmente = (ids: string[], visualizado: boolean) => {
     const conjunto = new Set(ids);
     setAlertas((atuais) =>
@@ -327,9 +331,28 @@ export default function AlertasPage() {
   const excluirAlertas = async (ids: string[]) => {
     if (ids.length === 0) return;
 
+    const idsPermitidos = alertas
+      .filter((alerta) => ids.includes(alerta.id) && alerta.visualizado)
+      .map((alerta) => alerta.id);
+    const quantidadeBloqueada = ids.length - idsPermitidos.length;
+
+    if (idsPermitidos.length === 0) {
+      addNotification(
+        "Somente alertas visualizados podem ser excluídos.",
+        "warning",
+        3500,
+      );
+      setModal(null);
+      return;
+    }
+
     setProcessando(true);
     try {
-      const { error } = await supabase.from("alertas").delete().in("id", ids);
+      const { error } = await supabase
+        .from("alertas")
+        .delete()
+        .in("id", idsPermitidos)
+        .eq("visualizado", true);
 
       if (error) {
         console.error("Erro ao excluir alertas:", error);
@@ -337,11 +360,20 @@ export default function AlertasPage() {
         return;
       }
 
-      const conjunto = new Set(ids);
+      const conjunto = new Set(idsPermitidos);
       setAlertas((atuais) => atuais.filter((alerta) => !conjunto.has(alerta.id)));
       setSelecionados(new Set());
       setModal(null);
-      addNotification("Alertas removidos.", "success", 2200);
+      addNotification(
+        quantidadeBloqueada > 0
+          ? `${idsPermitidos.length} alerta(s) removido(s). ${quantidadeBloqueada} pendente(s) foram mantido(s).`
+          : "Alertas removidos do histórico.",
+        quantidadeBloqueada > 0 ? "warning" : "success",
+        quantidadeBloqueada > 0 ? 4500 : 2200,
+      );
+    } catch (error: unknown) {
+      console.error("Erro inesperado ao excluir alertas:", error);
+      addNotification("Erro inesperado ao excluir os alertas.", "error");
     } finally {
       setProcessando(false);
     }
@@ -408,6 +440,12 @@ export default function AlertasPage() {
       <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span className={`h-2 w-2 rounded-full ${realtimeAtivo ? "bg-emerald-500" : "bg-gray-400"}`} />
         {realtimeAtivo ? "Atualização automática ativa" : "Conectando atualização automática"}
+      </div>
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+        <strong>Importante:</strong> marcar um alerta como visualizado não
+        altera o estoque. Para resolver a situação, registre a entrada do
+        produto.
       </div>
 
       {erroCarregamento && (
@@ -506,18 +544,19 @@ export default function AlertasPage() {
             </button>
             <button
               type="button"
+              disabled={processando || selecionadosVisualizados === 0}
               onClick={() =>
                 setModal({
-                  titulo: "Excluir alertas selecionados?",
-                  descricao: "Esta ação remove os alertas do histórico e não pode ser desfeita.",
-                  textoBotao: "Excluir",
+                  titulo: `Excluir ${selecionadosVisualizados} alerta(s) visualizado(s)?`,
+                  descricao: "Somente alertas já visualizados serão removidos do histórico. Pendências ativas serão mantidas.",
+                  textoBotao: "Excluir vistos",
                   cor: "red",
                   onConfirmar: () => excluirAlertas(Array.from(selecionados)),
                 })
               }
-              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Excluir
+              Excluir vistos
             </button>
             <button type="button" onClick={() => setSelecionados(new Set())} className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-white/70 dark:text-gray-300 dark:hover:bg-gray-900/30">
               Cancelar
@@ -612,23 +651,25 @@ export default function AlertasPage() {
                         <CheckCircle2 className="h-4 w-4" />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      aria-label="Excluir alerta"
-                      disabled={processando}
-                      onClick={() =>
-                        setModal({
-                          titulo: "Excluir alerta?",
-                          descricao: `O alerta de “${alerta.produto?.nome ?? "produto"}” será removido do histórico.`,
-                          textoBotao: "Excluir",
-                          cor: "red",
-                          onConfirmar: () => excluirAlertas([alerta.id]),
-                        })
-                      }
-                      className="rounded-lg p-2 text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/30"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {alerta.visualizado && (
+                      <button
+                        type="button"
+                        aria-label="Excluir alerta do histórico"
+                        disabled={processando}
+                        onClick={() =>
+                          setModal({
+                            titulo: "Excluir alerta do histórico?",
+                            descricao: `O alerta de “${alerta.produto?.nome ?? "produto"}” será removido permanentemente.`,
+                            textoBotao: "Excluir",
+                            cor: "red",
+                            onConfirmar: () => excluirAlertas([alerta.id]),
+                          })
+                        }
+                        className="rounded-lg p-2 text-red-600 hover:bg-red-100 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>

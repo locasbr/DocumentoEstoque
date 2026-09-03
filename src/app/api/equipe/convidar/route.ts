@@ -1,262 +1,328 @@
-// src/app/api/equipe/convidar/route.ts
+import { randomBytes } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
 
-// ════════════════════════════════════════════════════
-// 🔒 LIMITES DE USUÁRIOS POR PLANO
-// (igual ao usePlano.ts pra manter consistência)
-// ════════════════════════════════════════════════════
 const LIMITES_USUARIOS: Record<string, number> = {
-  iniciante: 1,
-  profissional: 3,
-  negocio: 10,
+  iniciante: 2 ,
+  profissional: 2,
+  negocio: 2,
+}
+
+const NOMES_PLANOS: Record<string, string> = {
+  iniciante: 'Iniciante',
+  profissional: 'Profissional',
+  negocio: 'Negócio',
+}
+
+interface CorpoConvite {
+  email?: unknown
+}
+
+function respostaErro(error: string, status: number, extras?: object) {
+  return NextResponse.json(
+    {
+      error,
+      ...(extras ?? {}),
+    },
+    { status }
+  )
+}
+
+function normalizarEmail(valor: unknown): string {
+  return typeof valor === 'string' ? valor.trim().toLowerCase() : ''
+}
+
+function emailValido(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function gerarSenhaSegura(tamanho = 16): string {
+  const maiusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const minusculas = 'abcdefghijkmnopqrstuvwxyz'
+  const numeros = '23456789'
+  const especiais = '!@#$%'
+  const todos = `${maiusculas}${minusculas}${numeros}${especiais}`
+
+  const escolher = (caracteres: string): string => {
+    const limite = 256 - (256 % caracteres.length)
+    let byte = randomBytes(1)[0]
+
+    while (byte >= limite) {
+      byte = randomBytes(1)[0]
+    }
+
+    return caracteres[byte % caracteres.length]
+  }
+
+  const caracteres = [
+    escolher(maiusculas),
+    escolher(minusculas),
+    escolher(numeros),
+    escolher(especiais),
+  ]
+
+  while (caracteres.length < Math.max(tamanho, 12)) {
+    caracteres.push(escolher(todos))
+  }
+
+  for (let indice = caracteres.length - 1; indice > 0; indice -= 1) {
+    const byte = randomBytes(1)[0]
+    const destino = byte % (indice + 1)
+    ;[caracteres[indice], caracteres[destino]] = [
+      caracteres[destino],
+      caracteres[indice],
+    ]
+  }
+
+  return caracteres.join('')
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
+    console.error('Variáveis obrigatórias do Supabase não configuradas.')
+    return respostaErro('Configuração interna indisponível.', 500)
+  }
+
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return respostaErro('Não autenticado.', 401)
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim()
+  if (!token) {
+    return respostaErro('Token de acesso não informado.', 401)
+  }
+
+  let corpo: CorpoConvite
+
   try {
-    // ════════════════════════════════════════════════════
-    // 🔒 SEGURANÇA: Pega o token do header
-    // ════════════════════════════════════════════════════
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Não autenticado' },
-        { status: 401 }
-      )
-    }
+    corpo = (await req.json()) as CorpoConvite
+  } catch {
+    return respostaErro('Corpo da requisição inválido.', 400)
+  }
 
-    const token = authHeader.replace('Bearer ', '')
+  const email = normalizarEmail(corpo.email)
 
-    // ════════════════════════════════════════════════════
-    // 🔍 Verifica o token e descobre QUEM é o usuário
-    // ════════════════════════════════════════════════════
-    const supabaseAuth = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-      {
-        global: {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      }
-    )
+  if (!email) {
+    return respostaErro('E-mail é obrigatório.', 400)
+  }
 
+  if (email.length > 160 || !emailValido(email)) {
+    return respostaErro('E-mail inválido.', 400)
+  }
+
+  const supabaseAuth = createClient(supabaseUrl, publishableKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  })
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAuth.auth.getUser(token)
+
+  if (authError || !user) {
+    return respostaErro('Token inválido ou expirado.', 401)
+  }
+
+  const donoId = user.id
+  const emailDono = user.email?.trim().toLowerCase()
+
+  if (emailDono && email === emailDono) {
+    return respostaErro('Use um e-mail diferente do proprietário.', 409)
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+
+  try {
     const {
-      data: { user },
-      error: authError,
-    } = await supabaseAuth.auth.getUser(token)
+      data: vinculosSolicitante,
+      error: vinculoSolicitanteError,
+    } = await supabaseAdmin
+      .from('membros')
+      .select('id, nivel, dono_id, status')
+      .eq('user_id', donoId)
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Token inválido ou expirado' },
-        { status: 401 }
-      )
+    if (vinculoSolicitanteError) {
+      throw vinculoSolicitanteError
     }
 
-    // ✅ donoId vem da SESSÃO AUTENTICADA, não do body!
-    const donoId = user.id
-
-    // ════════════════════════════════════════════════════
-    // 📥 Pega o email do body (e SÓ o email!)
-    // ════════════════════════════════════════════════════
-    const { email } = await req.json()
-
-    if (!email) {
-      return NextResponse.json(
-        { error: 'Email é obrigatório' },
-        { status: 400 }
-      )
-    }
-
-    // ✅ Validação de email com regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Email inválido' },
-        { status: 400 }
-      )
-    }
-
-    // ════════════════════════════════════════════════════
-    // 🛡️ Cria client admin SOMENTE pra ações privilegiadas
-    // ════════════════════════════════════════════════════
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const solicitanteEhFuncionario = (vinculosSolicitante ?? []).some(
+      (vinculo) =>
+        vinculo.nivel === 'funcionario' && vinculo.status !== 'inativo'
     )
 
-    // ════════════════════════════════════════════════════
-    // 🔍 Verifica se o usuário autenticado É DONO
-    // (não funcionário tentando convidar outro funcionário)
-    // ════════════════════════════════════════════════════
-    const { data: membroAtual } = await supabaseAdmin
-      .from('membros')
-      .select('nivel, dono_id')
-      .eq('user_id', donoId)
-      .maybeSingle()
-
-    // Se tem row em membros E é funcionário → BLOQUEIA
-    if (membroAtual && membroAtual.nivel === 'funcionario') {
-      return NextResponse.json(
-        {
-          error: 'Apenas donos podem convidar funcionários',
-        },
-        { status: 403 }
-      )
+    if (solicitanteEhFuncionario) {
+      return respostaErro('Apenas proprietários podem convidar usuários.', 403)
     }
 
-    // ════════════════════════════════════════════════════
-    // ✅ Verifica se o perfil do dono existe + pega plano
-    // ════════════════════════════════════════════════════
-    const { data: perfil } = await supabaseAdmin
+    const { data: perfil, error: perfilError } = await supabaseAdmin
       .from('perfis')
       .select('id, tipo_plano, plano, is_admin')
       .eq('id', donoId)
-      .single()
-
-    if (!perfil) {
-      return NextResponse.json(
-        { error: 'Perfil não encontrado' },
-        { status: 404 }
-      )
-    }
-
-    // ════════════════════════════════════════════════════
-    // 🔒 NOVO: VERIFICA LIMITE DE USUÁRIOS POR PLANO
-    // ════════════════════════════════════════════════════
-    // Admin tem acesso ilimitado (pra testes)
-    if (!perfil.is_admin) {
-      const tipoPlano = perfil.tipo_plano || 'profissional'
-      const limite = LIMITES_USUARIOS[tipoPlano] || 1
-
-      // Conta quantos membros (ativos + pendentes) já existem
-      const { count: totalFuncionarios } = await supabaseAdmin
-        .from('membros')
-        .select('*', { count: 'exact', head: true })
-        .eq('dono_id', donoId)
-        .in('status', ['ativo', 'pendente'])
-
-      // ✅ +1 pq o dono também conta como usuário do plano
-      const totalAtual = (totalFuncionarios || 0) + 1
-
-      if (totalAtual >= limite) {
-        const nomesPlanos: Record<string, string> = {
-          iniciante: 'Iniciante',
-          profissional: 'Profissional',
-          negocio: 'Negócio',
-        }
-
-        return NextResponse.json(
-          {
-            error: `Limite de ${limite} usuário(s) atingido no plano ${nomesPlanos[tipoPlano] || tipoPlano}. Faça upgrade pra adicionar mais funcionários.`,
-            motivo: 'limite_plano',
-            limite,
-            atual: totalAtual,
-            tipo_plano: tipoPlano,
-            upgrade: true,
-          },
-          { status: 403 }
-        )
-      }
-    }
-
-    // ════════════════════════════════════════════════════
-    // 🔍 Verifica se o email já foi convidado por este dono
-    // ════════════════════════════════════════════════════
-    const { data: existente } = await supabaseAdmin
-      .from('membros')
-      .select('id')
-      .eq('email', email)
-      .eq('dono_id', donoId)
       .maybeSingle()
 
-    if (existente) {
-      return NextResponse.json(
-        { error: 'Este funcionário já foi convidado' },
-        { status: 409 }
+    if (perfilError) {
+      throw perfilError
+    }
+
+    if (!perfil) {
+      return respostaErro('Perfil do proprietário não encontrado.', 404)
+    }
+
+    const tipoPlano = String(
+      perfil.tipo_plano || perfil.plano || 'iniciante'
+    ).toLowerCase()
+    const limiteTotal = LIMITES_USUARIOS[tipoPlano] ?? 1
+    const limiteAdicionais = Math.max(limiteTotal - 1, 0)
+
+    const {
+      count: totalFuncionarios,
+      error: contagemError,
+    } = await supabaseAdmin
+      .from('membros')
+      .select('id', { count: 'exact', head: true })
+      .eq('dono_id', donoId)
+      .eq('nivel', 'funcionario')
+      .in('status', ['ativo', 'pendente'])
+
+    if (contagemError) {
+      throw contagemError
+    }
+
+    const totalAdicionaisAtual = totalFuncionarios ?? 0
+
+    if (!perfil.is_admin && totalAdicionaisAtual >= limiteAdicionais) {
+      const nomePlano = NOMES_PLANOS[tipoPlano] ?? tipoPlano
+      const mensagem =
+        limiteAdicionais === 0
+          ? `O plano ${nomePlano} permite somente o acesso do proprietário.`
+          : `O plano ${nomePlano} permite no máximo 1 usuário adicional.`
+
+      return respostaErro(mensagem, 403, {
+        motivo: 'limite_plano',
+        limite_total: limiteTotal,
+        limite_adicionais: limiteAdicionais,
+        adicionais_atuais: totalAdicionaisAtual,
+        tipo_plano: tipoPlano,
+        upgrade: tipoPlano === 'iniciante',
+      })
+    }
+
+    const { data: vinculoEmail, error: vinculoEmailError } =
+      await supabaseAdmin
+        .from('membros')
+        .select('id, dono_id, user_id, status')
+        .ilike('email', email)
+        .maybeSingle()
+
+    if (vinculoEmailError) {
+      throw vinculoEmailError
+    }
+
+    if (vinculoEmail) {
+      if (vinculoEmail.dono_id === donoId) {
+        return respostaErro('Este usuário já foi convidado.', 409)
+      }
+
+      return respostaErro(
+        'Este e-mail já está vinculado a outro estabelecimento.',
+        409
       )
     }
 
-    // ════════════════════════════════════════════════════
-    // 🔐 Gera senha temporária SEGURA usando crypto
-    // ════════════════════════════════════════════════════
-    const tempPassword = gerarSenhaSegura(12)
-
-    // ════════════════════════════════════════════════════
-    // 👤 Cria o usuário via Admin API
-    // ════════════════════════════════════════════════════
-    let userId: string | null = null
+    const tempPassword = gerarSenhaSegura(16)
+    let usuarioCriadoId: string | null = null
 
     const { data: authData, error: authCreateError } =
       await supabaseAdmin.auth.admin.createUser({
         email,
         password: tempPassword,
         email_confirm: true,
+        user_metadata: {
+          deve_alterar_senha: true,
+          criado_por_convite_equipe: true,
+        },
       })
 
     if (authCreateError) {
-      // Se o user já existe em auth, busca ele
-      if (authCreateError.message.includes('already been registered')) {
-        const { data: existingUsers } =
-          await supabaseAdmin.auth.admin.listUsers()
-        const existingUser = existingUsers?.users?.find(
-          (u) => u.email === email
+      const mensagem = authCreateError.message.toLowerCase()
+
+      if (
+        mensagem.includes('already') ||
+        mensagem.includes('registered') ||
+        mensagem.includes('exists')
+      ) {
+        return respostaErro(
+          'Este e-mail já possui uma conta. Use outro e-mail para o usuário adicional.',
+          409
         )
-        userId = existingUser?.id || null
-      } else {
-        throw authCreateError
       }
-    } else {
-      userId = authData?.user?.id || null
+
+      throw authCreateError
     }
 
-    if (!userId) {
-      throw new Error('Não foi possível criar/encontrar o usuário')
+    usuarioCriadoId = authData.user?.id ?? null
+
+    if (!usuarioCriadoId) {
+      throw new Error('A criação do usuário não retornou um identificador.')
     }
 
-    // ════════════════════════════════════════════════════
-    // 📝 Registra na tabela membros
-    // ════════════════════════════════════════════════════
     const { error: insertError } = await supabaseAdmin
       .from('membros')
       .insert({
         dono_id: donoId,
-        user_id: userId,
+        user_id: usuarioCriadoId,
         email,
         nivel: 'funcionario',
         status: 'pendente',
       })
 
-    if (insertError) throw insertError
+    if (insertError) {
+      const { error: cleanupError } =
+        await supabaseAdmin.auth.admin.deleteUser(usuarioCriadoId)
 
-    // ════════════════════════════════════════════════════
-    // ✅ Retorna sucesso com senha temporária
-    // ════════════════════════════════════════════════════
-    return NextResponse.json({
-      success: true,
-      tempPassword,
-      message: `Funcionário ${email} convidado com sucesso!`,
-    })
-  } catch (error: any) {
-    console.error('Erro ao convidar funcionário:', error)
+      if (cleanupError) {
+        console.error(
+          'Falha ao remover usuário órfão após erro no vínculo:',
+          cleanupError
+        )
+      }
+
+      if (insertError.code === '23505') {
+        return respostaErro('Este usuário já foi convidado.', 409)
+      }
+
+      throw insertError
+    }
+
     return NextResponse.json(
-      { error: error.message || 'Erro interno do servidor' },
-      { status: 500 }
+      {
+        success: true,
+        email,
+        tempPassword,
+        message: `Usuário adicional ${email} criado com sucesso.`,
+      },
+      { status: 201 }
     )
+  } catch (error: unknown) {
+    console.error('Erro ao convidar usuário adicional:', error)
+    return respostaErro('Não foi possível criar o usuário adicional.', 500)
   }
-}
-
-// ════════════════════════════════════════════════════
-// 🔐 Gera senha temporária criptograficamente segura
-// ════════════════════════════════════════════════════
-function gerarSenhaSegura(length: number = 12): string {
-  // Caracteres pra senha (sem ambíguos como 0/O, 1/l/I)
-  const chars =
-    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%'
-  const bytes = randomBytes(length)
-  let password = ''
-  for (let i = 0; i < length; i++) {
-    password += chars[bytes[i] % chars.length]
-  }
-  return password
 }

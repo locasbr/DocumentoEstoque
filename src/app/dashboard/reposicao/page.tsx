@@ -11,7 +11,6 @@ import {
   Boxes,
   Crown,
   Download,
-
   PackageCheck,
   PackagePlus,
   RefreshCw,
@@ -511,9 +510,14 @@ export default function ReposicaoPage() {
         <KPICard
           label="Custo estimado"
           valor={formatarMoeda(indicadores.custoEstimado)}
-          descricao="Calculado pelo custo atual"
+          descricao={
+            indicadores.semCusto > 0
+              ? `${indicadores.semCusto} produto(s) não incluído(s)`
+              : "Todos os produtos possuem custo"
+          }
           icon={Wallet}
-          cor="emerald"
+          cor={indicadores.semCusto > 0 ? "amber" : "emerald"}
+          destaque={indicadores.semCusto > 0}
         />
         <KPICard
           label="Produtos sem custo"

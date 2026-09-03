@@ -1,27 +1,28 @@
-// src/app/dashboard/equipe/page.tsx
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { useNotification } from '@/contexts/NotificationContext'
-import { useMembro } from '@/hooks/useMembro'
-import { usePlano } from '@/hooks/usePlano'
-import { formatarData } from '@/lib/utils'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Plus,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
+  Loader2,
+  Lock,
+  Plus,
+  RefreshCw,
   Trash2,
   UserPlus,
-  KeyRound,
-  Loader2,
   Users,
-  Crown,
-  AlertTriangle,
-  Sparkles,
-  Zap,
+  X,
 } from 'lucide-react'
+
+import { useMembro } from '@/hooks/useMembro'
+import { usePlano } from '@/hooks/usePlano'
+import { useNotification } from '@/contexts/NotificationContext'
+import { supabase } from '@/lib/supabase'
+import { formatarData } from '@/lib/utils'
 
 interface Membro {
   id: string
@@ -33,860 +34,649 @@ interface Membro {
   created_at: string
 }
 
+interface RespostaConvite {
+  success?: boolean
+  email?: string
+  tempPassword?: string
+  message?: string
+  error?: string
+  motivo?: string
+}
+
+function validarEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function normalizarEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+function mensagemErro(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message
+  }
+  return 'Ocorreu um erro inesperado.'
+}
+
+async function lerResposta(response: Response): Promise<RespostaConvite> {
+  try {
+    return (await response.json()) as RespostaConvite
+  } catch {
+    return {}
+  }
+}
+
 export default function EquipePage() {
   const { membro: usuarioAtual, isDono, isLoading: loadingMembro } = useMembro()
-  const { tipoPlano, limites, isAdmin, loading: loadingPlano } = usePlano()
+  const { isAdmin, loading: loadingPlano } = usePlano()
   const { addNotification } = useNotification()
 
   const [membros, setMembros] = useState<Membro[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [atualizando, setAtualizando] = useState(false)
+  const [erroListagem, setErroListagem] = useState<string | null>(null)
   const [newEmail, setNewEmail] = useState('')
   const [isInviting, setIsInviting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState('')
-  const [resetandoSenhaId, setResetandoSenhaId] = useState<string | null>(null)
+  const [processandoId, setProcessandoId] = useState<string | null>(null)
 
   const senhaBoxRef = useRef<HTMLDivElement>(null)
-
   const donoId = usuarioAtual?.dono_id || usuarioAtual?.user_id
 
-  // ════════════════════════════════════════════════════
-  // 🔢 CÁLCULOS DE USO DO PLANO
-  // ════════════════════════════════════════════════════
-  // Conta apenas membros ativos + pendentes (inativos não contam)
-  const membrosContagem = membros.filter(
-    (m) => m.status === 'ativo' || m.status === 'pendente'
-  ).length
-  
-  // ✅ +1 pq o dono também conta no limite do plano
-  const usuariosUsados = membrosContagem + 1
-  const usuariosRestantes = Math.max(0, limites.usuarios - usuariosUsados)
-  const limiteAtingido = !isAdmin && usuariosUsados >= limites.usuarios
-  const percentualUso = isAdmin
-    ? 0
-    : Math.min(100, (usuariosUsados / limites.usuarios) * 100)
-  const quasePerto = !isAdmin && usuariosRestantes === 1 && !limiteAtingido
+  const funcionarios = membros.filter(
+    (membro) => membro.nivel === 'funcionario'
+  )
+  const usuarioAdicionalOcupandoVaga = funcionarios.some(
+    (membro) => membro.status === 'ativo' || membro.status === 'pendente'
+  )
 
-  // Nome bonito do plano pra UI
-  const nomesPlanos: Record<string, string> = {
-    iniciante: 'Iniciante',
-    profissional: 'Profissional',
-    negocio: 'Negócio',
-  }
-  const nomePlano = nomesPlanos[tipoPlano] || 'Profissional'
+  const usuariosUsados = 1 + (usuarioAdicionalOcupandoVaga ? 1 : 0)
+  const limiteTotal = 2
+  const limiteAtingido = !isAdmin && usuarioAdicionalOcupandoVaga
+  const percentualUso = isAdmin ? 50 : (usuariosUsados / limiteTotal) * 100
 
-  // ════════════════════════════════════════════════════
-  // 📡 Buscar lista de membros
-  // ════════════════════════════════════════════════════
-  const fetchMembros = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      const { data, error } = await supabase
-        .from('membros')
-        .select('*')
-        .eq('dono_id', donoId)
-        .order('created_at', { ascending: false })
+  const fetchMembros = useCallback(
+    async (feedback = false) => {
+      if (!donoId) {
+        setErroListagem('Não foi possível identificar o proprietário da conta.')
+        setIsLoading(false)
+        return
+      }
 
-      if (error) throw error
-      setMembros(data || [])
-    } catch (error) {
-      console.error('Erro ao buscar membros:', error)
-      addNotification('Erro ao carregar membros', 'error')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [addNotification, donoId])
+      feedback ? setAtualizando(true) : setIsLoading(true)
+      setErroListagem(null)
+
+      try {
+        const { data, error } = await supabase
+          .from('membros')
+          .select('id, dono_id, user_id, email, nivel, status, created_at')
+          .eq('dono_id', donoId)
+          .eq('nivel', 'funcionario')
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+        setMembros((data as Membro[] | null) ?? [])
+
+        if (feedback) {
+          addNotification('Equipe atualizada.', 'success', 1800)
+        }
+      } catch (error) {
+        console.error('Erro ao buscar equipe:', error)
+        setErroListagem('Não foi possível carregar o usuário adicional.')
+      } finally {
+        setIsLoading(false)
+        setAtualizando(false)
+      }
+    },
+    [addNotification, donoId]
+  )
 
   useEffect(() => {
-    if (loadingMembro) return
-
+    if (loadingMembro || loadingPlano) return
     if (!isDono) {
-      addNotification('Apenas donos podem acessar esta página', 'error')
+      setIsLoading(false)
       return
     }
+    void fetchMembros()
+  }, [fetchMembros, isDono, loadingMembro, loadingPlano])
 
-    fetchMembros()
-  }, [isDono, loadingMembro, donoId, addNotification, fetchMembros])
+  const handleInviteNewMember = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault()
+    if (isInviting) return
 
-  // ════════════════════════════════════════════════════
-  // ✅ Validação de email com regex
-  // ════════════════════════════════════════════════════
-  const validarEmail = (email: string): boolean => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return regex.test(email)
-  }
-
-  // ════════════════════════════════════════════════════
-  // 🆕 Convidar funcionário (com JWT no header)
-  // ════════════════════════════════════════════════════
-  const handleInviteNewMember = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // 🔒 BLOQUEIO no frontend (defesa em camadas — backend tbm bloqueia)
     if (limiteAtingido) {
       addNotification(
-        `Limite de ${limites.usuarios} usuário(s) atingido. Faça upgrade!`,
+        'Já existe um usuário adicional ativo ou pendente.',
         'warning',
-        5000
+        4000
       )
       return
     }
 
-    if (!newEmail.trim()) {
-      addNotification('Email é obrigatório', 'warning')
+    const email = normalizarEmail(newEmail)
+    if (!email || !validarEmail(email)) {
+      addNotification('Informe um e-mail válido.', 'warning')
       return
     }
 
-    if (!validarEmail(newEmail)) {
-      addNotification('Email inválido', 'warning')
-      return
-    }
+    setIsInviting(true)
 
     try {
-      setIsInviting(true)
-
-      // 🔒 SEGURANÇA: Pega o token JWT da sessão
       const {
         data: { session },
       } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        addNotification('Sessão expirada. Faça login novamente.', 'error')
+        addNotification('Sessão expirada. Entre novamente.', 'error')
         return
       }
 
-      // ✅ Envia o token no header Authorization
       const response = await fetch('/api/equipe/convidar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          email: newEmail,
-        }),
+        body: JSON.stringify({ email }),
       })
 
-      const data = await response.json()
+      const data = await lerResposta(response)
 
       if (!response.ok) {
-        if (response.status === 401) {
-          addNotification('Sessão expirada. Faça login novamente.', 'error')
-        } else if (response.status === 403) {
-          // 🆕 Trata o erro de limite de plano com CTA pra upgrade
-          if (data.motivo === 'limite_plano') {
-            addNotification(
-              `⚠️ ${data.error}`,
-              'warning',
-              6000
-            )
-          } else {
-            addNotification(
-              data.error || 'Sem permissão pra essa ação',
-              'error'
-            )
-          }
-        } else if (response.status === 409) {
-          addNotification('Este funcionário já foi convidado', 'warning')
-        } else {
-          addNotification(data.error || 'Erro ao convidar', 'error')
-        }
-        return
-      }
-
-      // ✅ Sucesso!
-      setGeneratedPassword(data.tempPassword)
-      addNotification(
-        '✅ Funcionário convidado! Copie a senha abaixo.',
-        'success',
-        8000
-      )
-      setNewEmail('')
-      fetchMembros()
-
-      // 🔒 Scroll suave pro box da senha
-      setTimeout(() => {
-        senhaBoxRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        })
-      }, 100)
-    } catch (error) {
-      console.error('Erro ao convidar funcionário:', error)
-      addNotification('Erro ao convidar funcionário', 'error')
-    } finally {
-      setIsInviting(false)
-    }
-  }
-
-  // ════════════════════════════════════════════════════
-  // 🔄 Alternar status (ativo/inativo)
-  // ════════════════════════════════════════════════════
-  const toggleStatus = async (memberId: string, currentStatus: string) => {
-    try {
-      const newStatus =
-        currentStatus === 'ativo'
-          ? 'inativo'
-          : currentStatus === 'inativo'
-          ? 'ativo'
-          : 'ativo'
-
-      // 🔒 Se está tentando ATIVAR e já tá no limite → bloqueia
-      if (newStatus === 'ativo' && limiteAtingido) {
         addNotification(
-          `Limite de ${limites.usuarios} usuário(s) ativos atingido. Desative outro ou faça upgrade.`,
-          'warning',
+          data.error || 'Não foi possível criar o usuário adicional.',
+          response.status === 409 || data.motivo === 'limite_plano'
+            ? 'warning'
+            : 'error',
           5000
         )
         return
       }
 
-      const { error } = await supabase
-        .from('membros')
-        .update({ status: newStatus })
-        .eq('id', memberId)
-
-      if (error) throw error
-
-      addNotification(
-        `Funcionário ${newStatus === 'ativo' ? 'ativado' : 'desativado'}`,
-        'success'
-      )
-      fetchMembros()
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error)
-      addNotification('Erro ao atualizar funcionário', 'error')
-    }
-  }
-
-  // ════════════════════════════════════════════════════
-  // 🗑️ Remover funcionário
-  // ════════════════════════════════════════════════════
-  const deleteMember = async (memberId: string) => {
-    if (!confirm('Tem certeza que deseja remover este funcionário?')) return
-
-    try {
-      const { error } = await supabase
-        .from('membros')
-        .delete()
-        .eq('id', memberId)
-
-      if (error) throw error
-
-      addNotification('Funcionário removido com sucesso', 'success')
-      fetchMembros()
-    } catch (error) {
-      console.error('Erro ao remover funcionário:', error)
-      addNotification('Erro ao remover funcionário', 'error')
-    }
-  }
-
-  // ════════════════════════════════════════════════════
-  // 🆕 RESETAR SENHA do funcionário
-  // ════════════════════════════════════════════════════
-  const resetarSenha = async (memberId: string, email: string) => {
-    if (
-      !confirm(
-        `Gerar nova senha temporária pra ${email}? A senha antiga deixará de funcionar.`
-      )
-    )
-      return
-
-    try {
-      setResetandoSenhaId(memberId)
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.access_token) {
-        addNotification('Sessão expirada', 'error')
-        return
-      }
-
-      const response = await fetch('/api/equipe/resetar-senha', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ memberId }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        addNotification(data.error || 'Erro ao resetar senha', 'error')
-        return
+      if (!data.tempPassword) {
+        throw new Error('A API não retornou a senha temporária.')
       }
 
       setGeneratedPassword(data.tempPassword)
-      addNotification(
-        '🔑 Nova senha gerada! Copie e envie ao funcionário.',
-        'success',
-        8000
-      )
+      setShowPassword(false)
+      setNewEmail('')
+      addNotification('Usuário adicional criado com sucesso.', 'success', 4000)
+      await fetchMembros()
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         senhaBoxRef.current?.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
         })
       }, 100)
     } catch (error) {
-      console.error('Erro ao resetar senha:', error)
-      addNotification('Erro ao resetar senha', 'error')
+      console.error('Erro ao convidar usuário adicional:', error)
+      addNotification(mensagemErro(error), 'error', 5000)
     } finally {
-      setResetandoSenhaId(null)
+      setIsInviting(false)
     }
   }
 
-  // ════════════════════════════════════════════════════
-  // 🎨 Helpers de estilo
-  // ════════════════════════════════════════════════════
-  const getStatusBadge = (status: string) => {
-    const badges = {
-      ativo: 'badge-success',
-      inativo: 'badge-danger',
-      pendente: 'badge-warning',
+  const copiarSenha = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedPassword)
+      addNotification('Senha copiada.', 'success', 1800)
+    } catch {
+      addNotification('Não foi possível copiar a senha.', 'error')
     }
-    return badges[status as keyof typeof badges] || 'badge-info'
   }
 
-  const getStatusLabel = (status: string) => {
-    const labels = {
-      ativo: 'Ativo',
-      inativo: 'Inativo',
-      pendente: 'Pendente',
+  const toggleStatus = async (membro: Membro) => {
+    if (processandoId) return
+
+    const novoStatus = membro.status === 'ativo' ? 'inativo' : 'ativo'
+
+    if (
+      novoStatus === 'ativo' &&
+      membro.status === 'inativo' &&
+      !isAdmin &&
+      funcionarios.some(
+        (item) =>
+          item.id !== membro.id &&
+          (item.status === 'ativo' || item.status === 'pendente')
+      )
+    ) {
+      addNotification('A vaga de usuário adicional já está ocupada.', 'warning')
+      return
     }
-    return labels[status as keyof typeof labels] || status
+
+    setProcessandoId(membro.id)
+
+    try {
+      const { error } = await supabase
+        .from('membros')
+        .update({ status: novoStatus })
+        .eq('id', membro.id)
+        .eq('dono_id', donoId)
+        .eq('nivel', 'funcionario')
+
+      if (error) throw error
+
+      setMembros((atuais) =>
+        atuais.map((item) =>
+          item.id === membro.id ? { ...item, status: novoStatus } : item
+        )
+      )
+
+      addNotification(
+        `Usuário ${novoStatus === 'ativo' ? 'ativado' : 'desativado'}.`,
+        'success',
+        2200
+      )
+    } catch (error) {
+      console.error('Erro ao alterar status:', error)
+      addNotification('Não foi possível alterar o status.', 'error')
+      await fetchMembros()
+    } finally {
+      setProcessandoId(null)
+    }
   }
 
-  // ════════════════════════════════════════════════════
-  // 🚫 BLOQUEIO: loading
-  // ════════════════════════════════════════════════════
+  const deleteMember = async (membro: Membro) => {
+    if (processandoId) return
+
+    if (
+      !window.confirm(
+        `Remover o vínculo de ${membro.email} com este estabelecimento?`
+      )
+    ) {
+      return
+    }
+
+    setProcessandoId(membro.id)
+
+    try {
+      const { error } = await supabase
+        .from('membros')
+        .delete()
+        .eq('id', membro.id)
+        .eq('dono_id', donoId)
+        .eq('nivel', 'funcionario')
+
+      if (error) throw error
+
+      setMembros((atuais) => atuais.filter((item) => item.id !== membro.id))
+      addNotification('Usuário removido da equipe.', 'success', 2200)
+    } catch (error) {
+      console.error('Erro ao remover usuário:', error)
+      addNotification('Não foi possível remover o usuário.', 'error')
+      await fetchMembros()
+    } finally {
+      setProcessandoId(null)
+    }
+  }
+
   if (loadingMembro || loadingPlano) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+      <div className="flex min-h-[360px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     )
   }
 
   if (!isDono) {
     return (
-      <div className="card text-center">
-        <p className="text-gray-600 dark:text-gray-400">
-          Você não tem permissão para acessar esta página.
+      <div className="card mx-auto max-w-lg p-8 text-center">
+        <Lock className="mx-auto mb-3 h-10 w-10 text-gray-400" />
+        <h1 className="font-bold text-gray-900 dark:text-white">
+          Acesso restrito
+        </h1>
+        <p className="mt-2 text-sm text-gray-500">
+          Apenas o proprietário pode gerenciar o usuário adicional.
         </p>
       </div>
     )
   }
 
-  // ════════════════════════════════════════════════════
-  // 🎨 RENDER
-  // ════════════════════════════════════════════════════
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Gerenciar Equipe
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Convide funcionários e controle suas permissões
-        </p>
-      </div>
-
-      {/* ══════════ 🆕 BANNER DE USO DO PLANO ══════════ */}
-      {!isAdmin && (
-        <div
-          className={`card p-5 border-2 ${
-            limiteAtingido
-              ? 'border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800'
-              : quasePerto
-                ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800'
-                : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800'
-          }`}
+    <div className="mx-auto max-w-5xl space-y-6 pb-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+            Acesso ao estabelecimento
+          </p>
+          <h1 className="mt-1 text-3xl font-bold text-gray-900 dark:text-white">
+            Equipe
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Sua conta permite 1 proprietário e 1 usuário adicional.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void fetchMembros(true)}
+          disabled={atualizando}
+          className="btn-secondary inline-flex items-center justify-center gap-2 self-start disabled:opacity-50"
         >
-          <div className="flex items-start gap-4 flex-wrap">
-            <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                limiteAtingido
-                  ? 'bg-red-100 dark:bg-red-900/30'
-                  : quasePerto
-                    ? 'bg-amber-100 dark:bg-amber-900/30'
-                    : 'bg-blue-100 dark:bg-blue-900/30'
-              }`}
-            >
-              <Users
-                className={`w-6 h-6 ${
-                  limiteAtingido
-                    ? 'text-red-600 dark:text-red-400'
-                    : quasePerto
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-blue-600 dark:text-blue-400'
+          <RefreshCw
+            className={`h-4 w-4 ${atualizando ? 'animate-spin' : ''}`}
+          />
+          Atualizar
+        </button>
+      </header>
+
+      <section className="card overflow-hidden p-0">
+        <div className="grid md:grid-cols-[1fr_auto]">
+          <div className="p-5 md:p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 dark:text-white">
+                  {usuariosUsados} de {limiteTotal} acessos utilizados
+                </h2>
+                <p className="text-xs text-gray-500">
+                  O proprietário já ocupa o primeiro acesso.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+              <div
+                className={`h-full rounded-full ${
+                  limiteAtingido ? 'bg-emerald-600' : 'bg-blue-600'
                 }`}
+                style={{ width: `${Math.min(percentualUso, 100)}%` }}
               />
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                <h3 className="font-bold text-gray-900 dark:text-white">
-                  Plano {nomePlano} — {usuariosUsados} de {limites.usuarios} usuário(s)
-                </h3>
-                {limiteAtingido && (
-                  <span className="text-xs font-bold px-2 py-0.5 bg-red-600 text-white rounded-full">
-                    LIMITE ATINGIDO
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              {limiteAtingido ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    O usuário adicional já está cadastrado.
                   </span>
-                )}
-                {quasePerto && (
-                  <span className="text-xs font-bold px-2 py-0.5 bg-amber-500 text-white rounded-full">
-                    ÚLTIMO SLOT
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 text-blue-600" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Você ainda pode cadastrar 1 usuário adicional.
                   </span>
-                )}
-              </div>
-
-              {/* Barra de progresso */}
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2 overflow-hidden">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    limiteAtingido
-                      ? 'bg-red-500'
-                      : quasePerto
-                        ? 'bg-amber-500'
-                        : 'bg-blue-600'
-                  }`}
-                  style={{ width: `${percentualUso}%` }}
-                />
-              </div>
-
-              <p
-                className={`text-sm ${
-                  limiteAtingido
-                    ? 'text-red-700 dark:text-red-300'
-                    : quasePerto
-                      ? 'text-amber-700 dark:text-amber-300'
-                      : 'text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {limiteAtingido ? (
-                  <>
-                    ⚠️ Você atingiu o limite do plano {nomePlano}. Faça upgrade
-                    pra adicionar mais funcionários.
-                  </>
-                ) : quasePerto ? (
-                  <>
-                    ⚡ Falta apenas 1 slot. Considere fazer upgrade pra crescer
-                    sem se preocupar.
-                  </>
-                ) : (
-                  <>
-                    Você ainda pode adicionar{' '}
-                    <strong>{usuariosRestantes} funcionário(s)</strong> nesse
-                    plano.
-                  </>
-                )}
-              </p>
+                </>
+              )}
             </div>
-
-            {/* Botão de upgrade */}
-            {(limiteAtingido || quasePerto) && tipoPlano !== 'negocio' && (
-              <Link
-                href="/assinar"
-                className={`flex items-center gap-2 px-4 py-2.5 text-white font-bold rounded-xl whitespace-nowrap transition shadow-lg ${
-                  tipoPlano === 'iniciante'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-green-500/30'
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-purple-500/30'
-                }`}
-              >
-                {tipoPlano === 'iniciante' ? (
-                  <>
-                    <Sparkles size={16} />
-                    Upgrade Profissional
-                  </>
-                ) : (
-                  <>
-                    <Crown size={16} />
-                    Upgrade Negócio
-                  </>
-                )}
-              </Link>
-            )}
           </div>
 
-          {/* 🆕 Detalhes do que cada plano oferece (se atingiu limite) */}
-          {limiteAtingido && tipoPlano !== 'negocio' && (
-            <div className="mt-4 pt-4 border-t border-red-200 dark:border-red-800">
-              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
-                💡 Veja o que muda no upgrade:
+          <div className="flex items-center border-t bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-800/50 md:border-l md:border-t-0">
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-gray-400">
+                Limite fixo
               </p>
-              <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                {tipoPlano === 'iniciante' && (
-                  <>
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                      <Zap size={14} />
-                      <span>Profissional: até <strong>3 usuários</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                      <Crown size={14} />
-                      <span>Negócio: até <strong>10 usuários</strong></span>
-                    </div>
-                  </>
-                )}
-                {tipoPlano === 'profissional' && (
-                  <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                    <Crown size={14} />
-                    <span>
-                      Negócio: até <strong>10 usuários</strong> + IA completa
-                    </span>
-                  </div>
-                )}
-              </div>
+              <p className="mt-1 text-2xl font-bold">2</p>
+              <p className="text-xs text-gray-500">acessos</p>
             </div>
-          )}
+          </div>
         </div>
-      )}
+      </section>
 
-      {/* 🛡️ Badge de Admin (se for admin) */}
-      {isAdmin && (
-        <div className="card p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-300 dark:border-yellow-700">
-          <div className="flex items-center gap-3">
-            <Crown className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-            <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
-              🛡️ Você é admin — sem limite de usuários
+      <section className="card p-5 md:p-6">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <UserPlus className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="font-bold text-gray-900 dark:text-white">
+              Usuário adicional
+            </h2>
+            <p className="text-xs text-gray-500">
+              O acesso é individual. Não use o e-mail do proprietário.
             </p>
           </div>
         </div>
-      )}
 
-      {/* Invite Form */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <UserPlus size={20} /> Convidar Novo Funcionário
-        </h2>
-
-        <form onSubmit={handleInviteNewMember} className="space-y-4">
-          <div className="flex gap-3 flex-col sm:flex-row">
+        <form onSubmit={handleInviteNewMember} className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <input
               type="email"
-              placeholder="Email do funcionário"
+              maxLength={160}
+              autoComplete="email"
+              placeholder="email@exemplo.com"
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="input-field flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              onChange={(event) => setNewEmail(event.target.value)}
               disabled={isInviting || limiteAtingido}
+              className="input-field min-w-0 flex-1 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={isInviting || limiteAtingido}
-              className={`btn-primary flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
-                limiteAtingido
-                  ? '!bg-gray-400 hover:!bg-gray-400'
-                  : ''
-              }`}
-              title={
-                limiteAtingido
-                  ? `Limite de ${limites.usuarios} usuário(s) atingido`
-                  : ''
-              }
+              className="btn-primary inline-flex items-center justify-center gap-2 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {limiteAtingido ? (
-                <>
-                  <AlertTriangle size={18} />
-                  Limite atingido
-                </>
+              {isInviting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <Plus size={18} />
-                  {isInviting ? 'Enviando...' : 'Convidar'}
-                </>
+                <Plus className="h-4 w-4" />
               )}
+              {isInviting
+                ? 'Criando acesso...'
+                : limiteAtingido
+                  ? 'Vaga ocupada'
+                  : 'Criar usuário'}
             </button>
           </div>
 
-          {/* 🆕 Aviso pequeno embaixo do form quando bloqueado */}
           {limiteAtingido && (
-            <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
-              <AlertTriangle size={12} />
-              Faça upgrade do plano pra adicionar mais funcionários.
+            <p className="flex items-center gap-1.5 text-xs text-gray-500">
+              <AlertTriangle className="h-3.5 w-3.5" /> Para cadastrar outro
+              usuário, remova ou desative o vínculo atual primeiro.
             </p>
           )}
+        </form>
 
-          {generatedPassword && (
-            <div
-              ref={senhaBoxRef}
-              className="relative p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl shadow-lg animate-pulse-once"
-            >
-              {/* Header de atenção */}
-              <div className="flex items-start gap-3 mb-4">
-                <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                  <span className="text-xl">🔑</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-amber-900 dark:text-amber-100 text-base">
-                    Senha temporária gerada
-                  </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                    Copie agora — esta senha não será mostrada novamente!
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setGeneratedPassword('')}
-                  className="text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 text-sm font-medium"
-                  title="Já copiei, fechar"
-                >
-                  ✕
-                </button>
+        {generatedPassword && (
+          <div
+            ref={senhaBoxRef}
+            className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-bold text-amber-900 dark:text-amber-100">
+                  Senha temporária
+                </p>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  Copie agora. Esta senha não ficará disponível depois que o
+                  painel for fechado.
+                </p>
               </div>
+              <button
+                type="button"
+                aria-label="Fechar senha temporária"
+                onClick={() => {
+                  setGeneratedPassword('')
+                  setShowPassword(false)
+                }}
+                className="text-amber-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-              {/* Input da senha + ações */}
-              <div className="flex items-center gap-2 mb-3">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={generatedPassword}
-                  readOnly
-                  className="input-field flex-1 font-mono text-base font-bold tracking-wider bg-white dark:bg-gray-900 border-amber-300 dark:border-amber-700"
-                />
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={generatedPassword}
+                readOnly
+                className="input-field min-w-0 flex-1 font-mono font-bold tracking-wider"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((atual) => !atual)}
+                className="btn-secondary inline-flex items-center justify-center gap-2"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+                {showPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copiarSenha()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+              >
+                <Copy className="h-4 w-4" /> Copiar
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">
+              Compartilhe a credencial por um canal privado e oriente o usuário
+              a alterar a senha após entrar.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="card p-5 md:p-6">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900 dark:text-white">
+              Acesso adicional
+            </h2>
+            <p className="text-xs text-gray-500">
+              No máximo um usuário pode ficar ativo ou pendente.
+            </p>
+          </div>
+          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold dark:bg-gray-800">
+            {funcionarios.length}
+          </span>
+        </div>
+
+        {erroListagem ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p>{erroListagem}</p>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="p-2.5 bg-white dark:bg-gray-900 hover:bg-amber-100 dark:hover:bg-amber-800 rounded transition border border-amber-200 dark:border-amber-700"
-                  title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => void fetchMembros()}
+                  className="mt-2 font-semibold underline"
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  Tentar novamente
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(generatedPassword)
-                    addNotification('✅ Senha copiada!', 'success', 2000)
-                  }}
-                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg hover:shadow-amber-500/30 text-white font-bold rounded transition text-sm whitespace-nowrap"
-                >
-                  📋 Copiar
-                </button>
-              </div>
-
-              {/* Avisos importantes */}
-              <div className="space-y-1.5">
-                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                  <span>⚠️</span>
-                  <span>
-                    <strong>Compartilhe pelo WhatsApp ou pessoalmente</strong>{' '}
-                    — nunca por email
-                  </span>
-                </div>
-                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                  <span>🔒</span>
-                  <span>
-                    O funcionário deve{' '}
-                    <strong>alterar essa senha no primeiro login</strong>
-                  </span>
-                </div>
-                <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                  <span>⏱️</span>
-                  <span>
-                    Esta senha <strong>não será exibida novamente</strong> —
-                    copie agora
-                  </span>
-                </div>
               </div>
             </div>
-          )}
-        </form>
-      </div>
-
-      {/* Members List */}
-      <div className="card">
-        <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">
-          Funcionários ({membros.length})
-        </h3>
-
-        {isLoading ? (
-          <div className="text-center py-8 text-gray-500">Carregando...</div>
-        ) : membros.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            Nenhum funcionário convidado ainda
+          </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin" /> Carregando...
+          </div>
+        ) : funcionarios.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 py-10 text-center dark:border-gray-700">
+            <Users className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+            <p className="font-semibold text-gray-700 dark:text-gray-300">
+              Nenhum usuário adicional
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              Use o formulário acima para criar o segundo acesso.
+            </p>
           </div>
         ) : (
-          <>
-            {/* ══════════ DESKTOP: Tabela ══════════ */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Email
-                    </th>
-                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Nível
-                    </th>
-                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Status
-                    </th>
-                    <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Data
-                    </th>
-                    <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {membros.map((membro) => (
-                    <tr
-                      key={membro.id}
-                      className="border-b border-gray-100 dark:border-gray-800"
-                    >
-                      <td className="py-3 px-2 text-sm text-gray-900 dark:text-gray-100">
-                        {membro.email}
-                      </td>
-                      <td className="py-3 px-2 text-sm">
-                        <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                          {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(
-                            membro.status
-                          )}`}
-                        >
-                          {getStatusLabel(membro.status)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 text-sm text-gray-600 dark:text-gray-400">
-                        {formatarData(membro.created_at)}
-                      </td>
-                      <td className="py-3 px-2 text-right">
-                        {membro.nivel !== 'dono' && (
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() =>
-                                resetarSenha(membro.id, membro.email)
-                              }
-                              disabled={resetandoSenhaId === membro.id}
-                              className="px-3 py-1 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 disabled:opacity-50 transition flex items-center gap-1"
-                              title="Resetar senha"
-                            >
-                              {resetandoSenhaId === membro.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <KeyRound className="w-3.5 h-3.5" />
-                              )}
-                              Senha
-                            </button>
-                            <button
-                              onClick={() =>
-                                toggleStatus(membro.id, membro.status)
-                              }
-                              disabled={
-                                membro.status === 'inativo' && limiteAtingido
-                              }
-                              className={`px-3 py-1 rounded text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                                membro.status === 'ativo'
-                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 hover:bg-red-200'
-                                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 hover:bg-green-200'
-                              }`}
-                              title={
-                                membro.status === 'inativo' && limiteAtingido
-                                  ? 'Limite atingido — desative outro pra ativar este'
-                                  : ''
-                              }
-                            >
-                              {membro.status === 'ativo'
-                                ? 'Desativar'
-                                : 'Ativar'}
-                            </button>
-                            <button
-                              onClick={() => deleteMember(membro.id)}
-                              className="px-3 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                              title="Remover funcionário"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* ══════════ MOBILE: Cards ══════════ */}
-            <div className="md:hidden space-y-3">
-              {membros.map((membro) => (
-                <div
+          <div className="space-y-3">
+            {funcionarios.map((membro) => {
+              const processando = processandoId === membro.id
+              return (
+                <article
                   key={membro.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
+                  className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700 sm:flex-row sm:items-center"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                      {membro.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-900 dark:text-white">
                         {membro.email}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {formatarData(membro.created_at)}
-                      </div>
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Cadastrado em {formatarData(membro.created_at)}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mb-3">
-                    <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                      {membro.nivel === 'dono' ? 'Dono' : 'Funcionário'}
-                    </span>
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(
-                        membro.status
-                      )}`}
+                  <StatusBadge status={membro.status} />
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void toggleStatus(membro)}
+                      disabled={Boolean(processandoId)}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50 sm:flex-none ${
+                        membro.status === 'ativo'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      }`}
                     >
-                      {getStatusLabel(membro.status)}
-                    </span>
+                      {processando ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : membro.status === 'ativo' ? (
+                        'Desativar'
+                      ) : (
+                        'Ativar'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteMember(membro)}
+                      disabled={Boolean(processandoId)}
+                      title="Remover vínculo"
+                      className="rounded-lg bg-red-100 p-2 text-red-700 disabled:opacity-50 dark:bg-red-900/30 dark:text-red-300"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-
-                  {membro.nivel !== 'dono' && (
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={() => resetarSenha(membro.id, membro.email)}
-                        disabled={resetandoSenhaId === membro.id}
-                        className="flex-1 py-2 rounded-lg text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 disabled:opacity-50 flex items-center justify-center gap-1"
-                      >
-                        {resetandoSenhaId === membro.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <KeyRound className="w-3.5 h-3.5" />
-                        )}
-                        Resetar
-                      </button>
-                      <button
-                        onClick={() => toggleStatus(membro.id, membro.status)}
-                        disabled={
-                          membro.status === 'inativo' && limiteAtingido
-                        }
-                        className={`flex-1 py-2 rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                          membro.status === 'ativo'
-                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                            : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                        }`}
-                      >
-                        {membro.status === 'ativo' ? '⏸ Desativar' : '▶ Ativar'}
-                      </button>
-                      <button
-                        onClick={() => deleteMember(membro.id)}
-                        className="py-2 px-4 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
+                </article>
+              )
+            })}
+          </div>
         )}
-      </div>
+      </section>
+
+      <p className="text-center text-xs text-gray-400">
+        O usuário adicional utiliza acesso próprio e opera dentro do mesmo
+        estabelecimento.
+      </p>
     </div>
+  )
+}
+
+function StatusBadge({ status }: { status: Membro['status'] }) {
+  const estilos = {
+    ativo:
+      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    pendente:
+      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    inativo:
+      'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  }
+
+  const labels = {
+    ativo: 'Ativo',
+    pendente: 'Pendente',
+    inativo: 'Inativo',
+  }
+
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${estilos[status]}`}
+    >
+      {labels[status]}
+    </span>
   )
 }

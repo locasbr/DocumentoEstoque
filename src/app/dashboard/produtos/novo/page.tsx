@@ -1,100 +1,129 @@
-"use client";
+'use client'
 
-import { useMemo, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
-  QrCode,
   CalendarDays,
   Camera,
   DollarSign,
   Loader2,
   Lock,
   PackagePlus,
+  QrCode,
   Save,
   Tag,
   Warehouse,
   X,
   Zap,
-} from "lucide-react";
+} from 'lucide-react'
 
-import Alert from "@/components/alerts";
-import BarcodeProductModal from "@/components/barcode-product-modal";
-import BarcodeScanner from "@/components/barcode-scanner";
-import PageHeader from "@/components/page-header";
-import UpgradeBlock from "@/components/upgrade-block";
-import { useNotification } from "@/contexts/NotificationContext";
-import { usePlano } from "@/hooks/usePlano";
+import Alert from '@/components/alerts'
+import BarcodeProductModal from '@/components/barcode-product-modal'
+import BarcodeScanner from '@/components/barcode-scanner'
+import PageHeader from '@/components/page-header'
+import UpgradeBlock from '@/components/upgrade-block'
+import { useNotification } from '@/contexts/NotificationContext'
+import { usePlano } from '@/hooks/usePlano'
 import {
   buscarProdutoPorBarcode,
   type ProdutoBarcode,
-} from "@/lib/barcode-api";
-import { supabase } from "@/lib/supabase";
-import { formatarMoeda } from "@/lib/utils";
+} from '@/lib/barcode-api'
+import { supabase } from '@/lib/supabase'
+import { formatarMoeda } from '@/lib/utils'
 
 interface FormProduto {
-  nome: string;
-  descricao: string;
-  marca: string;
-  sku: string;
-  categoria: string;
-  quantidade_atual: number;
-  quantidade_minima: number;
-  preco_custo: number;
-  preco_venda: number;
-  data_validade: string;
+  nome: string
+  descricao: string
+  marca: string
+  sku: string
+  categoria: string
+  quantidade_atual: number
+  quantidade_minima: number
+  preco_custo: number
+  preco_venda: number
+  data_validade: string
+}
+
+interface ProdutoCriado {
+  id: string
+  nome: string
+  sku: string
+  quantidade_atual: number
+  quantidade_minima: number
+  preco_custo: number
+  preco_venda: number
+  data_validade: string | null
+  ativo: boolean
+  usuario_id: string
+  cadastrado_por: string
+  movimento_inicial_id: string | null
+  criado_em: string
 }
 
 const CATEGORIAS = [
-  "Alimentos",
-  "Bebidas",
-  "Limpeza",
-  "Higiene",
-  "Eletrônicos",
-  "Utilidades",
-  "Outros",
-] as const;
+  'Alimentos',
+  'Bebidas',
+  'Limpeza',
+  'Higiene',
+  'Eletrônicos',
+  'Utilidades',
+  'Outros',
+] as const
 
 const FORM_INICIAL: FormProduto = {
-  nome: "",
-  descricao: "",
-  marca: "",
-  sku: "",
-  categoria: "",
+  nome: '',
+  descricao: '',
+  marca: '',
+  sku: '',
+  categoria: '',
   quantidade_atual: 0,
   quantidade_minima: 10,
   preco_custo: 0,
   preco_venda: 0,
-  data_validade: "",
-};
+  data_validade: '',
+}
 
 const PRODUTO_BARCODE_VAZIO: ProdutoBarcode = {
-  nome: "",
-  marca: "",
-  descricao: "",
-  categoria: "",
+  nome: '',
+  marca: '',
+  descricao: '',
+  categoria: '',
   encontrado: false,
-  fonte: "",
-};
+  fonte: '',
+}
 
 function numeroSeguro(valor: string): number {
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? Math.max(numero, 0) : 0;
+  const numero = Number(valor)
+  return Number.isFinite(numero) ? Math.max(numero, 0) : 0
 }
 
 function dataLocal(dataISO: string): Date | null {
-  if (!dataISO) return null;
-  const data = new Date(`${dataISO}T00:00:00`);
-  return Number.isNaN(data.getTime()) ? null : data;
+  if (!dataISO) return null
+  const data = new Date(`${dataISO}T00:00:00`)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
+function obterMensagemErro(erro: unknown): string {
+  if (
+    typeof erro === 'object' &&
+    erro !== null &&
+    'message' in erro &&
+    typeof erro.message === 'string'
+  ) {
+    return erro.message
+  }
+
+  return 'Ocorreu um erro inesperado ao cadastrar o produto.'
 }
 
 export default function NovoProdutoPage() {
-  const router = useRouter();
-  const { addNotification } = useNotification();
+  const router = useRouter()
+  const { addNotification } = useNotification()
   const {
     isIniciante,
     loading: loadingPlano,
@@ -102,102 +131,99 @@ export default function NovoProdutoPage() {
     totalProdutos,
     limites,
     temValidade,
-  } = usePlano();
+  } = usePlano()
 
-  const [formData, setFormData] = useState<FormProduto>(FORM_INICIAL);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState("");
-  const [sucesso, setSucesso] = useState("");
-  const [scannerAberto, setScannerAberto] = useState(false);
-  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false);
-  const [barcodeDetectado, setBarcodeDetectado] = useState("");
+  const [formData, setFormData] = useState<FormProduto>(FORM_INICIAL)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [scannerAberto, setScannerAberto] = useState(false)
+  const [barcodeModalAberto, setBarcodeModalAberto] = useState(false)
+  const [barcodeDetectado, setBarcodeDetectado] = useState('')
   const [produtoBarcode, setProdutoBarcode] =
-    useState<ProdutoBarcode | null>(null);
-  const [buscandoBarcode, setBuscandoBarcode] = useState(false);
-  const [mostrarLimiteAtingido, setMostrarLimiteAtingido] = useState(false);
+    useState<ProdutoBarcode | null>(null)
+  const [buscandoBarcode, setBuscandoBarcode] = useState(false)
+  const [mostrarLimiteAtingido, setMostrarLimiteAtingido] = useState(false)
 
-  const limiteProdutos = Math.max(Number(limites.produtos) || 0, 0);
+  const limiteProdutos = Math.max(Number(limites.produtos) || 0, 0)
   const restantes = isIniciante
     ? Math.max(limiteProdutos - totalProdutos, 0)
-    : 0;
+    : 0
   const porcentagemUso =
     isIniciante && limiteProdutos > 0
       ? Math.min(Math.round((totalProdutos / limiteProdutos) * 100), 100)
-      : 0;
-  const pertoDoLimite = isIniciante && restantes > 0 && restantes <= 20;
+      : 0
+  const pertoDoLimite = isIniciante && restantes > 0 && restantes <= 20
 
   const margem = useMemo(() => {
-    if (formData.preco_venda <= 0) return null;
+    if (formData.preco_venda <= 0) return null
     const valor =
       ((formData.preco_venda - formData.preco_custo) /
         formData.preco_venda) *
-      100;
-    return Number.isFinite(valor) ? valor : null;
-  }, [formData.preco_custo, formData.preco_venda]);
+      100
+    return Number.isFinite(valor) ? valor : null
+  }, [formData.preco_custo, formData.preco_venda])
 
-  const lucroUnitario = Math.max(
-    formData.preco_venda - formData.preco_custo,
-    0,
-  );
+  const lucroUnitario = formData.preco_venda - formData.preco_custo
 
   const validadeInfo = useMemo(() => {
-    const validade = dataLocal(formData.data_validade);
-    if (!validade) return null;
+    const validade = dataLocal(formData.data_validade)
+    if (!validade) return null
 
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
     const diasRestantes = Math.ceil(
-      (validade.getTime() - hoje.getTime()) / 86_400_000,
-    );
+      (validade.getTime() - hoje.getTime()) / 86_400_000
+    )
 
-    return {
-      diasRestantes,
-      vencido: diasRestantes < 0,
-    };
-  }, [formData.data_validade]);
+    return { diasRestantes, vencido: diasRestantes < 0 }
+  }, [formData.data_validade])
 
   const handleInputChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+    event: ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
-    const { name, value } = event.target;
-    const campoNumerico =
-      name === "quantidade_atual" ||
-      name === "quantidade_minima" ||
-      name === "preco_custo" ||
-      name === "preco_venda";
+    const { name, value } = event.target
+    const numerico = [
+      'quantidade_atual',
+      'quantidade_minima',
+      'preco_custo',
+      'preco_venda',
+    ].includes(name)
 
     setFormData((atual) => ({
       ...atual,
-      [name]: campoNumerico ? numeroSeguro(value) : value,
-    }));
-  };
+      [name]: numerico ? numeroSeguro(value) : value,
+    }))
+
+    if (erro) setErro('')
+  }
 
   const handleCodigoBarrasLido = async (codigo: string) => {
-    const codigoLimpo = codigo.trim();
-    if (!codigoLimpo) return;
+    const codigoLimpo = codigo.trim()
+    if (!codigoLimpo) return
 
-    setScannerAberto(false);
-    setBarcodeDetectado(codigoLimpo);
-    setBarcodeModalAberto(true);
-    setBuscandoBarcode(true);
-    setProdutoBarcode(null);
-    setFormData((atual) => ({ ...atual, sku: codigoLimpo }));
+    setScannerAberto(false)
+    setBarcodeDetectado(codigoLimpo)
+    setBarcodeModalAberto(true)
+    setBuscandoBarcode(true)
+    setProdutoBarcode(null)
+    setFormData((atual) => ({ ...atual, sku: codigoLimpo }))
 
     try {
-      const resultado = await buscarProdutoPorBarcode(codigoLimpo);
-      setProdutoBarcode(resultado);
+      setProdutoBarcode(await buscarProdutoPorBarcode(codigoLimpo))
     } catch (error) {
-      console.error("Erro ao consultar código de barras:", error);
+      console.error('Erro ao consultar código de barras:', error)
       addNotification(
-        "Não foi possível consultar o código. Você pode preencher os dados manualmente.",
-        "warning",
-        4000,
-      );
-      setBarcodeModalAberto(false);
+        'Não foi possível consultar o código. Preencha os dados manualmente.',
+        'warning',
+        4000
+      )
+      setBarcodeModalAberto(false)
     } finally {
-      setBuscandoBarcode(false);
+      setBuscandoBarcode(false)
     }
-  };
+  }
 
   const handleConfirmarBarcode = (produto: ProdutoBarcode) => {
     setFormData((atual) => ({
@@ -205,126 +231,101 @@ export default function NovoProdutoPage() {
       nome: produto.nome || atual.nome,
       descricao: produto.descricao || atual.descricao,
       categoria: produto.categoria || atual.categoria,
-      marca:
-        "marca" in produto && typeof produto.marca === "string"
-          ? produto.marca || atual.marca
-          : atual.marca,
-    }));
-    setBarcodeModalAberto(false);
-    addNotification("Dados do produto preenchidos.", "success", 2000);
-  };
+      marca: produto.marca || atual.marca,
+    }))
+    setBarcodeModalAberto(false)
+    addNotification('Dados do produto preenchidos.', 'success', 2000)
+  }
 
   const validarFormulario = (): string | null => {
-    if (!formData.nome.trim()) return "Informe o nome do produto.";
-    if (!formData.sku.trim()) return "Informe o SKU ou código de barras.";
+    if (!formData.nome.trim()) return 'Informe o nome do produto.'
+    if (formData.nome.trim().length < 2)
+      return 'O nome deve ter pelo menos 2 caracteres.'
+    if (!formData.sku.trim()) return 'Informe o SKU ou código de barras.'
     if (formData.quantidade_atual < 0)
-      return "A quantidade inicial não pode ser negativa.";
+      return 'A quantidade inicial não pode ser negativa.'
+    if (!Number.isInteger(formData.quantidade_atual))
+      return 'A quantidade inicial deve ser um número inteiro.'
     if (formData.quantidade_minima < 0)
-      return "O estoque mínimo não pode ser negativo.";
+      return 'O estoque mínimo não pode ser negativo.'
+    if (!Number.isInteger(formData.quantidade_minima))
+      return 'O estoque mínimo deve ser um número inteiro.'
     if (formData.preco_custo < 0)
-      return "O preço de custo não pode ser negativo.";
+      return 'O preço de custo não pode ser negativo.'
     if (formData.preco_venda <= 0)
-      return "Informe um preço de venda maior que zero.";
-    if (salvando) return "O produto já está sendo salvo.";
-    return null;
-  };
+      return 'Informe um preço de venda maior que zero.'
+    return null
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setErro("");
-    setSucesso("");
+    event.preventDefault()
+    if (salvando) return
+
+    setErro('')
 
     if (!podeAdicionarProduto) {
-      setMostrarLimiteAtingido(true);
-      return;
+      setMostrarLimiteAtingido(true)
+      return
     }
 
-    const validacao = validarFormulario();
+    const validacao = validarFormulario()
     if (validacao) {
-      setErro(validacao);
-      addNotification(validacao, "warning", 3000);
-      return;
+      setErro(validacao)
+      addNotification(validacao, 'warning', 3000)
+      return
     }
 
-    setSalvando(true);
+    setSalvando(true)
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        setErro("Sua sessão não foi encontrada. Entre novamente.");
-        addNotification("Usuário não autenticado.", "error");
-        return;
-      }
-
-      const dadosParaSalvar = {
-        nome: formData.nome.trim(),
-        descricao: formData.descricao.trim() || null,
-        marca: formData.marca.trim(),
-        sku: formData.sku.trim(),
-        categoria: formData.categoria || null,
-        quantidade_atual: Math.trunc(formData.quantidade_atual),
-        quantidade_minima: Math.trunc(formData.quantidade_minima),
-        preco_custo: Number(formData.preco_custo.toFixed(2)),
-        preco_venda: Number(formData.preco_venda.toFixed(2)),
-        data_validade:
-          temValidade && formData.data_validade
-            ? formData.data_validade
-            : null,
-        ativo: true,
-        usuario_id: user.id,
-      };
-
-      const { data: produtoCriado, error: insertError } = await supabase
-        .from("produtos")
-        .insert(dadosParaSalvar)
-        .select("id")
-        .single();
-
-      if (insertError) {
-        console.error("Erro ao criar produto:", insertError);
-
-        if (
-          insertError.code === "23505" ||
-          insertError.message.toLocaleLowerCase("pt-BR").includes("sku")
-        ) {
-          setErro(
-            "Este SKU ou código de barras já está cadastrado. Use outro código.",
-          );
-          addNotification("SKU já cadastrado.", "warning", 3500);
-          return;
+      const { data, error: rpcError } = await supabase.rpc(
+        'registrar_produto',
+        {
+          p_nome: formData.nome.trim(),
+          p_descricao: formData.descricao.trim() || null,
+          p_marca: formData.marca.trim() || null,
+          p_sku: formData.sku.trim(),
+          p_categoria: formData.categoria || null,
+          p_quantidade_inicial: Math.trunc(formData.quantidade_atual),
+          p_quantidade_minima: Math.trunc(formData.quantidade_minima),
+          p_preco_custo: Number(formData.preco_custo.toFixed(2)),
+          p_preco_venda: Number(formData.preco_venda.toFixed(2)),
+          p_data_validade:
+            temValidade && formData.data_validade
+              ? formData.data_validade
+              : null,
         }
+      )
 
-        if (insertError.message.includes("Limite de 100 produtos")) {
-          setMostrarLimiteAtingido(true);
-          return;
-        }
+      if (rpcError) throw rpcError
 
-        setErro("Não foi possível criar o produto. Revise os dados e tente novamente.");
-        addNotification("Erro ao criar produto.", "error");
-        return;
+      const produtoCriado = data as ProdutoCriado | null
+      if (!produtoCriado?.id) {
+        throw new Error('O servidor retornou uma resposta inválida.')
       }
 
-      setSucesso("Produto criado com sucesso.");
-      addNotification("Produto adicionado ao estoque.", "success", 2500);
+      addNotification(
+        `Produto "${produtoCriado.nome}" adicionado ao estoque.`,
+        'success',
+        3000
+      )
 
-      if (produtoCriado?.id) {
-        router.push(`/dashboard/produtos/${produtoCriado.id}`);
-      } else {
-        router.push("/dashboard/produtos");
-      }
-      router.refresh();
+      router.push('/dashboard/produtos')
+      router.refresh()
     } catch (error) {
-      console.error("Erro inesperado ao criar produto:", error);
-      setErro("Ocorreu um erro inesperado. Tente novamente.");
-      addNotification("Erro inesperado ao criar produto.", "error");
+      console.error('Erro ao criar produto:', error)
+      const mensagem = obterMensagemErro(error)
+      setErro(mensagem)
+
+      if (mensagem.toLocaleLowerCase('pt-BR').includes('limite')) {
+        setMostrarLimiteAtingido(true)
+      } else {
+        addNotification(mensagem, 'error', 5000)
+      }
     } finally {
-      setSalvando(false);
+      setSalvando(false)
     }
-  };
+  }
 
   if (loadingPlano) {
     return (
@@ -332,18 +333,17 @@ export default function NovoProdutoPage() {
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
         <span className="sr-only">Verificando o plano</span>
       </div>
-    );
+    )
   }
 
   if (!podeAdicionarProduto) {
     return (
-      <div className="mx-auto max-w-2xl space-y-5 py-10">
+      <div className="mx-auto max-w-2xl space-y-5 px-4 py-10">
         <Link
           href="/dashboard/produtos"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-400"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para produtos
+          <ArrowLeft className="h-4 w-4" /> Voltar para produtos
         </Link>
         <UpgradeBlock
           titulo={`Limite de ${limiteProdutos} produtos atingido`}
@@ -351,7 +351,7 @@ export default function NovoProdutoPage() {
           planoNecessario="profissional"
         />
       </div>
-    );
+    )
   }
 
   return (
@@ -364,10 +364,9 @@ export default function NovoProdutoPage() {
         actions={
           <Link
             href="/dashboard/produtos"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar
+            <ArrowLeft className="h-4 w-4" /> Voltar
           </Link>
         }
       />
@@ -376,8 +375,8 @@ export default function NovoProdutoPage() {
         <section
           className={`rounded-xl border p-4 ${
             pertoDoLimite
-              ? "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20"
-              : "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20"
+              ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20'
+              : 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20'
           }`}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -385,17 +384,17 @@ export default function NovoProdutoPage() {
               <div className="flex items-center gap-2">
                 <Lock
                   className={`h-4 w-4 ${
-                    pertoDoLimite ? "text-amber-600" : "text-blue-600"
+                    pertoDoLimite ? 'text-amber-600' : 'text-blue-600'
                   }`}
                 />
-                <p className="text-sm font-bold text-gray-900 dark:text-white">
+                <p className="text-sm font-bold">
                   {totalProdutos} de {limiteProdutos} produtos cadastrados
                 </p>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80 dark:bg-gray-800">
                 <div
                   className={`h-full rounded-full ${
-                    pertoDoLimite ? "bg-amber-500" : "bg-blue-600"
+                    pertoDoLimite ? 'bg-amber-500' : 'bg-blue-600'
                   }`}
                   style={{ width: `${porcentagemUso}%` }}
                 />
@@ -406,110 +405,79 @@ export default function NovoProdutoPage() {
             </div>
             <Link
               href="/assinar"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
             >
-              <Zap className="h-4 w-4" />
-              Ver planos
+              <Zap className="h-4 w-4" /> Ver planos
             </Link>
           </div>
         </section>
       )}
 
       {erro && <Alert message={erro} type="error" />}
-      {sucesso && <Alert message={sucesso} type="success" />}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
-          <div className="mb-5 flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-              <Tag className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Identificação
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Informações usadas para localizar o produto rapidamente.
-              </p>
-            </div>
-          </div>
-
+        <Secao
+          icon={Tag}
+          titulo="Identificação"
+          descricao="Informações usadas para localizar o produto rapidamente."
+          cor="blue"
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="nome" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Nome do produto *
-              </label>
+            <Campo label="Nome do produto *" contador={`${formData.nome.length}/255`}>
               <input
-                id="nome"
                 name="nome"
-                type="text"
-                autoComplete="off"
                 maxLength={255}
                 value={formData.nome}
                 onChange={handleInputChange}
                 placeholder="Ex.: Arroz tipo 1, 5 kg"
                 required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                autoFocus
+                className="input-field w-full"
               />
-            </div>
+            </Campo>
 
-            <div>
-              <label htmlFor="sku" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                SKU ou código de barras *
-              </label>
+            <Campo label="SKU ou código de barras *">
               <div className="flex gap-2">
                 <div className="relative min-w-0 flex-1">
                   <QrCode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <input
-                    id="sku"
                     name="sku"
-                    type="text"
-                    autoComplete="off"
                     maxLength={100}
                     value={formData.sku}
                     onChange={handleInputChange}
                     placeholder="Digite ou leia o código"
                     required
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    className="input-field w-full pl-10"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setScannerAberto(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  className="btn-secondary inline-flex items-center gap-2 px-4"
                 >
                   <Camera className="h-4 w-4" />
                   <span className="hidden sm:inline">Ler</span>
                 </button>
               </div>
-            </div>
+            </Campo>
 
-            <div>
-              <label htmlFor="marca" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Marca
-              </label>
+            <Campo label="Marca" contador={`${formData.marca.length}/120`}>
               <input
-                id="marca"
                 name="marca"
-                type="text"
                 maxLength={120}
                 value={formData.marca}
                 onChange={handleInputChange}
                 placeholder="Ex.: Nestlé"
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               />
-            </div>
+            </Campo>
 
-            <div>
-              <label htmlFor="categoria" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Categoria
-              </label>
+            <Campo label="Categoria">
               <select
-                id="categoria"
                 name="categoria"
                 value={formData.categoria}
                 onChange={handleInputChange}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               >
                 <option value="">Sem categoria</option>
                 {CATEGORIAS.map((categoria) => (
@@ -518,51 +486,36 @@ export default function NovoProdutoPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </Campo>
           </div>
 
           <div className="mt-4">
-            <label htmlFor="descricao" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-              Descrição
-            </label>
-            <textarea
-              id="descricao"
-              name="descricao"
-              value={formData.descricao}
-              onChange={handleInputChange}
-              maxLength={500}
-              rows={3}
-              placeholder="Informações adicionais para identificar o produto"
-              className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            />
-            <p className="mt-1 text-right text-[10px] text-gray-400">
-              {formData.descricao.length}/500
-            </p>
+            <Campo
+              label="Descrição"
+              contador={`${formData.descricao.length}/500`}
+            >
+              <textarea
+                name="descricao"
+                value={formData.descricao}
+                onChange={handleInputChange}
+                maxLength={500}
+                rows={3}
+                className="input-field w-full resize-none"
+                placeholder="Informações adicionais para identificar o produto"
+              />
+            </Campo>
           </div>
-        </section>
+        </Secao>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
-          <div className="mb-5 flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-              <Warehouse className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Controle de estoque
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                O estoque mínimo alimenta Alertas e Reposição.
-              </p>
-            </div>
-          </div>
-
+        <Secao
+          icon={Warehouse}
+          titulo="Controle de estoque"
+          descricao="O estoque mínimo alimenta Alertas e Reposição."
+          cor="emerald"
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="quantidade_atual" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Quantidade inicial
-              </label>
+            <Campo label="Quantidade inicial" ajuda="Informe o saldo físico disponível agora.">
               <input
-                id="quantidade_atual"
                 name="quantidade_atual"
                 type="number"
                 min={0}
@@ -570,19 +523,11 @@ export default function NovoProdutoPage() {
                 inputMode="numeric"
                 value={formData.quantidade_atual}
                 onChange={handleInputChange}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Informe o saldo físico disponível agora.
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="quantidade_minima" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Estoque mínimo
-              </label>
+            </Campo>
+            <Campo label="Estoque mínimo" ajuda="Abaixo dessa quantidade, o sistema recomenda reposição.">
               <input
-                id="quantidade_minima"
                 name="quantidade_minima"
                 type="number"
                 min={0}
@@ -590,49 +535,31 @@ export default function NovoProdutoPage() {
                 inputMode="numeric"
                 value={formData.quantidade_minima}
                 onChange={handleInputChange}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Abaixo dessa quantidade, o sistema recomenda reposição.
-              </p>
-            </div>
+            </Campo>
           </div>
 
           {formData.quantidade_minima > 0 &&
             formData.quantidade_atual < formData.quantidade_minima && (
-              <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>
-                  Este produto será cadastrado abaixo do mínimo. A Reposição
-                  sugerirá {formData.quantidade_minima - formData.quantidade_atual}{" "}
-                  unidade(s).
-                </p>
-              </div>
+              <Aviso cor="amber" icon={AlertTriangle}>
+                Este produto será cadastrado abaixo do mínimo. A reposição
+                sugerirá{' '}
+                {formData.quantidade_minima - formData.quantidade_atual}{' '}
+                unidade(s).
+              </Aviso>
             )}
-        </section>
+        </Secao>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
-          <div className="mb-5 flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-              <DollarSign className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Preços
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                O custo ajuda a calcular valor em estoque, reposição e perdas.
-              </p>
-            </div>
-          </div>
-
+        <Secao
+          icon={DollarSign}
+          titulo="Preços"
+          descricao="O custo ajuda a calcular valor em estoque, reposição e perdas."
+          cor="blue"
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="preco_custo" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Preço de custo
-              </label>
+            <Campo label="Preço de custo">
               <input
-                id="preco_custo"
                 name="preco_custo"
                 type="number"
                 min={0}
@@ -640,16 +567,11 @@ export default function NovoProdutoPage() {
                 inputMode="decimal"
                 value={formData.preco_custo}
                 onChange={handleInputChange}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               />
-            </div>
-
-            <div>
-              <label htmlFor="preco_venda" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Preço de venda *
-              </label>
+            </Campo>
+            <Campo label="Preço de venda *">
               <input
-                id="preco_venda"
                 name="preco_venda"
                 type="number"
                 min="0.01"
@@ -658,151 +580,114 @@ export default function NovoProdutoPage() {
                 value={formData.preco_venda}
                 onChange={handleInputChange}
                 required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="input-field w-full"
               />
-            </div>
+            </Campo>
           </div>
 
           <div className="mt-4 grid gap-3 rounded-xl bg-gray-50 p-4 dark:bg-gray-800/60 sm:grid-cols-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Custo
-              </p>
-              <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white">
-                {formatarMoeda(formData.preco_custo)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Resultado unitário
-              </p>
-              <p className="mt-1 text-sm font-bold text-gray-900 dark:text-white">
-                {formatarMoeda(lucroUnitario)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Margem estimada
-              </p>
-              <p
-                className={`mt-1 text-sm font-bold ${
-                  margem !== null && margem < 0
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                {margem === null ? "Não calculada" : `${margem.toFixed(1)}%`}
-              </p>
-            </div>
+            <Resumo label="Custo" valor={formatarMoeda(formData.preco_custo)} />
+            <Resumo
+              label="Resultado unitário"
+              valor={formatarMoeda(lucroUnitario)}
+              negativo={lucroUnitario < 0}
+            />
+            <Resumo
+              label="Margem estimada"
+              valor={margem === null ? 'Não calculada' : `${margem.toFixed(1)}%`}
+              negativo={margem !== null && margem < 0}
+            />
           </div>
 
           {formData.preco_venda > 0 &&
             formData.preco_custo > formData.preco_venda && (
-              <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>O preço de venda está menor que o preço de custo.</p>
-              </div>
+              <Aviso cor="red" icon={AlertCircle}>
+                O preço de venda está menor que o preço de custo.
+              </Aviso>
             )}
-        </section>
+        </Secao>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
-          <div className="mb-5 flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-              <CalendarDays className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Validade
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Use apenas para produtos que possuem data de vencimento.
-              </p>
-            </div>
-          </div>
-
+        <Secao
+          icon={CalendarDays}
+          titulo="Validade"
+          descricao="Use apenas para produtos que possuem data de vencimento."
+          cor="amber"
+        >
           {temValidade ? (
             <>
-              <label htmlFor="data_validade" className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Data de validade
-              </label>
-              <input
-                id="data_validade"
-                name="data_validade"
-                type="date"
-                value={formData.data_validade}
-                onChange={handleInputChange}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:max-w-xs"
-              />
+              <Campo label="Data de validade">
+                <input
+                  name="data_validade"
+                  type="date"
+                  value={formData.data_validade}
+                  onChange={handleInputChange}
+                  className="input-field w-full sm:max-w-xs"
+                />
+              </Campo>
 
               {validadeInfo && (
-                <div
-                  className={`mt-4 flex items-start gap-3 rounded-xl border p-3 text-sm ${
+                <Aviso
+                  cor={
                     validadeInfo.vencido
-                      ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+                      ? 'red'
                       : validadeInfo.diasRestantes <= 7
-                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
-                        : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300"
-                  }`}
+                        ? 'amber'
+                        : 'blue'
+                  }
+                  icon={validadeInfo.vencido ? AlertTriangle : CalendarDays}
                 >
-                  {validadeInfo.vencido ? (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
-                  )}
-                  <p>
-                    {validadeInfo.vencido
-                      ? `A data informada venceu há ${Math.abs(validadeInfo.diasRestantes)} dia(s).`
-                      : `Faltam ${validadeInfo.diasRestantes} dia(s) para a validade.`}
-                  </p>
-                </div>
+                  {validadeInfo.vencido
+                    ? `A data informada venceu há ${Math.abs(
+                        validadeInfo.diasRestantes
+                      )} dia(s).`
+                    : `Faltam ${validadeInfo.diasRestantes} dia(s) para a validade.`}
+                </Aviso>
               )}
             </>
           ) : (
             <div className="flex flex-col gap-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-700">
-                  <Lock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              <div className="flex flex-1 items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-700">
+                  <Lock className="h-4 w-4 text-gray-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                    Controle de validade
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-sm font-bold">Controle de validade</p>
+                  <p className="text-xs text-gray-500">
                     Disponível em um plano com controle de vencimentos.
                   </p>
                 </div>
               </div>
               <Link
                 href="/assinar"
-                className="text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                className="text-sm font-semibold text-blue-600 hover:underline"
               >
                 Ver planos
               </Link>
             </div>
           )}
-        </section>
+        </Secao>
 
         <div className="flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 dark:border-gray-800 sm:flex-row sm:justify-end">
           <Link
             href="/dashboard/produtos"
-            className="inline-flex items-center justify-center rounded-xl bg-gray-100 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className={`btn-secondary inline-flex items-center justify-center px-6 py-3 ${
+              salvando ? 'pointer-events-none opacity-50' : ''
+            }`}
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={salvando}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             {salvando ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Salvando...
+                <Loader2 className="h-5 w-5 animate-spin" /> Salvando...
               </>
             ) : (
               <>
-                <Save className="h-5 w-5" />
-                Salvar produto
+                <Save className="h-5 w-5" /> Salvar produto
               </>
             )}
           </button>
@@ -823,9 +708,7 @@ export default function NovoProdutoPage() {
           loading={buscandoBarcode}
           onConfirmar={handleConfirmarBarcode}
           onCancelar={() => {
-            if (!buscandoBarcode) {
-              setBarcodeModalAberto(false);
-            }
+            if (!buscandoBarcode) setBarcodeModalAberto(false)
           }}
         />
       )}
@@ -835,22 +718,17 @@ export default function NovoProdutoPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setMostrarLimiteAtingido(false);
+              setMostrarLimiteAtingido(false)
             }
           }}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Limite de produtos atingido"
-            className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-800 dark:bg-gray-900"
-          >
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
             <div className="mb-4 flex justify-end">
               <button
                 type="button"
                 aria-label="Fechar"
                 onClick={() => setMostrarLimiteAtingido(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                className="text-gray-400"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -864,5 +742,114 @@ export default function NovoProdutoPage() {
         </div>
       )}
     </div>
-  );
+  )
+}
+
+function Secao({
+  icon: Icon,
+  titulo,
+  descricao,
+  cor,
+  children,
+}: {
+  icon: typeof Tag
+  titulo: string
+  descricao: string
+  cor: 'blue' | 'emerald' | 'amber'
+  children: React.ReactNode
+}) {
+  const estilos = {
+    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    emerald:
+      'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+    amber:
+      'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
+  }
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 md:p-6">
+      <div className="mb-5 flex items-start gap-3">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${estilos[cor]}`}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 className="font-bold">{titulo}</h2>
+          <p className="text-xs text-gray-500">{descricao}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Campo({
+  label,
+  ajuda,
+  contador,
+  children,
+}: {
+  label: string
+  ajuda?: string
+  contador?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-end justify-between gap-2">
+        <label className="block text-sm font-semibold">{label}</label>
+        {contador && <span className="text-[10px] text-gray-400">{contador}</span>}
+      </div>
+      {children}
+      {ajuda && <p className="mt-1 text-xs text-gray-500">{ajuda}</p>}
+    </div>
+  )
+}
+
+function Resumo({
+  label,
+  valor,
+  negativo = false,
+}: {
+  label: string
+  valor: string
+  negativo?: boolean
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-gray-400">{label}</p>
+      <p
+        className={`mt-1 text-sm font-bold ${
+          negativo ? 'text-red-600' : 'text-gray-900 dark:text-white'
+        }`}
+      >
+        {valor}
+      </p>
+    </div>
+  )
+}
+
+function Aviso({
+  cor,
+  icon: Icon,
+  children,
+}: {
+  cor: 'red' | 'amber' | 'blue'
+  icon: typeof AlertCircle
+  children: React.ReactNode
+}) {
+  const estilos = {
+    red: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300',
+    amber:
+      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300',
+    blue: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
+  }
+
+  return (
+    <div className={`mt-4 flex items-start gap-3 rounded-xl border p-3 text-sm ${estilos[cor]}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>{children}</p>
+    </div>
+  )
 }

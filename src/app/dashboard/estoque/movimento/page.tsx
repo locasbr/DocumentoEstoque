@@ -59,10 +59,6 @@ interface ResultadoMovimento {
   motivo: MotivoMovimento;
 }
 
-interface MovimentoInserido {
-  id: string;
-}
-
 const MOTIVOS: Record<
   TipoMovimento,
   ReadonlyArray<{ label: string; valor: MotivoMovimento }>
@@ -156,7 +152,7 @@ function NovoMovimentoContent() {
   }, []);
 
   useEffect(() => {
-    carregarProdutos();
+    void carregarProdutos();
   }, [carregarProdutos]);
 
   useEffect(() => {
@@ -286,68 +282,6 @@ function NovoMovimentoContent() {
     setObservacao("");
   };
 
-  const criarOuAtualizarAlerta = async (
-    produtoId: string,
-    usuarioId: string,
-    quantidadeFinal: number,
-  ) => {
-    if (!produtoSelecionado || estoqueMinimo <= 0) {
-      return;
-    }
-
-    if (quantidadeFinal >= estoqueMinimo) {
-      const { error } = await supabase
-        .from("alertas")
-        .update({ visualizado: true })
-        .eq("produto_id", produtoId)
-        .eq("visualizado", false);
-
-      if (error) {
-        console.warn("Não foi possível encerrar alertas pendentes:", error);
-      }
-      return;
-    }
-
-    const tipoAlerta =
-      quantidadeFinal <= 0 ? "estoque_critico" : "estoque_baixo";
-
-    const { data: alertaExistente, error: buscaAlertaError } = await supabase
-      .from("alertas")
-      .select("id")
-      .eq("produto_id", produtoId)
-      .eq("visualizado", false)
-      .limit(1)
-      .maybeSingle();
-
-    if (buscaAlertaError) {
-      console.warn("Não foi possível consultar alertas pendentes:", buscaAlertaError);
-      return;
-    }
-
-    if (alertaExistente?.id) {
-      const { error } = await supabase
-        .from("alertas")
-        .update({ tipo_alerta: tipoAlerta })
-        .eq("id", alertaExistente.id);
-
-      if (error) {
-        console.warn("Não foi possível atualizar o alerta:", error);
-      }
-      return;
-    }
-
-    const { error } = await supabase.from("alertas").insert({
-      produto_id: produtoId,
-      usuario_id: usuarioId,
-      tipo_alerta: tipoAlerta,
-      visualizado: false,
-    });
-
-    if (error) {
-      console.warn("Não foi possível criar o alerta:", error);
-    }
-  };
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -379,94 +313,43 @@ function NovoMovimentoContent() {
 
     setSalvando(true);
 
-    let movimentoCriadoId: string | null = null;
-
     try {
-      const { data: userData, error: userError } =
-        await supabase.auth.getUser();
-
-      if (userError || !userData.user) {
-        addNotification("Usuário não autenticado.", "error");
-        return;
-      }
-
       const motivoCompleto = observacao.trim()
         ? `${motivo} | ${observacao.trim()}`
         : motivo;
 
-      const { data: movimentoCriado, error: movimentoError } = await supabase
-        .from("movimentos_estoque")
-        .insert({
-          produto_id: produtoSelecionado.id,
-          tipo_movimento: tipoMovimento,
-          quantidade,
-          motivo: motivoCompleto,
-          usuario_id: userData.user.id,
-        })
-        .select("id")
-        .single();
-
-      if (movimentoError) {
-        console.error("Erro ao registrar movimento:", movimentoError);
-        addNotification("Não foi possível registrar a movimentação.", "error");
-        return;
-      }
-
-      movimentoCriadoId = (movimentoCriado as MovimentoInserido).id;
-
-      const { data: produtoAtualizado, error: updateError } = await supabase
-        .from("produtos")
-        .update({ quantidade_atual: novaQuantidade })
-        .eq("id", produtoSelecionado.id)
-        .eq("quantidade_atual", estoqueAtual)
-        .select("id, quantidade_atual")
-        .maybeSingle();
-
-      if (updateError || !produtoAtualizado) {
-        console.error(
-          "Falha ao atualizar quantidade; tentando reverter movimento:",
-          updateError,
-        );
-
-        const { error: rollbackError } = await supabase
-          .from("movimentos_estoque")
-          .delete()
-          .eq("id", movimentoCriadoId);
-
-        if (rollbackError) {
-          console.error("Falha ao reverter movimento:", rollbackError);
-          addNotification(
-            "Falha crítica: a movimentação foi criada, mas o estoque não foi atualizado. Procure o suporte.",
-            "error",
-            7000,
-          );
-        } else {
-          addNotification(
-            "O estoque foi alterado por outra operação. Atualize a página e tente novamente.",
-            "warning",
-            6000,
-          );
-        }
-        return;
-      }
-
-      await criarOuAtualizarAlerta(
-        produtoSelecionado.id,
-        userData.user.id,
-        novaQuantidade,
+      const { data, error } = await supabase.rpc(
+        "registrar_movimentacao_estoque",
+        {
+          p_produto_id: produtoSelecionado.id,
+          p_tipo_movimento: tipoMovimento,
+          p_quantidade: quantidade,
+          p_motivo: motivoCompleto,
+        },
       );
+
+      if (error || !data?.[0]) {
+        console.error("Erro ao registrar movimento:", error);
+        addNotification(
+          error?.message || "Não foi possível registrar a movimentação.",
+          "error",
+        );
+        return;
+      }
+
+      const quantidadeFinal = Number(data[0].nova_quantidade);
 
       setProdutos((itens) =>
         itens.map((item) =>
           item.id === produtoSelecionado.id
-            ? { ...item, quantidade_atual: novaQuantidade }
+            ? { ...item, quantidade_atual: quantidadeFinal }
             : item,
         ),
       );
 
       setResultado({
         nome: produtoSelecionado.nome,
-        novaQuantidade,
+        novaQuantidade: quantidadeFinal,
         tipo: tipoMovimento,
         motivo,
       });

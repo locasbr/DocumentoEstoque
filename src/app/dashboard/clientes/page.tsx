@@ -1,94 +1,335 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { useNotification } from '@/contexts/NotificationContext'
-import { formatarMoeda } from '@/lib/utils'
 import {
-  Users, Plus, Search, Phone, DollarSign,
-  AlertTriangle, Trash2, Eye, Download
+  AlertCircle,
+  AlertTriangle,
+  Download,
+  DollarSign,
+  Eye,
+  Loader2,
+  Lock,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Users,
+  X,
 } from 'lucide-react'
-import { usePlano } from '@/hooks/usePlano'
-import UpgradeBlock from '@/components/upgrade-block'
 
-interface Cliente {
+import UpgradeBlock from '@/components/upgrade-block'
+import { useNotification } from '@/contexts/NotificationContext'
+import { usePlano } from '@/hooks/usePlano'
+import { supabase } from '@/lib/supabase'
+import { formatarMoeda } from '@/lib/utils'
+
+interface ClienteComSaldo {
   id: string
   nome: string
-  telefone: string
-  cpf: string
-  email: string
-  endereco: string
-  notas: string
+  telefone: string | null
+  cpf: string | null
+  email: string | null
+  endereco: string | null
+  notas: string | null
   criado_em: string
-  saldo_fiado?: number
+  saldo_fiado: number
+  quantidade_lancamentos: number
+  quantidade_vendas: number
+}
+
+interface ResultadoExclusao {
+  cliente_id: string
+  cliente_nome: string
+  excluido: boolean
+  usuario_id: string
+  excluido_por: string
+}
+
+function numero(valor: unknown): number {
+  const convertido = Number(valor)
+  return Number.isFinite(convertido) ? convertido : 0
+}
+
+function somenteNumeros(valor: string | null): string {
+  return (valor ?? '').replace(/\D/g, '')
+}
+
+function formatarTelefone(valor: string | null): string {
+  const numeros = somenteNumeros(valor)
+
+  if (numeros.length === 11) {
+    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`
+  }
+
+  if (numeros.length === 10) {
+    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 6)}-${numeros.slice(6)}`
+  }
+
+  return valor ?? ''
+}
+
+function mascararCPF(valor: string | null): string {
+  const numeros = somenteNumeros(valor)
+  if (numeros.length !== 11) return valor ?? ''
+  return `***.***.***-${numeros.slice(-2)}`
+}
+
+function obterMensagemErro(erro: unknown): string {
+  if (
+    typeof erro === 'object' &&
+    erro !== null &&
+    'message' in erro &&
+    typeof erro.message === 'string'
+  ) {
+    return erro.message
+  }
+
+  return 'Erro inesperado ao realizar a operação.'
+}
+
+function escaparCSV(valor: unknown): string {
+  const texto = String(valor ?? '')
+  const seguro = /^[=+\-@]/.test(texto) ? `'${texto}` : texto
+  return `"${seguro.replace(/"/g, '""')}"`
 }
 
 export default function ClientesPage() {
-  // 🔒 BLOQUEIO POR PLANO
   const { isIniciante, temExportarCSV, loading: loadingPlano } = usePlano()
-
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filtro, setFiltro] = useState('')
   const { addNotification } = useNotification()
 
-  const fetchClientes = useCallback(async () => {
-    try {
-      const { data: clientesData, error } = await supabase
-        .from('clientes')
-        .select('*')
-        .order('nome')
+  const [clientes, setClientes] = useState<ClienteComSaldo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [atualizando, setAtualizando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const [filtro, setFiltro] = useState('')
+  const [excluindoId, setExcluindoId] = useState<string | null>(null)
 
-      if (error) throw error
+  const fetchClientes = useCallback(
+    async (feedback = false) => {
+      feedback ? setAtualizando(true) : setLoading(true)
+      setErro(null)
 
-      const { data: todosOsFiados } = await supabase
-        .from('fiado')
-        .select('cliente_id, tipo, valor')
+      try {
+        const { data, error: rpcError } = await supabase.rpc(
+          'listar_clientes_com_saldo'
+        )
 
-      const saldoPorCliente: Record<string, number> = {}
-      ;(todosOsFiados || []).forEach((f: any) => {
-        const id = f.cliente_id
-        if (!saldoPorCliente[id]) saldoPorCliente[id] = 0
-        saldoPorCliente[id] += f.tipo === 'debito' ? Number(f.valor) : -Number(f.valor)
-      })
+        if (rpcError) throw rpcError
 
-      const clientesComSaldo = (clientesData || []).map((cliente: Cliente) => ({
-        ...cliente,
-        saldo_fiado: saldoPorCliente[cliente.id] || 0,
-      }))
+        const recebidos = (data ?? []) as Array<
+          Omit<
+            ClienteComSaldo,
+            'saldo_fiado' | 'quantidade_lancamentos' | 'quantidade_vendas'
+          > & {
+            saldo_fiado: unknown
+            quantidade_lancamentos: unknown
+            quantidade_vendas: unknown
+          }
+        >
 
-      setClientes(clientesComSaldo)
-    } catch (error) {
-      console.error('Erro ao buscar clientes:', error)
-      addNotification('Erro ao carregar clientes', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [addNotification])
+        setClientes(
+          recebidos.map((cliente) => ({
+            ...cliente,
+            saldo_fiado: numero(cliente.saldo_fiado),
+            quantidade_lancamentos: numero(cliente.quantidade_lancamentos),
+            quantidade_vendas: numero(cliente.quantidade_vendas),
+          }))
+        )
+
+        if (feedback) {
+          addNotification('Clientes atualizados.', 'success', 1800)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar clientes:', error)
+        setErro(
+          'Não foi possível carregar os clientes e os saldos de fiado. Nenhum saldo foi presumido.'
+        )
+      } finally {
+        setLoading(false)
+        setAtualizando(false)
+      }
+    },
+    [addNotification]
+  )
 
   useEffect(() => {
-    // Só busca clientes se NÃO for iniciante
-    if (!isIniciante) {
-      fetchClientes()
-    } else {
-      setLoading(false)
-    }
-  }, [fetchClientes, isIniciante])
+    if (loadingPlano) return
 
-  // 🔒 LOADING DO PLANO
-  if (loadingPlano) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
+    if (isIniciante) {
+      setLoading(false)
+      return
+    }
+
+    void fetchClientes()
+  }, [fetchClientes, isIniciante, loadingPlano])
+
+  const clientesFiltrados = useMemo(() => {
+    const termo = filtro.trim().toLocaleLowerCase('pt-BR')
+    const termoNumerico = somenteNumeros(filtro)
+
+    if (!termo) return clientes
+
+    return clientes.filter((cliente) => {
+      const correspondeNome = cliente.nome
+        .toLocaleLowerCase('pt-BR')
+        .includes(termo)
+      const correspondeEmail = (cliente.email ?? '')
+        .toLocaleLowerCase('pt-BR')
+        .includes(termo)
+      const correspondeTelefone =
+        Boolean(termoNumerico) &&
+        somenteNumeros(cliente.telefone).includes(termoNumerico)
+      const correspondeCPF =
+        Boolean(termoNumerico) &&
+        somenteNumeros(cliente.cpf).includes(termoNumerico)
+
+      return (
+        correspondeNome ||
+        correspondeEmail ||
+        correspondeTelefone ||
+        correspondeCPF
+      )
+    })
+  }, [clientes, filtro])
+
+  const totalFiado = useMemo(
+    () =>
+      clientes.reduce(
+        (total, cliente) => total + Math.max(0, cliente.saldo_fiado),
+        0
+      ),
+    [clientes]
+  )
+
+  const clientesComDebito = useMemo(
+    () => clientes.filter((cliente) => cliente.saldo_fiado > 0).length,
+    [clientes]
+  )
+
+  const handleDeletar = async (cliente: ClienteComSaldo) => {
+    if (excluindoId) return
+
+    if (
+      cliente.quantidade_lancamentos > 0 ||
+      cliente.quantidade_vendas > 0
+    ) {
+      addNotification(
+        'Este cliente possui histórico de vendas ou fiado e não pode ser excluído.',
+        'warning',
+        4500
+      )
+      return
+    }
+
+    const confirmou = window.confirm(
+      `Excluir permanentemente o cliente "${cliente.nome}"? Essa ação não pode ser desfeita.`
     )
+
+    if (!confirmou) return
+
+    setExcluindoId(cliente.id)
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc(
+        'excluir_cliente_sem_historico',
+        { p_cliente_id: cliente.id }
+      )
+
+      if (rpcError) throw rpcError
+
+      const resultado = data as ResultadoExclusao | null
+      if (!resultado?.excluido) {
+        throw new Error('O servidor não confirmou a exclusão do cliente.')
+      }
+
+      setClientes((atuais) =>
+        atuais.filter((item) => item.id !== cliente.id)
+      )
+      addNotification(
+        `Cliente "${resultado.cliente_nome}" excluído.`,
+        'success',
+        2500
+      )
+    } catch (error) {
+      console.error('Erro ao excluir cliente:', error)
+      addNotification(obterMensagemErro(error), 'error', 5000)
+      await fetchClientes()
+    } finally {
+      setExcluindoId(null)
+    }
   }
 
-  // 🔒 BLOQUEIO PARA PLANO INICIANTE
+  const exportarClientesCSV = () => {
+    if (!temExportarCSV) {
+      addNotification(
+        'Exportação CSV disponível no plano Profissional.',
+        'warning',
+        3500
+      )
+      return
+    }
+
+    if (clientes.length === 0) {
+      addNotification('Não existem clientes para exportar.', 'warning')
+      return
+    }
+
+    const confirmou = window.confirm(
+      'O arquivo conterá dados pessoais dos clientes. Deseja continuar?'
+    )
+    if (!confirmou) return
+
+    const cabecalhos = [
+      'Nome',
+      'Telefone',
+      'CPF',
+      'Email',
+      'Endereco',
+      'Saldo Fiado',
+      'Lancamentos Fiado',
+      'Vendas Vinculadas',
+    ]
+
+    const linhas = clientes.map((cliente) => [
+      cliente.nome,
+      formatarTelefone(cliente.telefone),
+      cliente.cpf ?? '',
+      cliente.email ?? '',
+      cliente.endereco ?? '',
+      cliente.saldo_fiado.toFixed(2).replace('.', ','),
+      cliente.quantidade_lancamentos,
+      cliente.quantidade_vendas,
+    ])
+
+    const csv = [
+      cabecalhos.map(escaparCSV).join(';'),
+      ...linhas.map((linha) => linha.map(escaparCSV).join(';')),
+    ].join('\r\n')
+
+    const blob = new Blob([`\uFEFF${csv}`], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+
+    addNotification('Clientes exportados com sucesso.', 'success', 2200)
+  }
+
+  if (loadingPlano) {
+    return <Carregando texto="Verificando plano..." />
+  }
+
   if (isIniciante) {
     return (
-      <div className="max-w-2xl mx-auto py-12 px-4">
+      <div className="mx-auto max-w-2xl px-4 py-12">
         <UpgradeBlock
           titulo="Controle de Clientes e Fiado"
           descricao="Cadastre clientes, controle quem deve, quanto deve e tenha histórico completo de pagamentos. Adeus caderninho!"
@@ -98,218 +339,323 @@ export default function ClientesPage() {
     )
   }
 
-  const handleDeletar = async (id: string, nome: string) => {
-    if (!confirm(`Tem certeza que deseja remover "${nome}"? Os registros de fiado também serão removidos.`)) return
-    try {
-      const { error } = await supabase.from('clientes').delete().eq('id', id)
-      if (error) throw error
-      addNotification(`Cliente "${nome}" removido`, 'success')
-      fetchClientes()
-    } catch (error) {
-      addNotification('Erro ao remover cliente', 'error')
-    }
-  }
-
-  const exportarClientesCSV = () => {
-    // 🔒 Segurança extra contra burla via console
-    if (!temExportarCSV) {
-      addNotification('Exportação CSV disponível no plano Profissional', 'warning')
-      return
-    }
-
-    const headers = ['Nome', 'Telefone', 'CPF', 'Email', 'Saldo Fiado']
-    const linhas = clientes.map((c) => [
-      c.nome,
-      c.telefone || '',
-      c.cpf || '',
-      c.email || '',
-      (c.saldo_fiado || 0).toFixed(2).replace('.', ','),
-    ])
-
-    const csv = [
-      headers.join(';'),
-      ...linhas.map((l) => l.map((v) => `"${v}"`).join(';')),
-    ].join('\n')
-
-    const blob = new Blob(['\uFEFF' + csv], {
-      type: 'text/csv;charset=utf-8;',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
-
-    addNotification('Clientes exportados!', 'success', 2000)
-  }
-
-  const clientesFiltrados = clientes.filter(c =>
-    c.nome.toLowerCase().includes(filtro.toLowerCase()) ||
-    c.telefone.includes(filtro) ||
-    c.cpf.includes(filtro)
-  )
-
-  const totalFiado = clientes.reduce((acc, c) => acc + Math.max(0, c.saldo_fiado || 0), 0)
-  const clientesComDebito = clientes.filter(c => (c.saldo_fiado || 0) > 0).length
-
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
+    return <Carregando texto="Carregando clientes..." />
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-6 pb-8">
+      <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clientes</h2>
-          <p className="text-gray-500 dark:text-gray-400">Gerencie seus clientes e controle o fiado</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Clientes
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Gerencie clientes, vendas vinculadas e saldos de fiado.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => void fetchClientes(true)}
+            disabled={atualizando}
+            className="btn-secondary inline-flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${atualizando ? 'animate-spin' : ''}`}
+            />
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+
           {clientes.length > 0 && (
             <button
+              type="button"
               onClick={exportarClientesCSV}
-              className="btn-secondary flex items-center gap-2 text-sm"
+              className="btn-secondary inline-flex items-center justify-center gap-2 text-sm"
             >
-              <Download size={16} /> Exportar CSV
+              <Download className="h-4 w-4" /> Exportar CSV
             </button>
           )}
+
           <Link
             href="/dashboard/clientes/novo"
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
           >
-            <Plus className="w-4 h-4" />
-            Novo Cliente
+            <Plus className="h-4 w-4" /> Novo cliente
           </Link>
         </div>
-      </div>
+      </header>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+      {erro && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="flex-1">
+            <p>{erro}</p>
+            <button
+              type="button"
+              onClick={() => void fetchClientes()}
+              className="mt-2 font-semibold underline"
+            >
+              Tentar novamente
+            </button>
           </div>
-          <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total de Clientes</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{clientes.length}</p>
-          </div>
-        </div>
-
-        <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
-            <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total Fiado Pendente</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatarMoeda(totalFiado)}</p>
-          </div>
-        </div>
-
-        <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Clientes com Débito</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{clientesComDebito}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Busca */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-        <input
-          type="text"
-          placeholder="Buscar por nome, telefone ou CPF..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="input-field pl-10 w-full"
-        />
-      </div>
-
-      {/* Lista de Clientes */}
-      {clientesFiltrados.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400 mb-2">
-            {filtro ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
-          </h3>
-          <p className="text-gray-400 dark:text-gray-500 mb-4">
-            {filtro ? 'Tente buscar com outros termos' : 'Cadastre seu primeiro cliente para controlar o fiado'}
-          </p>
-          {!filtro && (
-            <Link href="/dashboard/clientes/novo" className="btn-primary inline-flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Cadastrar primeiro cliente
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clientesFiltrados.map((cliente) => (
-            <div key={cliente.id} className="card p-5 hover:shadow-lg transition">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                    <span className="font-bold text-blue-600 dark:text-blue-400">
-                      {cliente.nome.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white">{cliente.nome}</h4>
-                    {cliente.telefone && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                        <Phone className="w-3 h-3" /> {cliente.telefone}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Saldo Fiado */}
-              <div className={`p-3 rounded-xl mb-4 ${
-                (cliente.saldo_fiado || 0) > 0
-                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-                  : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-              }`}>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Saldo Fiado</p>
-                <p className={`text-lg font-bold ${
-                  (cliente.saldo_fiado || 0) > 0
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-green-600 dark:text-green-400'
-                }`}>
-                  {(cliente.saldo_fiado || 0) > 0
-                    ? `${formatarMoeda(cliente.saldo_fiado || 0)} devendo`
-                    : 'Em dia ✓'
-                  }
-                </p>
-              </div>
-
-              {/* Ações */}
-              <div className="flex gap-2">
-                <Link
-                  href={`/dashboard/clientes/${cliente.id}`}
-                  className="flex-1 btn-primary text-xs flex items-center justify-center gap-1 py-2"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Ver detalhes
-                </Link>
-                <button
-                  onClick={() => handleDeletar(cliente.id, cliente.nome)}
-                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
-                  title="Remover"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
       )}
+
+      {!erro && (
+        <>
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <MetricCard
+              icon={Users}
+              label="Total de clientes"
+              valor={clientes.length.toLocaleString('pt-BR')}
+              cor="blue"
+            />
+            <MetricCard
+              icon={DollarSign}
+              label="Total fiado pendente"
+              valor={formatarMoeda(totalFiado)}
+              cor="red"
+            />
+            <MetricCard
+              icon={AlertTriangle}
+              label="Clientes com débito"
+              valor={clientesComDebito.toLocaleString('pt-BR')}
+              cor="amber"
+            />
+          </section>
+
+          <section className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              placeholder="Buscar por nome, telefone, CPF ou e-mail..."
+              value={filtro}
+              onChange={(event) => setFiltro(event.target.value)}
+              className="input-field w-full pl-10 pr-10"
+            />
+            {filtro && (
+              <button
+                type="button"
+                onClick={() => setFiltro('')}
+                aria-label="Limpar busca"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </section>
+
+          {clientesFiltrados.length === 0 ? (
+            <section className="py-16 text-center">
+              <Users className="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600" />
+              <h2 className="mb-2 text-lg font-semibold text-gray-600 dark:text-gray-400">
+                {filtro
+                  ? 'Nenhum cliente encontrado'
+                  : 'Nenhum cliente cadastrado'}
+              </h2>
+              <p className="mb-4 text-gray-400 dark:text-gray-500">
+                {filtro
+                  ? 'Tente buscar com outros termos.'
+                  : 'Cadastre o primeiro cliente para vincular vendas e controlar o fiado.'}
+              </p>
+              {!filtro && (
+                <Link
+                  href="/dashboard/clientes/novo"
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" /> Cadastrar primeiro cliente
+                </Link>
+              )}
+            </section>
+          ) : (
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {clientesFiltrados.map((cliente) => {
+                const saldo = Math.max(0, cliente.saldo_fiado)
+                const possuiHistorico =
+                  cliente.quantidade_lancamentos > 0 ||
+                  cliente.quantidade_vendas > 0
+                const estaExcluindo = excluindoId === cliente.id
+
+                return (
+                  <article
+                    key={cliente.id}
+                    className="card flex flex-col p-5 transition hover:shadow-lg"
+                  >
+                    <div className="mb-3 flex min-w-0 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                          {cliente.nome.charAt(0).toLocaleUpperCase('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="truncate font-semibold text-gray-900 dark:text-white">
+                          {cliente.nome}
+                        </h2>
+                        {cliente.telefone && (
+                          <p className="mt-0.5 flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                            <Phone className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {formatarTelefone(cliente.telefone)}
+                            </span>
+                          </p>
+                        )}
+                        {cliente.cpf && (
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            CPF {mascararCPF(cliente.cpf)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`mb-4 rounded-xl border p-3 ${
+                        saldo > 0
+                          ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                          : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
+                      }`}
+                    >
+                      <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
+                        Saldo fiado
+                      </p>
+                      <p
+                        className={`text-lg font-bold ${
+                          saldo > 0
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-green-600 dark:text-green-400'
+                        }`}
+                      >
+                        {saldo > 0
+                          ? `${formatarMoeda(saldo)} devendo`
+                          : 'Em dia ✓'}
+                      </p>
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                      <div className="rounded-lg bg-gray-50 p-2 dark:bg-gray-800">
+                        <p>Movimentações</p>
+                        <p className="mt-0.5 font-bold text-gray-900 dark:text-white">
+                          {cliente.quantidade_lancamentos}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-2 dark:bg-gray-800">
+                        <p>Vendas vinculadas</p>
+                        <p className="mt-0.5 font-bold text-gray-900 dark:text-white">
+                          {cliente.quantidade_vendas}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto flex gap-2">
+                      <Link
+                        href={`/dashboard/clientes/${cliente.id}`}
+                        className="btn-primary flex flex-1 items-center justify-center gap-1 py-2 text-xs"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> Ver detalhes
+                      </Link>
+
+                      {possuiHistorico ? (
+                        <button
+                          type="button"
+                          disabled
+                          title="Cliente com histórico não pode ser excluído"
+                          aria-label="Exclusão bloqueada por histórico"
+                          className="cursor-not-allowed rounded-lg p-2 text-gray-400 opacity-60"
+                        >
+                          <Lock className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletar(cliente)}
+                          disabled={Boolean(excluindoId)}
+                          title="Excluir cliente sem histórico"
+                          aria-label={`Excluir ${cliente.nome}`}
+                          className="rounded-lg p-2 text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/20"
+                        >
+                          {estaExcluindo ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {possuiHistorico && (
+                      <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-gray-400">
+                        <Lock className="h-3 w-3" /> Histórico protegido
+                      </p>
+                    )}
+                  </article>
+                )
+              })}
+            </section>
+          )}
+        </>
+      )}
     </div>
+  )
+}
+
+function Carregando({ texto }: { texto: string }) {
+  return (
+    <div className="flex h-64 items-center justify-center gap-2 text-gray-500">
+      <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+      <span className="text-sm">{texto}</span>
+    </div>
+  )
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  valor,
+  cor,
+}: {
+  icon: typeof Users
+  label: string
+  valor: string
+  cor: 'blue' | 'red' | 'amber'
+}) {
+  const estilos = {
+    blue: {
+      fundo: 'bg-blue-100 dark:bg-blue-900/30',
+      texto: 'text-blue-600 dark:text-blue-400',
+    },
+    red: {
+      fundo: 'bg-red-100 dark:bg-red-900/30',
+      texto: 'text-red-600 dark:text-red-400',
+    },
+    amber: {
+      fundo: 'bg-amber-100 dark:bg-amber-900/30',
+      texto: 'text-amber-600 dark:text-amber-400',
+    },
+  }
+
+  return (
+    <article className="card flex items-center gap-4 p-5">
+      <div
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${estilos[cor].fundo}`}
+      >
+        <Icon className={`h-6 w-6 ${estilos[cor].texto}`} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+        <p
+          className={`break-words text-2xl font-bold ${
+            cor === 'red'
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-gray-900 dark:text-white'
+          }`}
+        >
+          {valor}
+        </p>
+      </div>
+    </article>
   )
 }
