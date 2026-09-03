@@ -224,22 +224,32 @@ export default function Sidebar() {
   const [moreResourcesOpen, setMoreResourcesOpen] = useState(false);
   const [saindo, setSaindo] = useState(false);
 
-  useEffect(() => {
-    if (!moreResourcesOpen) return;
+useEffect(() => {
+  if (!moreResourcesOpen) return;
 
-    const fecharComEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMoreResourcesOpen(false);
-    };
+  const fecharComEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      setMoreResourcesOpen(false);
+    }
+  };
 
-    const overflowAnterior = document.body.style.overflow;
+  const mobile = window.matchMedia("(max-width: 767px)").matches;
+  const overflowAnterior = document.body.style.overflow;
+
+  if (mobile) {
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", fecharComEscape);
+  }
 
-    return () => {
+  window.addEventListener("keydown", fecharComEscape);
+
+  return () => {
+    if (mobile) {
       document.body.style.overflow = overflowAnterior;
-      window.removeEventListener("keydown", fecharComEscape);
-    };
-  }, [moreResourcesOpen]);
+    }
+
+    window.removeEventListener("keydown", fecharComEscape);
+  };
+}, [moreResourcesOpen]);
 
   const isActive = (path: string) => {
     if (path === "/dashboard") return pathname === "/dashboard";
