@@ -81,7 +81,7 @@ const PLANOS: Plano[] = [
     icon: Sparkles,
     destaque: true,
     beneficios: [
-      { texto: "Produtos ilimitados", destaque: true },
+      { texto: "Limite ampliado de produtos", destaque: true },
       { texto: "Tudo do plano Iniciante" },
       { texto: "Clientes e fiado", destaque: true },
       { texto: "Controle de validade" },
@@ -422,7 +422,7 @@ function AssinarContent() {
               >
                 {plano.destaque && !atual && (
                   <span className="absolute right-5 top-5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                    Mais escolhido
+                    Recomendado
                   </span>
                 )}
                 {atual && (
