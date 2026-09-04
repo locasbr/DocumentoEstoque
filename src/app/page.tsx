@@ -302,16 +302,15 @@ export default function LandingPage() {
               </div>
 
               <h1 className="mt-7 text-4xl font-black leading-[1.06] tracking-tight sm:text-5xl lg:text-6xl xl:text-7xl">
-                Saiba o que tem,
+                Controle seu estoque  
                 <span className="block bg-gradient-to-r from-emerald-300 via-emerald-400 to-teal-300 bg-clip-text text-transparent">
-                  o que falta e onde agir.
+                   sem complicação.
                 </span>
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-gray-300 lg:mx-0">
-                Controle estoque, vendas, clientes e fiado em um sistema direto,
-                feito para quem quer sair do caderno e da planilha sem entrar em
-                um ERP complicado.
+                Saiba o que tem, o que está faltando e o que precisa de reposição
+                em um sistema simples para pequenos comércios.
               </p>
 
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
